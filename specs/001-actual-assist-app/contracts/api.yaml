@@ -1,0 +1,441 @@
+openapi: 3.0.3
+info:
+  title: Actual Budget Assistant API
+  description: POC API for reviewing and applying AI-generated budget suggestions
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+paths:
+  /budget/download:
+    post:
+      summary: Download budget from Actual server
+      description: |
+        Downloads a budget file from the Actual server and creates a local snapshot.
+        Returns snapshot metadata including transaction and category counts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - serverURL
+                - password
+                - budgetId
+              properties:
+                serverURL:
+                  type: string
+                  format: uri
+                  example: "http://localhost:5006"
+                password:
+                  type: string
+                  format: password
+                  example: "my-secure-password"
+                budgetId:
+                  type: string
+                  format: uuid
+                  example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
+      responses:
+        '200':
+          description: Budget downloaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /suggestions/generate:
+    post:
+      summary: Generate AI categorization suggestions
+      description: |
+        Analyzes transactions in the snapshot and generates AI-driven
+        categorization suggestions with confidence scores and rationales.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - snapshotId
+              properties:
+                snapshotId:
+                  type: string
+                  format: uuid
+                  example: "abc123-snapshot-uuid"
+                maxSuggestions:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  default: 50
+                  description: Limit number of suggestions generated
+      responses:
+        '200':
+          description: Suggestions generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Suggestion'
+                  total:
+                    type: integer
+                    example: 42
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /suggestions/{suggestionId}:
+    patch:
+      summary: Update suggestion status
+      description: Approve or reject a single suggestion
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected]
+      responses:
+        '200':
+          description: Suggestion updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suggestion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /suggestions/bulk-update:
+    post:
+      summary: Bulk update suggestion statuses
+      description: Approve or reject multiple suggestions in one request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - updates
+              properties:
+                updates:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - suggestionId
+                      - status
+                    properties:
+                      suggestionId:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum: [approved, rejected]
+      responses:
+        '200':
+          description: Bulk update completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                    example: 15
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        suggestionId:
+                          type: string
+                        error:
+                          type: string
+
+  /sync-plan/build:
+    post:
+      summary: Build sync plan from approved suggestions
+      description: |
+        Collects all approved suggestions for a snapshot and builds an ordered
+        sync plan with dry-run preview. Does not execute sync.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - snapshotId
+              properties:
+                snapshotId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Sync plan built successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPlan'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: No approved suggestions found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sync-plan/{planId}/execute:
+    post:
+      summary: Execute sync plan (POC deferred)
+      description: |
+        POC returns 501 Not Implemented. Future: applies changes to local
+        budget copy and syncs to Actual server.
+      parameters:
+        - name: planId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '501':
+          description: Not implemented in POC
+
+components:
+  schemas:
+    BudgetSnapshot:
+      type: object
+      required:
+        - id
+        - budgetId
+        - downloadedAt
+        - transactionCount
+        - categoryCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        budgetId:
+          type: string
+          format: uuid
+        downloadedAt:
+          type: string
+          format: date-time
+        transactionCount:
+          type: integer
+          example: 1247
+        categoryCount:
+          type: integer
+          example: 42
+
+    Suggestion:
+      type: object
+      required:
+        - id
+        - snapshotId
+        - transactionId
+        - transactionPayee
+        - transactionAmount
+        - transactionDate
+        - proposedCategoryId
+        - proposedCategoryName
+        - confidence
+        - rationale
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        snapshotId:
+          type: string
+          format: uuid
+        transactionId:
+          type: string
+        transactionPayee:
+          type: string
+          example: "Netflix"
+        transactionAmount:
+          type: integer
+          description: Amount in cents
+          example: 1599
+        transactionDate:
+          type: string
+          format: date
+          example: "2025-12-15"
+        currentCategoryId:
+          type: string
+          nullable: true
+        proposedCategoryId:
+          type: string
+          format: uuid
+        proposedCategoryName:
+          type: string
+          example: "Entertainment"
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.95
+        rationale:
+          type: string
+          example: "Recurring charge for streaming service matches Entertainment category"
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SyncPlan:
+      type: object
+      required:
+        - id
+        - snapshotId
+        - changes
+        - dryRunSummary
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        snapshotId:
+          type: string
+          format: uuid
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Change'
+        dryRunSummary:
+          $ref: '#/components/schemas/DryRunSummary'
+        createdAt:
+          type: string
+          format: date-time
+
+    Change:
+      type: object
+      required:
+        - transactionId
+        - field
+        - oldValue
+        - newValue
+        - suggestionId
+      properties:
+        transactionId:
+          type: string
+        field:
+          type: string
+          enum: [category]
+        oldValue:
+          type: string
+          nullable: true
+        newValue:
+          type: string
+        suggestionId:
+          type: string
+          format: uuid
+
+    DryRunSummary:
+      type: object
+      required:
+        - totalChanges
+        - approvedSuggestions
+        - conflicts
+      properties:
+        totalChanges:
+          type: integer
+          example: 15
+        approvedSuggestions:
+          type: integer
+          example: 15
+        conflicts:
+          type: array
+          items:
+            type: object
+          example: []
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: "BudgetDownloadError"
+        message:
+          type: string
+          example: "Failed to connect to Actual server"
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "AuthenticationError"
+            message: "Invalid server password"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "NotFoundError"
+            message: "Snapshot not found"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "InternalError"
+            message: "An unexpected error occurred"

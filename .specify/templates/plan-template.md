@@ -31,7 +31,14 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- Modular design with explicit ownership; no feature proceeds without defined module boundaries and owners (P1, P5, P10).
+- Zero duplication of business rules; shared logic extracted to a single authoritative module (P2).
+- Testability proven up front: isolated unit test strategy and coverage of error paths documented before build (P3, P7).
+- Contracts and control flow are explicit; reject hidden side effects or cleverness without justification (P4).
+- Dependencies justified with license/size review and exit strategy recorded; avoid unnecessary additions (P6).
+- Error handling plan defines taxonomy, propagation, and logging/redaction rules; failures are intentional and observable (P7).
+- Refactoring commitments captured to ensure the codebase is left healthier; speculative abstractions rejected (P8, P9).
+- Reviewability standards met: consistent patterns, directory layout, and clear rationale included in plan (P10).
 
 ## Project Structure
 

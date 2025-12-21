@@ -1,0 +1,132 @@
+.suggestion-list {
+  padding: 20px;
+}
+
+.suggestion-list h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.loading, .error, .empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.error {
+  color: #d32f2f;
+}
+
+.empty-state .hint {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: #999;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.suggestion-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
+  transition: box-shadow 0.2s;
+}
+
+.suggestion-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.category-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.confidence {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.confidence-high {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.confidence-medium {
+  background: #fff9c4;
+  color: #f57f17;
+}
+
+.confidence-low {
+  background: #ffccbc;
+  color: #d84315;
+}
+
+.suggestion-body {
+  margin-bottom: 16px;
+}
+
+.reasoning {
+  color: #555;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.transaction-id {
+  font-size: 0.85rem;
+  color: #999;
+  font-family: monospace;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-approve {
+  background: #4caf50;
+  color: white;
+}
+
+.btn-approve:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.btn-reject {
+  background: #f44336;
+  color: white;
+}
+
+.btn-reject:hover:not(:disabled) {
+  background: #da190b;
+}

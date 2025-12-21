@@ -42,6 +42,10 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 - [ ] T008 [P] Setup ESLint and Prettier for frontend (frontend/.eslintrc.js, frontend/.prettierrc)
 - [ ] T009 Create backend/.env.example with required environment variables per quickstart.md (ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_ID, OPENAI_API_KEY, DATA_DIR, SQLITE_DB_PATH, PORT, NODE_ENV)
 - [ ] T010 Create frontend/.env.example with VITE_API_BASE_URL per quickstart.md
+- [ ] T011 [P] Create Dockerfile for backend in backend/Dockerfile (multi-stage: build TypeScript → production image with node:20-alpine, copy dist/ and node_modules)
+- [ ] T012 [P] Create Dockerfile for frontend in frontend/Dockerfile (multi-stage: build Vite → serve with nginx:alpine)
+- [ ] T013 Create docker-compose.yml in repository root (services: backend, frontend with volume mounts for .env and data/, expose ports 3000 and 5173)
+- [ ] T014 Add npm scripts to root package.json (dev:all to start both backend and frontend concurrently, docker:up for docker-compose up, docker:down)
 
 ---
 
@@ -51,14 +55,14 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T011 Implement environment validation schema in backend/src/config.ts using zod (validate all env vars from .env.example, fail fast on startup)
-- [ ] T012 Create SQLite schema initialization script in backend/src/infra/db-schema.ts (suggestions table, audit_log table per research.md)
-- [ ] T013 Implement database migration runner in backend/src/infra/db-migrations.ts (execute schema.sql, track version)
-- [ ] T014 [P] Create error taxonomy types in backend/src/domain/errors.ts (BudgetDownloadError, AISuggestFailedError, SyncPlanInvalidError, NotFoundError, ValidationError)
-- [ ] T015 [P] Setup structured logging utility in backend/src/infra/logger.ts (Winston or Pino with JSON output, redact secrets per P7)
-- [ ] T016 [P] Configure Vitest for backend unit tests in backend/vitest.config.ts
-- [ ] T017 [P] Configure Playwright for frontend integration tests in frontend/playwright.config.ts
-- [ ] T018 Create backend server entry point in backend/src/index.ts (load env, init db, start Express server)
+- [ ] T015 Implement environment validation schema in backend/src/config.ts using zod (validate all env vars from .env.example, fail fast on startup)
+- [ ] T016 Create SQLite schema initialization script in backend/src/infra/db-schema.ts (suggestions table, audit_log table per research.md)
+- [ ] T017 Implement database migration runner in backend/src/infra/db-migrations.ts (execute schema.sql, track version)
+- [ ] T018 [P] Create error taxonomy types in backend/src/domain/errors.ts (BudgetDownloadError, AISuggestFailedError, SyncPlanInvalidError, NotFoundError, ValidationError)
+- [ ] T019 [P] Setup structured logging utility in backend/src/infra/logger.ts (Winston or Pino with JSON output, redact secrets per P7)
+- [ ] T020 [P] Configure Vitest for backend unit tests in backend/vitest.config.ts
+- [ ] T021 [P] Configure Playwright for frontend integration tests in frontend/playwright.config.ts
+- [ ] T022 Create backend server entry point in backend/src/index.ts (load env, init db, start Express server)
 
 **Checkpoint**: Foundation ready - P1 implementation can now begin in parallel
 
@@ -72,54 +76,54 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 ### Domain Layer (P1)
 
-- [ ] T019 [P] [US1] Implement BudgetSnapshot entity in backend/src/domain/budget-snapshot.ts (id, budgetId, filepath, downloadedAt, fileHash, transactionCount, categoryCount with validation per data-model.md)
-- [ ] T020 [P] [US1] Implement Suggestion entity in backend/src/domain/suggestion.ts (all fields from data-model.md, status state machine validation, confidence range check)
-- [ ] T021 [P] [US1] Implement SyncPlan entity in backend/src/domain/sync-plan.ts (id, snapshotId, changes array, dryRunSummary, immutability enforcement)
-- [ ] T022 [P] [US1] Unit test BudgetSnapshot validation rules in backend/tests/unit/domain/budget-snapshot.test.ts
-- [ ] T023 [P] [US1] Unit test Suggestion state transitions in backend/tests/unit/domain/suggestion.test.ts
-- [ ] T024 [P] [US1] Unit test SyncPlan change deduplication in backend/tests/unit/domain/sync-plan.test.ts
+- [ ] T023 [P] [US1] Implement BudgetSnapshot entity in backend/src/domain/budget-snapshot.ts (id, budgetId, filepath, downloadedAt, fileHash, transactionCount, categoryCount with validation per data-model.md)
+- [ ] T024 [P] [US1] Implement Suggestion entity in backend/src/domain/suggestion.ts (all fields from data-model.md, status state machine validation, confidence range check)
+- [ ] T025 [P] [US1] Implement SyncPlan entity in backend/src/domain/sync-plan.ts (id, snapshotId, changes array, dryRunSummary, immutability enforcement)
+- [ ] T026 [P] [US1] Unit test BudgetSnapshot validation rules in backend/tests/unit/domain/budget-snapshot.test.ts
+- [ ] T027 [P] [US1] Unit test Suggestion state transitions in backend/tests/unit/domain/suggestion.test.ts
+- [ ] T028 [P] [US1] Unit test SyncPlan change deduplication in backend/tests/unit/domain/sync-plan.test.ts
 
 ### Infrastructure Layer (P1)
 
-- [ ] T025 [P] [US1] Implement ActualClient adapter in backend/src/infra/actual-client.ts (wrap @actual-app/api: init, downloadBudget, getTransactions, getCategories, shutdown per research.md)
-- [ ] T026 [P] [US1] Implement OpenAIClient adapter in backend/src/infra/openai-client.ts (wrap OpenAI SDK: categorization prompt with JSON mode per research.md, timeout handling)
-- [ ] T027 [P] [US1] Implement AuditRepository in backend/src/infra/audit-repo.ts (SQLite CRUD for suggestions table, audit_log table per research.md schema)
-- [ ] T028 [P] [US1] Unit test ActualClient error handling for connection failures in backend/tests/unit/infra/actual-client.test.ts (mock @actual-app/api)
-- [ ] T029 [P] [US1] Unit test OpenAIClient prompt formatting and JSON parsing in backend/tests/unit/infra/openai-client.test.ts (mock OpenAI SDK)
-- [ ] T030 [P] [US1] Unit test AuditRepository SQLite queries in backend/tests/unit/infra/audit-repo.test.ts (in-memory SQLite)
+- [ ] T029 [P] [US1] Implement ActualClient adapter in backend/src/infra/actual-client.ts (wrap @actual-app/api: init, downloadBudget, getTransactions, getCategories, shutdown per research.md)
+- [ ] T030 [P] [US1] Implement OpenAIClient adapter in backend/src/infra/openai-client.ts (wrap OpenAI SDK: categorization prompt with JSON mode per research.md, timeout handling)
+- [ ] T031 [P] [US1] Implement AuditRepository in backend/src/infra/audit-repo.ts (SQLite CRUD for suggestions table, audit_log table per research.md schema)
+- [ ] T032 [P] [US1] Unit test ActualClient error handling for connection failures in backend/tests/unit/infra/actual-client.test.ts (mock @actual-app/api)
+- [ ] T033 [P] [US1] Unit test OpenAIClient prompt formatting and JSON parsing in backend/tests/unit/infra/openai-client.test.ts (mock OpenAI SDK)
+- [ ] T034 [P] [US1] Unit test AuditRepository SQLite queries in backend/tests/unit/infra/audit-repo.test.ts (in-memory SQLite)
 
 ### Service Layer (P1)
 
-- [ ] T031 [US1] Implement BudgetService in backend/src/services/budget-service.ts (downloadBudget method: call ActualClient, create BudgetSnapshot, log to audit)
-- [ ] T032 [US1] Implement AIService in backend/src/services/ai-service.ts (generateSuggestions method: read transactions/categories via ActualClient, batch OpenAI requests with concurrency limit, create Suggestion entities, persist via AuditRepo)
-- [ ] T033 [US1] Implement SyncService in backend/src/services/sync-service.ts (buildSyncPlan method: query approved suggestions from AuditRepo, build SyncPlan entity, validate no duplicates)
-- [ ] T034 [P] [US1] Unit test BudgetService download flow in backend/tests/unit/services/budget-service.test.ts (mock ActualClient, verify snapshot creation)
-- [ ] T035 [P] [US1] Unit test AIService suggestion generation in backend/tests/unit/services/ai-service.test.ts (mock ActualClient and OpenAIClient, verify batching and confidence filtering)
-- [ ] T036 [P] [US1] Unit test SyncService plan building in backend/tests/unit/services/sync-service.test.ts (mock AuditRepo, verify change ordering and dry-run summary)
+- [ ] T035 [US1] Implement BudgetService in backend/src/services/budget-service.ts (downloadBudget method: call ActualClient, create BudgetSnapshot, log to audit)
+- [ ] T036 [US1] Implement AIService in backend/src/services/ai-service.ts (generateSuggestions method: read transactions/categories via ActualClient, batch OpenAI requests with concurrency limit, create Suggestion entities, persist via AuditRepo)
+- [ ] T037 [US1] Implement SyncService in backend/src/services/sync-service.ts (buildSyncPlan method: query approved suggestions from AuditRepo, build SyncPlan entity, validate no duplicates)
+- [ ] T038 [P] [US1] Unit test BudgetService download flow in backend/tests/unit/services/budget-service.test.ts (mock ActualClient, verify snapshot creation)
+- [ ] T039 [P] [US1] Unit test AIService suggestion generation in backend/tests/unit/services/ai-service.test.ts (mock ActualClient and OpenAIClient, verify batching and confidence filtering)
+- [ ] T040 [P] [US1] Unit test SyncService plan building in backend/tests/unit/services/sync-service.test.ts (mock AuditRepo, verify change ordering and dry-run summary)
 
 ### API Layer (P1)
 
-- [ ] T037 [P] [US1] Implement POST /budget/download route in backend/src/api/routes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml)
-- [ ] T038 [P] [US1] Implement POST /suggestions/generate route in backend/src/api/routes.ts (validate snapshotId, call AIService, return Suggestion[] JSON per contracts/api.yaml)
-- [ ] T039 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/routes.ts (validate suggestionId and status, update via AuditRepo, return updated Suggestion per contracts/api.yaml)
-- [ ] T040 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/routes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
-- [ ] T041 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/routes.ts (validate snapshotId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
-- [ ] T042 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7)
-- [ ] T043 [P] [US1] Integration test /budget/download endpoint in backend/tests/integration/api/budget-download.test.ts (mock Actual server, verify 200 response and snapshot structure)
-- [ ] T044 [P] [US1] Integration test /suggestions/generate endpoint in backend/tests/integration/api/suggestions-generate.test.ts (mock OpenAI API, verify suggestions returned with confidence scores)
-- [ ] T045 [P] [US1] Integration test /suggestions/:id PATCH endpoint in backend/tests/integration/api/suggestions-update.test.ts (verify status transitions and 400 for invalid states)
-- [ ] T046 [P] [US1] Integration test /sync-plan/build endpoint in backend/tests/integration/api/sync-plan-build.test.ts (verify plan includes only approved suggestions)
+- [ ] T041 [P] [US1] Implement POST /budget/download route in backend/src/api/routes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml)
+- [ ] T042 [P] [US1] Implement POST /suggestions/generate route in backend/src/api/routes.ts (validate snapshotId, call AIService, return Suggestion[] JSON per contracts/api.yaml)
+- [ ] T043 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/routes.ts (validate suggestionId and status, update via AuditRepo, return updated Suggestion per contracts/api.yaml)
+- [ ] T044 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/routes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
+- [ ] T045 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/routes.ts (validate snapshotId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
+- [ ] T046 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7)
+- [ ] T047 [P] [US1] Integration test /budget/download endpoint in backend/tests/integration/api/budget-download.test.ts (mock Actual server, verify 200 response and snapshot structure)
+- [ ] T048 [P] [US1] Integration test /suggestions/generate endpoint in backend/tests/integration/api/suggestions-generate.test.ts (mock OpenAI API, verify suggestions returned with confidence scores)
+- [ ] T049 [P] [US1] Integration test /suggestions/:id PATCH endpoint in backend/tests/integration/api/suggestions-update.test.ts (verify status transitions and 400 for invalid states)
+- [ ] T050 [P] [US1] Integration test /sync-plan/build endpoint in backend/tests/integration/api/sync-plan-build.test.ts (verify plan includes only approved suggestions)
 
 ### Frontend (P1)
 
-- [ ] T047 [P] [US1] Create API client service in frontend/src/services/api-client.ts (axios or fetch wrapper: downloadBudget, generateSuggestions, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
-- [ ] T048 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons)
-- [ ] T049 [P] [US1] Implement SyncPlanPreview component in frontend/src/components/SyncPlanPreview.tsx (show changes count, old→new category diff list, dry-run summary)
-- [ ] T050 [US1] Implement App component in frontend/src/App.tsx (orchestrate workflow: download button → generate button → SuggestionList → build plan button → SyncPlanPreview)
-- [ ] T051 [US1] Add loading states and error handling in frontend/src/App.tsx (spinner during AI generation, error toast for API failures, disable buttons during operations)
-- [ ] T052 [P] [US1] Style components with Tailwind CSS or basic CSS in frontend/src/styles.css (confidence color coding: green >0.8, yellow 0.5-0.8, red <0.5)
-- [ ] T053 [P] [US1] Integration test approve/reject workflow in frontend/tests/integration/suggestion-review.spec.ts (Playwright: download → generate → approve 3 suggestions → build plan → verify plan contains 3 changes)
-- [ ] T054 [P] [US1] Integration test bulk approve workflow in frontend/tests/integration/bulk-approve.spec.ts (Playwright: filter by confidence >0.8 → bulk approve → build plan → verify all approved)
+- [ ] T051 [P] [US1] Create API client service in frontend/src/services/api-client.ts (axios or fetch wrapper: downloadBudget, generateSuggestions, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
+- [ ] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons)
+- [ ] T053 [P] [US1] Implement SyncPlanPreview component in frontend/src/components/SyncPlanPreview.tsx (show changes count, old→new category diff list, dry-run summary)
+- [ ] T054 [US1] Implement App component in frontend/src/App.tsx (orchestrate workflow: download button → generate button → SuggestionList → build plan button → SyncPlanPreview)
+- [ ] T055 [US1] Add loading states and error handling in frontend/src/App.tsx (spinner during AI generation, error toast for API failures, disable buttons during operations)
+- [ ] T056 [P] [US1] Style components with Tailwind CSS or basic CSS in frontend/src/styles.css (confidence color coding: green >0.8, yellow 0.5-0.8, red <0.5)
+- [ ] T057 [P] [US1] Integration test approve/reject workflow in frontend/tests/integration/suggestion-review.spec.ts (Playwright: download → generate → approve 3 suggestions → build plan → verify plan contains 3 changes)
+- [ ] T058 [P] [US1] Integration test bulk approve workflow in frontend/tests/integration/bulk-approve.spec.ts (Playwright: filter by confidence >0.8 → bulk approve → build plan → verify all approved)
 
 **Checkpoint**: At this point, P1 should be fully functional and testable independently
 
@@ -129,11 +133,11 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 **Purpose**: Final testing and documentation validation
 
-- [ ] T055 [P] Run full test suite for backend (npm test in backend/, verify all unit and integration tests pass)
-- [ ] T056 [P] Run full test suite for frontend (npm run test:e2e in frontend/, verify Playwright tests pass)
-- [ ] T057 Validate quickstart.md instructions (fresh clone, follow setup steps, verify POC runs and acceptance scenarios work per quickstart.md)
-- [ ] T058 [P] Add README.md to repository root with POC overview, links to specs/, and quickstart reference
-- [ ] T059 Run constitution compliance check (verify P1-P10 alignment per plan.md: modularity, no duplication, testability, explicitness, separation, dependency discipline, error handling, refactoring opportunities, minimalism, reviewability)
+- [ ] T059 [P] Run full test suite for backend (npm test in backend/, verify all unit and integration tests pass)
+- [ ] T060 [P] Run full test suite for frontend (npm run test:e2e in frontend/, verify Playwright tests pass)
+- [ ] T061 Validate quickstart.md instructions (fresh clone, follow setup steps, verify POC runs and acceptance scenarios work per quickstart.md)
+- [ ] T062 [P] Add README.md to repository root with POC overview, links to specs/, and quickstart reference
+- [ ] T063 Run constitution compliance check (verify P1-P10 alignment per plan.md: modularity, no duplication, testability, explicitness, separation, dependency discipline, error handling, refactoring opportunities, minimalism, reviewability)
 
 ---
 
@@ -153,29 +157,31 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 ### Within Phase 3 (P1)
 
-- **Domain (T019-T024)**: No dependencies, can all run in parallel
-- **Infrastructure (T025-T030)**: No dependencies on domain (uses mocks), can all run in parallel
-- **Service (T031-T036)**: Depends on Domain + Infrastructure completion; BudgetService, AIService, SyncService can be built in parallel after
-- **API (T037-T046)**: Depends on Service layer; routes can be built in parallel, error handler needed before integration tests
-- **Frontend (T047-T054)**: API client can start once contracts defined; components can be built in parallel; App orchestration last; tests after App complete
+- **Domain (T023-T028)**: No dependencies, can all run in parallel
+- **Infrastructure (T029-T034)**: No dependencies on domain (uses mocks), can all run in parallel
+- **Service (T035-T040)**: Depends on Domain + Infrastructure completion; BudgetService, AIService, SyncService can be built in parallel after
+- **API (T041-T050)**: Depends on Service layer; routes can be built in parallel, error handler needed before integration tests
+- **Frontend (T051-T058)**: API client can start once contracts defined; components can be built in parallel; App orchestration last; tests after App complete
 
 ### Parallel Opportunities
 
 ```bash
-# Phase 1: All setup tasks T003-T010 can run in parallel
+# Phase 1: All setup tasks T003-T014 can run in parallel (split by concern)
 Task: "Initialize backend TypeScript project"
 Task: "Initialize frontend TypeScript project"
 Task: "Configure TypeScript for backend"
 Task: "Configure TypeScript for frontend"
+Task: "Create backend Dockerfile"
+Task: "Create frontend Dockerfile"
 # ... etc
 
-# Phase 2: T014, T015, T016, T017 can run in parallel (different concerns)
+# Phase 2: T018, T019, T020, T021 can run in parallel (different concerns)
 Task: "Create error types"
 Task: "Setup logging"
 Task: "Configure Vitest"
 Task: "Configure Playwright"
 
-# Phase 3 Domain: T019-T024 all parallel (different entities)
+# Phase 3 Domain: T023-T028 all parallel (different entities)
 Task: "Implement BudgetSnapshot entity"
 Task: "Implement Suggestion entity"
 Task: "Implement SyncPlan entity"
@@ -215,6 +221,8 @@ Task: "Test BudgetSnapshot"
 - [US1] label maps task to User Story 1 for traceability
 - POC excludes P2/P3, so no tasks for payee merge or AI reports
 - Sync execution endpoint (POST /sync-plan/:id/execute) deferred to post-POC
-- Authentication, multi-user, Dockerfile, Helm chart all deferred to post-POC
+- Authentication, multi-user support deferred to post-POC
+- **1-click run**: `docker-compose up` (T013) or `npm run dev:all` (T014)
+- **Dockerfiles** (T011-T012) enable deployment to home-ops with Helm chart (post-POC)
 - Commit after each logical group (e.g., all domain entities, all infra adapters)
 - Stop at Phase 4 checkpoint to validate POC before expanding scope

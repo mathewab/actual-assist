@@ -146,7 +146,7 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 ### Frontend (P1)
 
 - [ ] T051 [P] [US1] Create API client service in frontend/src/services/api-client.ts (axios or fetch wrapper: downloadBudget, generateSuggestions with budgetId, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
-- [ ] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons, budgetId context)
+- [X] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons, budgetId context)
 - [ ] T053 [P] [US1] Implement SyncPlanPreview component in frontend/src/components/SyncPlanPreview.tsx (show changes count, old→new category diff list, dry-run summary)
 - [ ] T054 [US1] Implement App component in frontend/src/App.tsx (orchestrate workflow: download button → generate button with budgetId → SuggestionList → build plan button → SyncPlanPreview)
 - [ ] T055 [US1] Add loading states and error handling in frontend/src/App.tsx (spinner during AI generation, error toast for API failures and drift warnings, disable buttons during operations)

@@ -71,50 +71,93 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           <p className="hint">Click "Sync & Generate" to fetch new suggestions</p>
         </div>
       ) : (
-        <div className="suggestions">
-          {suggestions.map((suggestion: Suggestion) => (
-            <div key={suggestion.id} className="suggestion-card">
-              <div className="suggestion-header">
-                <span className="category-name">
-                  {suggestion.proposedCategoryName || 'Uncategorized'}
-                </span>
-                <span className={`confidence confidence-${getConfidenceLevel(suggestion.confidence)}`}>
-                  {Math.round(suggestion.confidence * 100)}% confident
-                </span>
-                <span className={`status status-${suggestion.status}`}>
-                  {suggestion.status}
-                </span>
-              </div>
-
-              <div className="suggestion-body">
-                <p className="rationale">{suggestion.rationale}</p>
-                <p className="transaction-details">
-                  {suggestion.transactionPayee} - {suggestion.transactionDate} ({suggestion.transactionAmount})
-                </p>
-              </div>
-
-              {suggestion.status === 'pending' && (
-                <div className="suggestion-actions">
-                  <button
-                    className="btn btn-approve"
-                    onClick={() => approveMutation.mutate(suggestion.id)}
-                    disabled={approveMutation.isPending}
-                  >
-                    ✓ Approve
-                  </button>
-                  <button
-                    className="btn btn-reject"
-                    onClick={() => rejectMutation.mutate(suggestion.id)}
-                    disabled={rejectMutation.isPending}
-                  >
-                    ✗ Reject
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+        <div className="transaction-table-container">
+          <table className="transaction-table">
+            <thead>
+              <tr>
+                <th className="col-date">Date</th>
+                <th className="col-payee">Payee</th>
+                <th className="col-amount">Amount</th>
+                <th className="col-category">Category</th>
+                <th className="col-confidence">Confidence</th>
+                <th className="col-status">Status</th>
+                <th className="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {suggestions.map((suggestion: Suggestion) => (
+                <tr 
+                  key={suggestion.id} 
+                  className={`transaction-row confidence-row-${getConfidenceLevel(suggestion.confidence)} status-row-${suggestion.status}`}
+                  title={suggestion.rationale}
+                >
+                  <td className="col-date">
+                    {formatDate(suggestion.transactionDate)}
+                  </td>
+                  <td className="col-payee">
+                    <span className="payee-name">{suggestion.transactionPayee || '—'}</span>
+                  </td>
+                  <td className="col-amount">
+                    {formatAmount(suggestion.transactionAmount)}
+                  </td>
+                  <td className="col-category">
+                    <span className="category-badge">
+                      {suggestion.proposedCategoryName || 'Uncategorized'}
+                    </span>
+                  </td>
+                  <td className="col-confidence">
+                    <span className={`confidence-badge confidence-${getConfidenceLevel(suggestion.confidence)}`}>
+                      {Math.round(suggestion.confidence * 100)}%
+                    </span>
+                  </td>
+                  <td className="col-status">
+                    <span className={`status-badge status-${suggestion.status}`}>
+                      {suggestion.status}
+                    </span>
+                  </td>
+                  <td className="col-actions">
+                    {suggestion.status === 'pending' ? (
+                      <div className="action-buttons">
+                        <button
+                          className="btn-icon btn-approve"
+                          onClick={() => approveMutation.mutate(suggestion.id)}
+                          disabled={approveMutation.isPending}
+                          title="Approve suggestion"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          className="btn-icon btn-reject"
+                          onClick={() => rejectMutation.mutate(suggestion.id)}
+                          disabled={rejectMutation.isPending}
+                          title="Reject suggestion"
+                        >
+                          ✗
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="action-done">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+      
+      <div className="legend">
+        <span className="legend-item">
+          <span className="legend-color confidence-high"></span> High confidence (≥80%)
+        </span>
+        <span className="legend-item">
+          <span className="legend-color confidence-medium"></span> Medium (50-79%)
+        </span>
+        <span className="legend-item">
+          <span className="legend-color confidence-low"></span> Low (&lt;50%)
+        </span>
+        <span className="legend-hint">Hover over a row to see AI rationale</span>
+      </div>
     </div>
   );
 }
@@ -123,4 +166,29 @@ function getConfidenceLevel(confidence: number): string {
   if (confidence >= 0.8) return 'high';
   if (confidence >= 0.5) return 'medium';
   return 'low';
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return '—';
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatAmount(amount: number | null): string {
+  if (amount === null || amount === undefined) return '—';
+  // Actual Budget stores amounts in cents, convert to dollars
+  const dollars = amount / 100;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(dollars);
 }

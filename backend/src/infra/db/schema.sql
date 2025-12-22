@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS suggestions (
   id TEXT PRIMARY KEY,              -- UUID v4
   budget_id TEXT NOT NULL,          -- Actual Budget ID (budgetId)
   transaction_id TEXT NOT NULL,     -- Actual Budget transaction ID
+  transaction_account_id TEXT,      -- Account ID
+  transaction_account_name TEXT,    -- Account name for display
   transaction_payee TEXT,           -- Payee name from transaction
   transaction_amount REAL,          -- Transaction amount
   transaction_date TEXT,            -- Transaction date

@@ -56,7 +56,12 @@ export class ActualBudgetAdapter {
     this.ensureInitialized();
 
     try {
-      const accounts = await api.getAccounts();
+      const [accounts, payees, categories] = await Promise.all([
+        api.getAccounts(),
+        api.getPayees(),
+        api.getCategories(),
+      ]);
+
       const allTransactions: Transaction[] = [];
 
       for (const account of accounts) {
@@ -64,37 +69,29 @@ export class ActualBudgetAdapter {
           continue; // Skip closed and off-budget accounts
         }
 
-        const accountTransactions = await api.getTransactions(account.id, '1970-01-01', new Date().toISOString().split('T')[0]);
+        const accountTransactions = await api.getTransactions(
+          account.id,
+          '1970-01-01',
+          new Date().toISOString().split('T')[0]
+        );
 
         for (const txn of accountTransactions) {
-          // Get payee name if payee_id exists
-          let payeeName: string | null = null;
-          if (txn.payee) {
-            const payee = await api.getPayees().then(payees =>
-              payees.find(p => p.id === txn.payee)
-            );
-            payeeName = payee?.name || null;
-          }
-
-          // Get category name if category exists
-          let categoryName: string | null = null;
-          if (txn.category) {
-            const categories = await api.getCategories();
-            const category = categories.find(c => c.id === txn.category);
-            categoryName = category?.name || null;
-          }
+          const payee = txn.payee ? payees.find((p: any) => p.id === txn.payee) : null;
+          const category = txn.category ? categories.find((c: any) => c.id === txn.category) : null;
 
           allTransactions.push({
             id: txn.id,
             accountId: account.id,
+            accountName: account.name || null,
             date: txn.date,
             payeeId: txn.payee || null,
-            payeeName,
+            payeeName: payee?.name || null,
             notes: txn.notes || null,
             categoryId: txn.category || null,
-            categoryName,
+            categoryName: category?.name || null,
             amount: txn.amount,
             cleared: txn.cleared || false,
+            isTransfer: Boolean((txn as any).transfer_id),
           });
         }
       }

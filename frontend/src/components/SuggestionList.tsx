@@ -77,6 +77,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               <tr>
                 <th className="col-date">Date</th>
                 <th className="col-payee">Payee</th>
+                <th className="col-account">Account</th>
                 <th className="col-amount">Amount</th>
                 <th className="col-category">Category</th>
                 <th className="col-confidence">Confidence</th>
@@ -96,6 +97,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                   </td>
                   <td className="col-payee">
                     <span className="payee-name">{suggestion.transactionPayee || '—'}</span>
+                  </td>
+                  <td className="col-account">
+                    <span className="account-name">{suggestion.transactionAccountName || '—'}</span>
                   </td>
                   <td className="col-amount">
                     {formatAmount(suggestion.transactionAmount)}

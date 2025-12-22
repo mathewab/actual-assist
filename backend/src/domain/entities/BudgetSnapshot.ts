@@ -5,6 +5,7 @@
 export interface Transaction {
   id: string;
   accountId: string;
+  accountName: string | null;
   date: string; // ISO 8601 date
   payeeId: string | null;
   payeeName: string | null;
@@ -13,6 +14,7 @@ export interface Transaction {
   categoryName: string | null;
   amount: number; // In cents (Actual Budget format)
   cleared: boolean;
+  isTransfer: boolean;
 }
 
 /**

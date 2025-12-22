@@ -38,7 +38,7 @@ const auditRepo = new AuditRepository(db);
 const payeeCache = new PayeeCacheRepository(db);
 
 // Initialize services
-const snapshotService = new SnapshotService(actualBudget, auditRepo);
+const snapshotService = new SnapshotService(actualBudget, auditRepo, suggestionRepo);
 const suggestionService = new SuggestionService(actualBudget, openai, suggestionRepo, auditRepo, payeeCache);
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
 

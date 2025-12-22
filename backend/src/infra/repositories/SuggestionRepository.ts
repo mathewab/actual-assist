@@ -17,16 +17,19 @@ export class SuggestionRepository {
   save(suggestion: Suggestion): void {
     const sql = `
       INSERT INTO suggestions (
-        id, budget_id, transaction_id, transaction_payee, transaction_amount, 
-        transaction_date, current_category_id, proposed_category_id, proposed_category_name,
-        confidence, rationale, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, budget_id, transaction_id, transaction_account_id, transaction_account_name,
+        transaction_payee, transaction_amount, transaction_date, current_category_id,
+        proposed_category_id, proposed_category_name, confidence, rationale, status,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     this.db.execute(sql, [
       suggestion.id,
       suggestion.budgetId,
       suggestion.transactionId,
+      suggestion.transactionAccountId,
+      suggestion.transactionAccountName,
       suggestion.transactionPayee,
       suggestion.transactionAmount,
       suggestion.transactionDate,
@@ -110,6 +113,8 @@ export class SuggestionRepository {
       transactionPayee: row.transaction_payee,
       transactionAmount: row.transaction_amount,
       transactionDate: row.transaction_date,
+      transactionAccountId: row.transaction_account_id,
+      transactionAccountName: row.transaction_account_name,
       currentCategoryId: row.current_category_id,
       proposedCategoryId: row.proposed_category_id,
       proposedCategoryName: row.proposed_category_name,

@@ -488,6 +488,14 @@ components:
           type: string
         transactionId:
           type: string
+        transactionAccountId:
+          type: string
+          nullable: true
+          description: "Account containing this transaction"
+        transactionAccountName:
+          type: string
+          nullable: true
+          description: "Display name of the account"
         transactionPayee:
           type: string
           example: "Netflix"

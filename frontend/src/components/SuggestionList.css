@@ -78,6 +78,7 @@
 /* Column Widths */
 .col-date { width: 110px; }
 .col-payee { min-width: 180px; }
+.col-account { min-width: 160px; }
 .col-amount { width: 100px; text-align: right; }
 .col-category { min-width: 140px; }
 .col-confidence { width: 90px; text-align: center; }
@@ -117,6 +118,10 @@
 .payee-name {
   font-weight: 500;
   color: #333;
+}
+
+.account-name {
+  color: #444;
 }
 
 /* Amount */

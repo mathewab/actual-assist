@@ -14,6 +14,8 @@ export interface Suggestion {
   id: string;
   budgetId: string;
   transactionId: string;
+  transactionAccountId: string | null;
+  transactionAccountName: string | null;
   transactionPayee: string | null;
   transactionAmount: number | null;
   transactionDate: string | null;

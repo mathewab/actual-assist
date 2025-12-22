@@ -6,6 +6,8 @@ export interface Suggestion {
   id: string; // UUID v4
   budgetId: string; // Actual Budget ID
   transactionId: string;
+  transactionAccountId: string | null;
+  transactionAccountName: string | null;
   transactionPayee: string | null;
   transactionAmount: number | null;
   transactionDate: string | null;
@@ -28,6 +30,8 @@ export type SuggestionStatus = 'pending' | 'approved' | 'rejected' | 'applied';
 export function createSuggestion(params: {
   budgetId: string;
   transactionId: string;
+  transactionAccountId?: string | null;
+  transactionAccountName?: string | null;
   transactionPayee?: string | null;
   transactionAmount?: number | null;
   transactionDate?: string | null;
@@ -42,6 +46,8 @@ export function createSuggestion(params: {
     id: crypto.randomUUID(),
     budgetId: params.budgetId,
     transactionId: params.transactionId,
+    transactionAccountId: params.transactionAccountId || null,
+    transactionAccountName: params.transactionAccountName || null,
     transactionPayee: params.transactionPayee || null,
     transactionAmount: params.transactionAmount || null,
     transactionDate: params.transactionDate || null,

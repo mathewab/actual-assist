@@ -1,5 +1,6 @@
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
+import type { SuggestionRepository } from '../infra/repositories/SuggestionRepository.js';
 import { createBudgetSnapshot, type BudgetSnapshot } from '../domain/entities/BudgetSnapshot.js';
 import { logger } from '../infra/logger.js';
 
@@ -11,7 +12,8 @@ import { logger } from '../infra/logger.js';
 export class SnapshotService {
   constructor(
     private actualBudget: ActualBudgetAdapter,
-    private auditRepo: AuditRepository
+    private auditRepo: AuditRepository,
+    private suggestionRepo: SuggestionRepository
   ) {}
 
   /**
@@ -26,6 +28,12 @@ export class SnapshotService {
       this.actualBudget.getTransactions(),
       this.actualBudget.getCategories(),
     ]);
+
+    // Clear any existing suggestions for this budget to avoid stale data after redownload
+    const cleared = this.suggestionRepo.deleteByBudgetId(budgetId);
+    if (cleared > 0) {
+      logger.info('Cleared existing suggestions for budget', { budgetId, cleared });
+    }
 
     // Create immutable snapshot
     const snapshot = createBudgetSnapshot({

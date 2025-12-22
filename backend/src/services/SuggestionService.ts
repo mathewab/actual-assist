@@ -53,9 +53,12 @@ export class SuggestionService {
     ]);
 
     // Filter uncategorized transactions
-    const uncategorized = transactions.filter(
-      (txn) => txn.categoryId === null
-    );
+    const uncategorized = transactions.filter((txn) => txn.categoryId === null && !txn.isTransfer);
+
+    const transferSkipped = transactions.filter((txn) => txn.isTransfer).length;
+    if (transferSkipped > 0) {
+      logger.info('Skipped transfer transactions from suggestion generation', { count: transferSkipped });
+    }
 
     if (uncategorized.length === 0) {
       logger.info('No uncategorized transactions found');
@@ -258,6 +261,11 @@ Respond with JSON array:
     try {
       // Build prompt for category suggestions
       const prompt = this.buildCategoryPrompt(payeeNames, categories);
+
+      logger.info('Calling OpenAI web search completion for payee batch', {
+        payeeCount: payeeNames.length,
+        promptLength: prompt.length,
+      });
       
       // Single LLM call with web search for merchant identification
       const responseContent = await this.openai.webSearchCompletion({ prompt });
@@ -265,7 +273,7 @@ Respond with JSON array:
       // Parse response into structured suggestions
       const aiResults = this.parseCategoryResponse(responseContent);
 
-      logger.debug('AI category suggestions received', {
+      logger.info('AI category suggestions received', {
         payeeCount: payeeNames.length,
         suggestionsCount: aiResults.length,
       });
@@ -295,6 +303,8 @@ Respond with JSON array:
           const suggestion = createSuggestion({
             budgetId,
             transactionId: txn.id,
+            transactionAccountId: txn.accountId,
+            transactionAccountName: txn.accountName,
             transactionPayee: txn.payeeName,
             transactionAmount: txn.amount,
             transactionDate: txn.date,
@@ -328,7 +338,11 @@ Respond with JSON array:
       }
 
     } catch (error) {
-      logger.error('Failed to generate batch suggestions', { error, payeeNames });
+      logger.error('Failed to generate batch suggestions', {
+        error: error instanceof Error ? error.message : String(error),
+        payeeCount: payeeNames.length,
+        payeesSample: payeeNames.slice(0, 5),
+      });
       // Create unknown suggestions for all transactions on failure
       for (const payeeName of payeeNames) {
         const txns = transactionsByPayee.get(payeeName) || [];
@@ -336,6 +350,8 @@ Respond with JSON array:
           const suggestion = createSuggestion({
             budgetId,
             transactionId: txn.id,
+            transactionAccountId: txn.accountId,
+            transactionAccountName: txn.accountName,
             transactionPayee: txn.payeeName,
             transactionAmount: txn.amount,
             transactionDate: txn.date,
@@ -454,8 +470,13 @@ Respond with JSON array:
 
     // Filter to only new uncategorized transactions without suggestions
     const uncategorized = transactions.filter(
-      (txn) => txn.categoryId === null && !existingTransactionIds.has(txn.id)
+      (txn) => txn.categoryId === null && !existingTransactionIds.has(txn.id) && !txn.isTransfer
     );
+
+    const transferSkipped = transactions.filter((txn) => txn.isTransfer).length;
+    if (transferSkipped > 0) {
+      logger.info('Skipped transfer transactions during diff-based generation', { count: transferSkipped });
+    }
 
     if (uncategorized.length === 0) {
       logger.info('No new uncategorized transactions found');
@@ -482,6 +503,8 @@ Respond with JSON array:
         const suggestion = createSuggestion({
           budgetId,
           transactionId: txn.id,
+          transactionAccountId: txn.accountId,
+          transactionAccountName: txn.accountName,
           transactionPayee: txn.payeeName,
           transactionAmount: txn.amount,
           transactionDate: txn.date,

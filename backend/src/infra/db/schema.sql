@@ -38,8 +38,26 @@ CREATE TABLE IF NOT EXISTS audit_log (
   timestamp TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Payee category cache: Store learned payee→category mappings to reduce LLM calls
+CREATE TABLE IF NOT EXISTS payee_category_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  budget_id TEXT NOT NULL,
+  payee_name TEXT NOT NULL,           -- Normalized payee name (lowercase, trimmed)
+  payee_name_original TEXT NOT NULL,  -- Original payee name for display
+  category_id TEXT NOT NULL,
+  category_name TEXT NOT NULL,
+  confidence REAL NOT NULL,           -- Confidence at time of caching
+  source TEXT NOT NULL CHECK(source IN ('user_approved', 'high_confidence_ai')),
+  hit_count INTEGER DEFAULT 1,        -- Number of times this cache entry was used
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(budget_id, payee_name)
+);
+
 -- Indexes for common query patterns
 CREATE INDEX IF NOT EXISTS idx_suggestions_budget ON suggestions(budget_id);
 CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_payee_cache_budget ON payee_category_cache(budget_id);
+CREATE INDEX IF NOT EXISTS idx_payee_cache_payee ON payee_category_cache(payee_name);

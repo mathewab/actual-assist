@@ -8,6 +8,7 @@ import { ActualBudgetAdapter } from './infra/ActualBudgetAdapter.js';
 import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
 import { SuggestionRepository } from './infra/repositories/SuggestionRepository.js';
 import { AuditRepository } from './infra/repositories/AuditRepository.js';
+import { PayeeCacheRepository } from './infra/repositories/PayeeCacheRepository.js';
 import { SnapshotService } from './services/SnapshotService.js';
 import { SuggestionService } from './services/SuggestionService.js';
 import { SyncService } from './services/SyncService.js';
@@ -34,10 +35,11 @@ const openai = new OpenAIAdapter(env);
 // Initialize repositories
 const suggestionRepo = new SuggestionRepository(db);
 const auditRepo = new AuditRepository(db);
+const payeeCache = new PayeeCacheRepository(db);
 
 // Initialize services
 const snapshotService = new SnapshotService(actualBudget, auditRepo);
-const suggestionService = new SuggestionService(actualBudget, openai, suggestionRepo, auditRepo);
+const suggestionService = new SuggestionService(actualBudget, openai, suggestionRepo, auditRepo, payeeCache);
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
 
 // Initialize Actual Budget connection

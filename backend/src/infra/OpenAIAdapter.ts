@@ -2,11 +2,26 @@ import OpenAI from 'openai';
 import { OpenAIError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
-import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
+
+/** Options for chat completion */
+export interface ChatCompletionOptions {
+  systemPrompt?: string;
+  userPrompt: string;
+  temperature?: number;
+  jsonResponse?: boolean;
+}
+
+/** Options for responses API with web search */
+export interface WebSearchCompletionOptions {
+  prompt: string;
+}
 
 /**
- * OpenAI API adapter for category suggestions
+ * OpenAI API adapter - generic wrapper for OpenAI API calls
  * P5 (Separation of concerns): Domain layer never imports OpenAI directly
+ * 
+ * This adapter is intentionally generic and reusable by any service.
+ * Prompt construction belongs in the calling service, not here.
  */
 export class OpenAIAdapter {
   private client: OpenAI;
@@ -20,31 +35,23 @@ export class OpenAIAdapter {
   }
 
   /**
-   * Generate category suggestion for a transaction
-   * P7 (Explicit error handling): Wraps OpenAI API errors
+   * Simple chat completion (no web search)
+   * Use for tasks where the model has sufficient knowledge
    */
-  async suggestCategory(
-    transaction: Transaction,
-    availableCategories: Category[],
-    recentTransactions: Transaction[]
-  ): Promise<{ categoryId: string | null; categoryName: string | null; confidence: number; reasoning: string }> {
+  async chatCompletion(options: ChatCompletionOptions): Promise<string> {
     try {
-      const prompt = this.buildPrompt(transaction, availableCategories, recentTransactions);
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+      
+      if (options.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt });
+      }
+      messages.push({ role: 'user', content: options.userPrompt });
 
       const response = await this.client.chat.completions.create({
         model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a financial assistant that suggests budget categories for transactions. Respond in JSON format with: categoryId (string or null), categoryName (string or null), confidence (0-1), and reasoning (string).',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.3, // Low temperature for consistency
-        response_format: { type: 'json_object' },
+        messages,
+        temperature: options.temperature ?? 0.3,
+        response_format: options.jsonResponse ? { type: 'json_object' } : undefined,
       });
 
       const content = response.choices[0]?.message?.content;
@@ -52,67 +59,64 @@ export class OpenAIAdapter {
         throw new OpenAIError('Empty response from OpenAI');
       }
 
-      const result = JSON.parse(content);
-      
-      logger.debug('OpenAI suggestion generated', {
-        transactionId: transaction.id,
-        suggestedCategory: result.categoryName,
-        confidence: result.confidence,
+      logger.debug('OpenAI chat completion', {
+        promptLength: options.userPrompt.length,
+        responseLength: content.length,
       });
 
-      return {
-        categoryId: result.categoryId || null,
-        categoryName: result.categoryName || null,
-        confidence: result.confidence,
-        reasoning: result.reasoning,
-      };
+      return content;
     } catch (error) {
       if (error instanceof OpenAIError) {
         throw error;
       }
-      throw new OpenAIError('Failed to generate category suggestion', { error });
+      logger.error('OpenAI chat completion failed', { error });
+      throw new OpenAIError('Chat completion failed', { error });
     }
   }
 
   /**
-   * Build prompt for category suggestion
-   * P2 (Zero duplication): Centralized prompt construction
+   * Completion with web search using Responses API
+   * Use for tasks requiring up-to-date information (e.g., merchant identification)
    */
-  private buildPrompt(
-    transaction: Transaction,
-    categories: Category[],
-    recentTransactions: Transaction[]
-  ): string {
-    const categoryList = categories
-      .map(cat => `- ${cat.name} (ID: ${cat.id}, Group: ${cat.groupName})`)
-      .join('\n');
+  async webSearchCompletion(options: WebSearchCompletionOptions): Promise<string> {
+    try {
+      const response = await this.client.responses.create({
+        model: this.model,
+        tools: [{ type: 'web_search_preview' }],
+        input: options.prompt,
+      });
 
-    const recentHistory = recentTransactions
-      .filter(t => t.payeeId === transaction.payeeId && t.categoryId)
-      .slice(0, 5)
-      .map(t => `- ${t.payeeName}: ${t.categoryName}`)
-      .join('\n');
+      // Extract text content from response
+      const textOutput = response.output.find(item => item.type === 'message');
+      const content = textOutput?.content?.find(c => c.type === 'output_text')?.text;
+      
+      if (!content) {
+        throw new OpenAIError('Empty response from OpenAI');
+      }
 
-    return `
-Transaction Details:
-- Payee: ${transaction.payeeName || 'Unknown'}
-- Amount: $${(transaction.amount / 100).toFixed(2)}
-- Date: ${transaction.date}
-- Notes: ${transaction.notes || 'None'}
+      logger.debug('OpenAI web search completion', {
+        promptLength: options.prompt.length,
+        responseLength: content.length,
+      });
 
-Available Categories:
-${categoryList}
+      return content;
+    } catch (error) {
+      if (error instanceof OpenAIError) {
+        throw error;
+      }
+      logger.error('OpenAI web search completion failed', { error });
+      throw new OpenAIError('Web search completion failed', { error });
+    }
+  }
 
-${recentHistory ? `Recent transactions from this payee:\n${recentHistory}` : ''}
-
-Suggest the most appropriate category for this transaction. If you're not confident, suggest null for uncategorized.
-Provide:
-1. categoryId: The category ID from the list, or null if uncertain
-2. categoryName: The category name, or null if uncertain
-3. confidence: A number between 0 and 1 indicating your confidence
-4. reasoning: A brief explanation of why you chose this category
-
-Respond in JSON format.
-    `.trim();
+  /**
+   * Parse JSON from LLM response (handles markdown code blocks)
+   */
+  static parseJsonResponse<T>(content: string): T {
+    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || 
+                      content.match(/```\s*([\s\S]*?)```/) ||
+                      [null, content];
+    const jsonStr = jsonMatch[1]?.trim() || content.trim();
+    return JSON.parse(jsonStr);
   }
 }

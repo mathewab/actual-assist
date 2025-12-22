@@ -1,7 +1,7 @@
-import type { DatabaseAdapter } from '../infra/DatabaseAdapter.js';
-import type { AuditEntry, AuditEventType } from '../domain/entities/AuditEntry.js';
-import { createAuditEntry } from '../domain/entities/AuditEntry.js';
-import { logger } from '../infra/logger.js';
+import type { DatabaseAdapter } from '../DatabaseAdapter.js';
+import type { AuditEntry, AuditEventType } from '../../domain/entities/AuditEntry.js';
+import { createAuditEntry } from '../../domain/entities/AuditEntry.js';
+import { logger } from '../logger.js';
 
 /**
  * Repository for AuditEntry persistence

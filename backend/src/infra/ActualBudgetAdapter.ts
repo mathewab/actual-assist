@@ -28,15 +28,22 @@ export class ActualBudgetAdapter {
         password: this.env.ACTUAL_PASSWORD,
       });
 
-      await api.downloadBudget(this.env.ACTUAL_BUDGET_ID, {
+      // Use sync ID if provided, otherwise use budget ID
+      const budgetIdentifier = this.env.ACTUAL_SYNC_ID || this.env.ACTUAL_BUDGET_ID;
+      
+      await api.downloadBudget(budgetIdentifier, {
         password: this.env.ACTUAL_ENCRYPTION_KEY,
       });
 
       this.initialized = true;
       logger.info('Actual Budget API initialized', {
-        budgetId: this.env.ACTUAL_BUDGET_ID,
+        budgetId: budgetIdentifier,
       });
     } catch (error) {
+      logger.error('Actual Budget initialization failed', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new ActualBudgetError('Failed to initialize Actual Budget API', { error });
     }
   }

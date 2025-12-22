@@ -1,7 +1,7 @@
-import type { DatabaseAdapter } from '../infra/DatabaseAdapter.js';
-import type { Suggestion, SuggestionStatus } from '../domain/entities/Suggestion.js';
-import { NotFoundError } from '../domain/errors.js';
-import { logger } from '../infra/logger.js';
+import type { DatabaseAdapter } from '../DatabaseAdapter.js';
+import type { Suggestion, SuggestionStatus } from '../../domain/entities/Suggestion.js';
+import { NotFoundError } from '../../domain/errors.js';
+import { logger } from '../logger.js';
 
 /**
  * Repository for Suggestion persistence

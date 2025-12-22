@@ -64,11 +64,7 @@ export class ActualBudgetAdapter {
           continue; // Skip closed and off-budget accounts
         }
 
-        const accountTransactions = await api.getTransactions(
-          account.id,
-          null, // startDate
-          null  // endDate
-        );
+        const accountTransactions = await api.getTransactions(account.id, '1970-01-01', new Date().toISOString().split('T')[0]);
 
         for (const txn of accountTransactions) {
           // Get payee name if payee_id exists
@@ -122,13 +118,13 @@ export class ActualBudgetAdapter {
       const categoryGroups = await api.getCategoryGroups();
 
       const categories: Category[] = rawCategories
-        .filter(cat => !cat.hidden)
-        .map(cat => {
-          const group = categoryGroups.find(g => g.id === cat.group_id);
+        .filter((cat: any) => !cat.hidden && cat.id && cat.name) // Filter out groups
+        .map((cat: any) => {
+          const group = categoryGroups.find((g: any) => g.id === cat.group_id);
           return {
             id: cat.id,
             name: cat.name,
-            groupId: cat.group_id,
+            groupId: cat.group_id || 'unknown',
             groupName: group?.name || 'Unknown',
             isIncome: group?.is_income || false,
             hidden: cat.hidden || false,
@@ -154,7 +150,7 @@ export class ActualBudgetAdapter {
 
     try {
       await api.updateTransaction(transactionId, {
-        category: categoryId,
+        category: categoryId || undefined,
       });
 
       logger.info('Updated transaction category', {

@@ -36,7 +36,7 @@ const auditRepo = new AuditRepository(db);
 
 // Initialize services
 const snapshotService = new SnapshotService(actualBudget, auditRepo);
-const suggestionService = new SuggestionService(openai, suggestionRepo, auditRepo);
+const suggestionService = new SuggestionService(actualBudget, openai, suggestionRepo, auditRepo);
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
 
 // Initialize Actual Budget connection
@@ -90,7 +90,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     res.status(err.statusCode).json({
       error: err.code,
       message: err.message,
-      ...(err.details && { details: err.details }),
+      ...(err.details ? { details: err.details } : {}),
     });
   } else {
     loggerInstance.error('Unexpected error', {

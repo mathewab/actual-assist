@@ -7,24 +7,33 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export interface Suggestion {
   id: string;
+  budgetId: string;
   transactionId: string;
-  suggestedCategoryId: string | null;
-  suggestedCategoryName: string | null;
+  transactionPayee: string | null;
+  transactionAmount: number | null;
+  transactionDate: string | null;
+  currentCategoryId: string | null;
+  proposedCategoryId: string;
+  proposedCategoryName: string;
   confidence: number;
-  reasoning: string;
+  rationale: string;
   status: 'pending' | 'approved' | 'rejected' | 'applied';
   createdAt: string;
 }
 
 export interface SyncPlan {
   id: string;
-  snapshotId: string;
-  operations: Array<{
-    type: 'update_category';
+  budgetId: string;
+  changes: Array<{
+    id: string;
     transactionId: string;
-    newCategoryId: string | null;
-    newCategoryName: string | null;
+    proposedCategoryId: string;
+    currentCategoryId: string | null;
   }>;
+  dryRunSummary: {
+    totalChanges: number;
+    estimatedImpact: string;
+  };
   createdAt: string;
 }
 
@@ -47,6 +56,23 @@ export const api = {
   },
 
   /**
+   * Generate AI suggestions
+   */
+  async generateSuggestions(budgetId: string, maxSuggestions?: number): Promise<{ suggestions: Suggestion[]; total: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, ...(maxSuggestions && { maxSuggestions }) }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Get pending suggestions
    */
   async getPendingSuggestions(): Promise<{ suggestions: Suggestion[] }> {
@@ -60,10 +86,10 @@ export const api = {
   },
 
   /**
-   * Get suggestions by snapshot ID
+   * Get suggestions by budget ID
    */
-  async getSuggestionsBySnapshot(snapshotId: string): Promise<{ suggestions: Suggestion[] }> {
-    const response = await fetch(`${API_BASE}/suggestions?snapshotId=${snapshotId}`);
+  async getSuggestionsByBudgetId(budgetId: string): Promise<{ suggestions: Suggestion[] }> {
+    const response = await fetch(`${API_BASE}/suggestions?budgetId=${budgetId}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch suggestions');
@@ -103,17 +129,17 @@ export const api = {
   },
 
   /**
-   * Create a sync plan
+   * Build a sync plan
    */
-  async createSyncPlan(snapshotId: string): Promise<SyncPlan> {
+  async buildSyncPlan(budgetId: string): Promise<SyncPlan> {
     const response = await fetch(`${API_BASE}/sync/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ snapshotId }),
+      body: JSON.stringify({ budgetId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to create sync plan');
+      throw new Error('Failed to build sync plan');
     }
 
     return response.json();
@@ -122,11 +148,11 @@ export const api = {
   /**
    * Execute a sync plan
    */
-  async executeSyncPlan(snapshotId: string) {
+  async executeSyncPlan(budgetId: string) {
     const response = await fetch(`${API_BASE}/sync/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ snapshotId }),
+      body: JSON.stringify({ budgetId }),
     });
 
     if (!response.ok) {

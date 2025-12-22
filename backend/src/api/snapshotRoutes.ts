@@ -14,17 +14,16 @@ export function createSnapshotRouter(snapshotService: SnapshotService): Router {
    */
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId, syncId } = req.body;
+      const { budgetId } = req.body;
 
-      const snapshot = await snapshotService.createSnapshot(budgetId, syncId || null);
+      const snapshot = await snapshotService.createSnapshot(budgetId);
 
       res.status(201).json({
-        id: snapshot.id,
         budgetId: snapshot.budgetId,
-        syncId: snapshot.syncId,
-        transactionCount: snapshot.transactions.length,
-        categoryCount: snapshot.categories.length,
-        createdAt: snapshot.createdAt.toISOString(),
+        filepath: snapshot.filepath,
+        downloadedAt: snapshot.downloadedAt,
+        transactionCount: snapshot.transactionCount,
+        categoryCount: snapshot.categoryCount,
       });
     } catch (error) {
       next(error);

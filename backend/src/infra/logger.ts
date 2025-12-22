@@ -50,12 +50,15 @@ function redactSecrets(obj: unknown): unknown {
 /**
  * Custom format that redacts secrets and formats as JSON
  */
-const redactFormat = winston.format((info) => {
-  return {
+const redactFormat = winston.format((info: any) => {
+  const result: any = {
     ...info,
     message: redactSecrets(info.message),
-    ...(info.meta && { meta: redactSecrets(info.meta) }),
   };
+  if (info.meta) {
+    result.meta = redactSecrets(info.meta);
+  }
+  return result;
 })();
 
 /**

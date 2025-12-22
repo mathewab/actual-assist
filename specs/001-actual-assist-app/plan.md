@@ -106,7 +106,7 @@ shared/                     # POC defers this; merge if types duplicate
 **Goal**: Resolve unknowns about @actual-app/api usage and OpenAI prompt design for categorization.
 
 **Tasks**:
-1. Research @actual-app/api: How to download budget, read transactions, read categories, detect staleness (hash/timestamp), build sync plan, execute sync.
+1. Research @actual-app/api: How to download budget, read transactions, read categories, build sync plan, execute sync; understand how Actual sync signals convey drift.
 2. Research OpenAI API: Prompt design for transaction categorization with confidence scores; cost estimation for 50 transactions; fallback if rate-limited.
 3. Research audit/staging storage: SQLite schema for suggestions (id, transaction_id, proposed_category, confidence, status, created_at, applied_at).
 
@@ -117,12 +117,12 @@ shared/                     # POC defers this; merge if types duplicate
 **Goal**: Define domain entities and API contracts for P1 only (categorization suggestions).
 
 **Tasks**:
-1. **data-model.md**: Define BudgetSnapshot (timestamp, hash, filepath), Suggestion (id, transactionId, proposedCategoryId, confidence, rationale, status: pending|approved|rejected), SyncPlan (changeList, dryRunSummary).
+1. **data-model.md**: Define BudgetSnapshot (single active immutable snapshot: budgetId as primary identifier, downloadedAt, filePath, transactionCount, categoryCount; no hash-based staleness; replaced only on explicit user re-download), Suggestion (id, budgetId, transactionId, proposedCategoryId, confidence, rationale, status: pending|approved|rejected), SyncPlan (changeList, dryRunSummary).
 2. **contracts/**: Define backend API endpoints:
-   - `POST /budget/download` (body: {serverURL, password, budgetId}) → {snapshotId, timestamp, transactionCount}
-   - `POST /suggestions/generate` (body: {snapshotId}) → {suggestions: Suggestion[]}
+   - `POST /budget/download` (body: {serverURL, password, budgetId}) → {budgetId, downloadedAt, transactionCount} (initial or user-triggered re-download)
+   - `POST /suggestions/generate` (body: {budgetId}) → {suggestions: Suggestion[]}
    - `PATCH /suggestions/:id` (body: {status: approved|rejected}) → {updated: Suggestion}
-   - `POST /sync-plan/build` (body: {snapshotId}) → {plan: SyncPlan}
+   - `POST /sync-plan/build` (body: {budgetId}) → {plan: SyncPlan}
 3. **quickstart.md**: Document how to run POC: install deps, set env vars (OPENAI_API_KEY, ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_ID), start backend, start frontend, test workflow.
 
 **Output**: [data-model.md](data-model.md), [contracts/api.yaml](contracts/api.yaml), [quickstart.md](quickstart.md).
@@ -143,6 +143,8 @@ shared/                     # POC defers this; merge if types duplicate
 - Tests: Unit tests for domain entities, service logic, AI prompt parsing; integration tests for API flows and UI approve/reject/build-plan workflow.
 
 **Output**: Working POC demonstrating P1 acceptance scenarios from spec.
+
+**Drift Handling Note (Phase 2 Deferral)**: POC assumes budget remains fresh during session (single initial download, no re-download). User-triggered re-download flow deferred to Phase 2. 
 
 ## Constitution Alignment (POC)
 

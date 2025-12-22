@@ -17,22 +17,27 @@ export class SuggestionRepository {
   save(suggestion: Suggestion): void {
     const sql = `
       INSERT INTO suggestions (
-        id, budget_snapshot_id, transaction_id, suggested_category_id,
-        suggested_category_name, confidence, reasoning, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, budget_id, transaction_id, transaction_payee, transaction_amount, 
+        transaction_date, current_category_id, proposed_category_id, proposed_category_name,
+        confidence, rationale, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     this.db.execute(sql, [
       suggestion.id,
-      suggestion.budgetSnapshotId,
+      suggestion.budgetId,
       suggestion.transactionId,
-      suggestion.suggestedCategoryId,
-      suggestion.suggestedCategoryName,
+      suggestion.transactionPayee,
+      suggestion.transactionAmount,
+      suggestion.transactionDate,
+      suggestion.currentCategoryId,
+      suggestion.proposedCategoryId,
+      suggestion.proposedCategoryName,
       suggestion.confidence,
-      suggestion.reasoning,
+      suggestion.rationale,
       suggestion.status,
-      suggestion.createdAt.toISOString(),
-      suggestion.updatedAt.toISOString(),
+      suggestion.createdAt,
+      suggestion.updatedAt,
     ]);
 
     logger.debug('Suggestion saved', { id: suggestion.id });
@@ -55,9 +60,9 @@ export class SuggestionRepository {
   /**
    * Find all suggestions for a budget snapshot
    */
-  findBySnapshotId(snapshotId: string): Suggestion[] {
-    const sql = 'SELECT * FROM suggestions WHERE budget_snapshot_id = ? ORDER BY created_at DESC';
-    const rows = this.db.query<any>(sql, [snapshotId]);
+  findByBudgetId(budgetId: string): Suggestion[] {
+    const sql = 'SELECT * FROM suggestions WHERE budget_id = ? ORDER BY created_at DESC';
+    const rows = this.db.query<any>(sql, [budgetId]);
     return rows.map(row => this.mapRowToSuggestion(row));
   }
 
@@ -86,11 +91,11 @@ export class SuggestionRepository {
   }
 
   /**
-   * Delete all suggestions for a snapshot
+   * Delete all suggestions for a budget
    */
-  deleteBySnapshotId(snapshotId: string): number {
-    const sql = 'DELETE FROM suggestions WHERE budget_snapshot_id = ?';
-    return this.db.execute(sql, [snapshotId]);
+  deleteByBudgetId(budgetId: string): number {
+    const sql = 'DELETE FROM suggestions WHERE budget_id = ?';
+    return this.db.execute(sql, [budgetId]);
   }
 
   /**
@@ -100,15 +105,19 @@ export class SuggestionRepository {
   private mapRowToSuggestion(row: any): Suggestion {
     return {
       id: row.id,
-      budgetSnapshotId: row.budget_snapshot_id,
+      budgetId: row.budget_id,
       transactionId: row.transaction_id,
-      suggestedCategoryId: row.suggested_category_id,
-      suggestedCategoryName: row.suggested_category_name,
+      transactionPayee: row.transaction_payee,
+      transactionAmount: row.transaction_amount,
+      transactionDate: row.transaction_date,
+      currentCategoryId: row.current_category_id,
+      proposedCategoryId: row.proposed_category_id,
+      proposedCategoryName: row.proposed_category_name,
       confidence: row.confidence,
-      reasoning: row.reasoning,
+      rationale: row.rationale,
       status: row.status as SuggestionStatus,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
     };
   }
 }

@@ -1,7 +1,7 @@
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { SuggestionRepository } from '../infra/repositories/SuggestionRepository.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
-import { createSyncPlan, type SyncPlan } from '../domain/entities/SyncPlan.js';
+import { createSyncPlan, type SyncPlan, createChange } from '../domain/entities/SyncPlan.js';
 import { ValidationError } from '../domain/errors.js';
 import { logger } from '../infra/logger.js';
 
@@ -21,11 +21,11 @@ export class SyncService {
    * Create a sync plan from approved suggestions
    * P4 (Explicitness): Returns complete SyncPlan entity
    */
-  createSyncPlan(snapshotId: string): SyncPlan {
-    logger.info('Creating sync plan', { snapshotId });
+  createSyncPlan(budgetId: string): SyncPlan {
+    logger.info('Creating sync plan', { budgetId });
 
-    // Get all approved suggestions
-    const allSuggestions = this.suggestionRepo.findBySnapshotId(snapshotId);
+    // Get all approved suggestions for this budget
+    const allSuggestions = this.suggestionRepo.findByBudgetId(budgetId);
     const approvedSuggestions = allSuggestions.filter(
       (suggestion) => suggestion.status === 'approved'
     );
@@ -34,8 +34,18 @@ export class SyncService {
       throw new ValidationError('No approved suggestions to sync');
     }
 
+    // Build changes from approved suggestions
+    const changes = approvedSuggestions.map(suggestion =>
+      createChange(
+        suggestion.transactionId,
+        suggestion.proposedCategoryId,
+        suggestion.currentCategoryId,
+        suggestion.id
+      )
+    );
+
     // Create sync plan
-    const syncPlan = createSyncPlan(snapshotId, approvedSuggestions);
+    const syncPlan = createSyncPlan(crypto.randomUUID(), budgetId, changes, approvedSuggestions.length);
 
     // Log audit event
     this.auditRepo.log({
@@ -43,14 +53,14 @@ export class SyncService {
       entityType: 'SyncPlan',
       entityId: syncPlan.id,
       metadata: {
-        snapshotId,
-        operationCount: syncPlan.operations.length,
+        budgetId,
+        changeCount: syncPlan.changes.length,
       },
     });
 
     logger.info('Sync plan created', {
       planId: syncPlan.id,
-      operationCount: syncPlan.operations.length,
+      changeCount: syncPlan.changes.length,
     });
 
     return syncPlan;
@@ -63,23 +73,25 @@ export class SyncService {
   async executeSyncPlan(syncPlan: SyncPlan): Promise<void> {
     logger.info('Executing sync plan', {
       planId: syncPlan.id,
-      operationCount: syncPlan.operations.length,
+      changeCount: syncPlan.changes.length,
     });
 
     try {
-      // Apply each operation
-      for (const operation of syncPlan.operations) {
+      // Apply each change
+      for (const change of syncPlan.changes) {
         await this.actualBudget.updateTransactionCategory(
-          operation.transactionId,
-          operation.newCategoryId
+          change.transactionId,
+          change.proposedCategoryId
         );
 
         // Update suggestion status to 'applied'
-        this.suggestionRepo.updateStatus(operation.suggestionId, 'applied');
+        if (change.suggestionId) {
+          this.suggestionRepo.updateStatus(change.suggestionId, 'applied');
+        }
 
-        logger.debug('Sync operation applied', {
-          transactionId: operation.transactionId,
-          newCategoryId: operation.newCategoryId,
+        logger.debug('Sync change applied', {
+          transactionId: change.transactionId,
+          proposedCategoryId: change.proposedCategoryId,
         });
       }
 
@@ -92,13 +104,13 @@ export class SyncService {
         entityType: 'SyncPlan',
         entityId: syncPlan.id,
         metadata: {
-          operationsApplied: syncPlan.operations.length,
+          changesApplied: syncPlan.changes.length,
         },
       });
 
       logger.info('Sync plan executed successfully', {
         planId: syncPlan.id,
-        operationsApplied: syncPlan.operations.length,
+        changesApplied: syncPlan.changes.length,
       });
     } catch (error) {
       // Log failure audit event

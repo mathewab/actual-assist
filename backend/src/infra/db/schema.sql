@@ -1,16 +1,20 @@
 -- SQLite schema for audit log and suggestion staging
--- Version: 1.0.0
+-- Version: 2.0.0
 -- Purpose: Track AI categorization suggestions and user actions
 
 -- Suggestions table: AI-generated categorization recommendations
 CREATE TABLE IF NOT EXISTS suggestions (
   id TEXT PRIMARY KEY,              -- UUID v4
-  budget_snapshot_id TEXT NOT NULL, -- Links to BudgetSnapshot entity
+  budget_id TEXT NOT NULL,          -- Actual Budget ID (budgetId)
   transaction_id TEXT NOT NULL,     -- Actual Budget transaction ID
-  suggested_category_id TEXT,       -- NULL for uncategorized suggestion
-  suggested_category_name TEXT,
+  transaction_payee TEXT,           -- Payee name from transaction
+  transaction_amount REAL,          -- Transaction amount
+  transaction_date TEXT,            -- Transaction date
+  current_category_id TEXT,         -- Current category ID (may be NULL)
+  proposed_category_id TEXT NOT NULL, -- Proposed category ID
+  proposed_category_name TEXT NOT NULL,
   confidence REAL NOT NULL,         -- 0.0 to 1.0
-  reasoning TEXT NOT NULL,          -- AI explanation
+  rationale TEXT NOT NULL,          -- AI explanation
   status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'rejected', 'applied')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -24,7 +28,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     'suggestions_generated',
     'suggestion_approved',
     'suggestion_rejected',
-    'sync_plan_created',
+    'sync_plan_built',
     'sync_executed',
     'sync_failed'
   )),
@@ -35,7 +39,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- Indexes for common query patterns
-CREATE INDEX IF NOT EXISTS idx_suggestions_snapshot ON suggestions(budget_snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_suggestions_budget ON suggestions(budget_id);
 CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);

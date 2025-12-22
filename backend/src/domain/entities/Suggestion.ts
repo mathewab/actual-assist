@@ -4,15 +4,19 @@
  */
 export interface Suggestion {
   id: string; // UUID v4
-  budgetSnapshotId: string;
+  budgetId: string; // Actual Budget ID
   transactionId: string;
-  suggestedCategoryId: string | null; // null = uncategorized suggestion
-  suggestedCategoryName: string | null;
+  transactionPayee: string | null;
+  transactionAmount: number | null;
+  transactionDate: string | null;
+  currentCategoryId: string | null;
+  proposedCategoryId: string;
+  proposedCategoryName: string;
   confidence: number; // 0.0 to 1.0
-  reasoning: string; // AI explanation
+  rationale: string; // AI explanation
   status: SuggestionStatus;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string; // ISO 8601 timestamp
+  updatedAt: string; // ISO 8601 timestamp
 }
 
 export type SuggestionStatus = 'pending' | 'approved' | 'rejected' | 'applied';
@@ -22,22 +26,30 @@ export type SuggestionStatus = 'pending' | 'approved' | 'rejected' | 'applied';
  * P4 (Explicitness): All fields explicitly provided
  */
 export function createSuggestion(params: {
-  budgetSnapshotId: string;
+  budgetId: string;
   transactionId: string;
-  suggestedCategoryId: string | null;
-  suggestedCategoryName: string | null;
+  transactionPayee?: string | null;
+  transactionAmount?: number | null;
+  transactionDate?: string | null;
+  currentCategoryId: string | null;
+  proposedCategoryId: string;
+  proposedCategoryName: string;
   confidence: number;
-  reasoning: string;
+  rationale: string;
 }): Suggestion {
-  const now = new Date();
+  const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
-    budgetSnapshotId: params.budgetSnapshotId,
+    budgetId: params.budgetId,
     transactionId: params.transactionId,
-    suggestedCategoryId: params.suggestedCategoryId,
-    suggestedCategoryName: params.suggestedCategoryName,
+    transactionPayee: params.transactionPayee || null,
+    transactionAmount: params.transactionAmount || null,
+    transactionDate: params.transactionDate || null,
+    currentCategoryId: params.currentCategoryId,
+    proposedCategoryId: params.proposedCategoryId,
+    proposedCategoryName: params.proposedCategoryName,
     confidence: params.confidence,
-    reasoning: params.reasoning,
+    rationale: params.rationale,
     status: 'pending',
     createdAt: now,
     updatedAt: now,
@@ -45,16 +57,37 @@ export function createSuggestion(params: {
 }
 
 /**
- * Updates suggestion status
+ * Validates suggestion confidence is in valid range
+ */
+export function validateSuggestionConfidence(confidence: number): boolean {
+  return confidence >= 0.0 && confidence <= 1.0;
+}
+
+/**
+ * Transitions suggestion status with validation
  * P2 (Zero Duplication): Single source of truth for status transitions
  */
-export function updateSuggestionStatus(
+export function transitionSuggestionStatus(
   suggestion: Suggestion,
-  status: SuggestionStatus
+  newStatus: SuggestionStatus
 ): Suggestion {
-  return {
-    ...suggestion,
-    status,
-    updatedAt: new Date(),
-  };
+  // Only allow pending → approved/rejected transitions
+  if (suggestion.status === 'pending' && (newStatus === 'approved' || newStatus === 'rejected')) {
+    return {
+      ...suggestion,
+      status: newStatus,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  
+  // Allow applied state after execution
+  if (newStatus === 'applied') {
+    return {
+      ...suggestion,
+      status: newStatus,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  throw new Error(`Invalid status transition from ${suggestion.status} to ${newStatus}`);
 }

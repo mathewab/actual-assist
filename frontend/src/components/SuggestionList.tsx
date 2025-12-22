@@ -52,7 +52,7 @@ export function SuggestionList() {
           <div key={suggestion.id} className="suggestion-card">
             <div className="suggestion-header">
               <span className="category-name">
-                {suggestion.suggestedCategoryName || 'Uncategorized'}
+                {suggestion.proposedCategoryName || 'Uncategorized'}
               </span>
               <span className={`confidence confidence-${getConfidenceLevel(suggestion.confidence)}`}>
                 {Math.round(suggestion.confidence * 100)}% confident
@@ -60,8 +60,10 @@ export function SuggestionList() {
             </div>
 
             <div className="suggestion-body">
-              <p className="reasoning">{suggestion.reasoning}</p>
-              <p className="transaction-id">Transaction: {suggestion.transactionId}</p>
+              <p className="rationale">{suggestion.rationale}</p>
+              <p className="transaction-details">
+                {suggestion.transactionPayee} - {suggestion.transactionDate} ({suggestion.transactionAmount})
+              </p>
             </div>
 
             <div className="suggestion-actions">

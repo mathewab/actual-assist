@@ -101,7 +101,7 @@ curl -X POST http://localhost:3000/api/budget/download \
   }'
 ```
 
-Response includes `snapshotId` for next steps.
+Response includes `budgetId` for next steps.
 
 ### Step 2: Generate Suggestions
 
@@ -113,7 +113,7 @@ Or via API:
 curl -X POST http://localhost:3000/api/suggestions/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "snapshotId": "abc123-uuid-from-step1",
+    "budgetId": "1cfdbb80-6274-49bf-b0c2-737235a4c81f",
     "maxSuggestions": 50
   }'
 ```
@@ -159,7 +159,7 @@ Or via API:
 ```bash
 curl -X POST http://localhost:3000/api/sync-plan/build \
   -H "Content-Type: application/json" \
-  -d '{"snapshotId": "abc123-uuid"}'
+  -d '{"budgetId": "1cfdbb80-6274-49bf-b0c2-737235a4c81f"}'
 ```
 
 Response shows dry-run preview:
@@ -183,6 +183,7 @@ Response shows dry-run preview:
 
 ```bash
 # Download budget
+BUDGET_ID="1cfdbb80-6274-49bf-b0c2-737235a4c81f"
 SNAPSHOT=$(curl -s -X POST http://localhost:3000/api/budget/download \
   -H "Content-Type: application/json" \
   -d '{"serverURL": "...", "password": "...", "budgetId": "..."}' \
@@ -191,7 +192,7 @@ SNAPSHOT=$(curl -s -X POST http://localhost:3000/api/budget/download \
 # Generate suggestions
 curl -X POST http://localhost:3000/api/suggestions/generate \
   -H "Content-Type: application/json" \
-  -d "{\"snapshotId\": \"$SNAPSHOT\", \"maxSuggestions\": 10}"
+  -d "{\"budgetId\": \"$BUDGET_ID\", \"maxSuggestions\": 10}"
 
 # Approve first suggestion (get ID from UI or list endpoint)
 curl -X PATCH http://localhost:3000/api/suggestions/{suggestionId} \
@@ -201,7 +202,7 @@ curl -X PATCH http://localhost:3000/api/suggestions/{suggestionId} \
 # Build sync plan
 PLAN=$(curl -s -X POST http://localhost:3000/api/sync-plan/build \
   -H "Content-Type: application/json" \
-  -d "{\"snapshotId\": \"$SNAPSHOT\"}" \
+  -d "{\"budgetId\": \"$BUDGET_ID\"}" \
   | jq '.')
 
 # Verify: plan contains only approved suggestion
@@ -220,7 +221,7 @@ curl -X POST http://localhost:3000/api/suggestions/bulk-update \
 # Build sync plan
 curl -X POST http://localhost:3000/api/sync-plan/build \
   -H "Content-Type: application/json" \
-  -d '{"snapshotId": "..."}'
+  -d '{"budgetId": "..."}'
 
 # Expect: 422 Unprocessable Entity or empty changes array
 ```
@@ -239,7 +240,7 @@ curl -X POST http://localhost:3000/api/sync-plan/build \
 
 ### "Snapshot not found"
 - Ensure budget was downloaded first
-- Check `snapshotId` is correct UUID
+- Check `budgetId` is correct
 - Verify `DATA_DIR` is writable and contains budget files
 
 ## Testing

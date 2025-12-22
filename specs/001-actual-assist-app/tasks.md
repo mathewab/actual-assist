@@ -76,52 +76,52 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 ### Domain Layer (P1)
 
-- [X] T023 [P] [US1] Implement BudgetSnapshot entity in backend/src/domain/budget-snapshot.ts (id, budgetId, filepath, downloadedAt, fileHash, transactionCount, categoryCount with validation per data-model.md)
-- [X] T024 [P] [US1] Implement Suggestion entity in backend/src/domain/suggestion.ts (all fields from data-model.md, status state machine validation, confidence range check)
-- [X] T025 [P] [US1] Implement SyncPlan entity in backend/src/domain/sync-plan.ts (id, snapshotId, changes array, dryRunSummary, immutability enforcement)
-- [X] T026 [P] [US1] Unit test BudgetSnapshot validation rules in backend/tests/unit/domain/budget-snapshot.test.ts
-- [X] T027 [P] [US1] Unit test Suggestion state transitions in backend/tests/unit/domain/suggestion.test.ts
+- [X] T023 [P] [US1] Implement BudgetSnapshot entity in backend/src/domain/budget-snapshot.ts (budgetId as primary identifier, filepath, downloadedAt, transactionCount, categoryCount with validation per data-model.md; no hash or id fields)
+- [X] T024 [P] [US1] Implement Suggestion entity in backend/src/domain/suggestion.ts (all fields from data-model.md with budgetId reference, status state machine validation, confidence range check)
+- [X] T025 [P] [US1] Implement SyncPlan entity in backend/src/domain/sync-plan.ts (id, budgetId, changes array, dryRunSummary, immutability enforcement)
+- [X] T026 [P] [US1] Unit test BudgetSnapshot validation rules in backend/tests/unit/domain/budget-snapshot.test.ts (test budgetId, downloadedAt, counts validation)
+- [X] T027 [P] [US1] Unit test Suggestion state transitions with budgetId references in backend/tests/unit/domain/suggestion.test.ts
 - [X] T028 [P] [US1] Unit test SyncPlan change deduplication in backend/tests/unit/domain/sync-plan.test.ts
 
 ### Infrastructure Layer (P1)
 
-- [X] T029 [P] [US1] Implement ActualClient adapter in backend/src/infra/actual-client.ts (wrap @actual-app/api: init, downloadBudget, getTransactions, getCategories, shutdown per research.md)
-- [X] T030 [P] [US1] Implement OpenAIClient adapter in backend/src/infra/openai-client.ts (wrap OpenAI SDK: categorization prompt with JSON mode per research.md, timeout handling)
-- [X] T031 [P] [US1] Implement AuditRepository in backend/src/infra/audit-repo.ts (SQLite CRUD for suggestions table, audit_log table per research.md schema)
-- [ ] T032 [P] [US1] Unit test ActualClient error handling for connection failures in backend/tests/unit/infra/actual-client.test.ts (mock @actual-app/api)
+- [ ] T029 [P] [US1] Implement ActualClient adapter in backend/src/infra/actual-client.ts (wrap @actual-app/api: init, downloadBudget, getTransactions, getCategories, shutdown per research.md; surface sync errors for drift detection)
+- [ ] T030 [P] [US1] Implement OpenAIClient adapter in backend/src/infra/openai-client.ts (wrap OpenAI SDK: categorization prompt with JSON mode per research.md, timeout handling)
+- [X] T031 [P] [US1] Implement AuditRepository in backend/src/infra/audit-repo.ts (SQLite CRUD for suggestions table with budgetId, audit_log table per research.md schema)
+- [ ] T032 [P] [US1] Unit test ActualClient error handling for connection failures in backend/tests/unit/infra/actual-client.test.ts (mock @actual-app/api, verify drift errors trigger when sync fails)
 - [ ] T033 [P] [US1] Unit test OpenAIClient prompt formatting and JSON parsing in backend/tests/unit/infra/openai-client.test.ts (mock OpenAI SDK)
 - [ ] T034 [P] [US1] Unit test AuditRepository SQLite queries in backend/tests/unit/infra/audit-repo.test.ts (in-memory SQLite)
 
 ### Service Layer (P1)
 
-- [X] T035 [US1] Implement BudgetService in backend/src/services/budget-service.ts (downloadBudget method: call ActualClient, create BudgetSnapshot, log to audit)
-- [X] T036 [US1] Implement AIService in backend/src/services/ai-service.ts (generateSuggestions method: read transactions/categories via ActualClient, batch OpenAI requests with concurrency limit, create Suggestion entities, persist via AuditRepo)
-- [X] T037 [US1] Implement SyncService in backend/src/services/sync-service.ts (buildSyncPlan method: query approved suggestions from AuditRepo, build SyncPlan entity, validate no duplicates)
-- [ ] T038 [P] [US1] Unit test BudgetService download flow in backend/tests/unit/services/budget-service.test.ts (mock ActualClient, verify snapshot creation)
+- [X] T035 [US1] Implement BudgetService in backend/src/services/budget-service.ts (downloadBudget method: call ActualClient, create/replace BudgetSnapshot, log to audit; surface sync errors for drift handling)
+- [X] T036 [US1] Implement AIService in backend/src/services/ai-service.ts (generateSuggestions method: accept budgetId, read transactions/categories via ActualClient, batch OpenAI requests with concurrency limit, create Suggestion entities, persist via AuditRepo)
+- [X] T037 [US1] Implement SyncService in backend/src/services/sync-service.ts (buildSyncPlan method: accept budgetId, query approved suggestions from AuditRepo, build SyncPlan entity, validate no duplicates)
+- [X] T038 [P] [US1] Unit test BudgetService download and re-download flow in backend/tests/unit/services/budget-service.test.ts (mock ActualClient, verify snapshot creation and replacement on explicit re-download)
 - [ ] T039 [P] [US1] Unit test AIService suggestion generation in backend/tests/unit/services/ai-service.test.ts (mock ActualClient and OpenAIClient, verify batching and confidence filtering)
 - [ ] T040 [P] [US1] Unit test SyncService plan building in backend/tests/unit/services/sync-service.test.ts (mock AuditRepo, verify change ordering and dry-run summary)
 
 ### API Layer (P1)
 
-- [X] T041 [P] [US1] Implement POST /budget/download route in backend/src/api/routes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml)
-- [X] T042 [P] [US1] Implement POST /suggestions/generate route in backend/src/api/routes.ts (validate snapshotId, call AIService, return Suggestion[] JSON per contracts/api.yaml)
-- [X] T043 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/routes.ts (validate suggestionId and status, update via AuditRepo, return updated Suggestion per contracts/api.yaml)
-- [X] T044 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/routes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
-- [X] T045 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/routes.ts (validate snapshotId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
-- [X] T046 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7)
-- [ ] T047 [P] [US1] Integration test /budget/download endpoint in backend/tests/integration/api/budget-download.test.ts (mock Actual server, verify 200 response and snapshot structure)
-- [ ] T048 [P] [US1] Integration test /suggestions/generate endpoint in backend/tests/integration/api/suggestions-generate.test.ts (mock OpenAI API, verify suggestions returned with confidence scores)
+- [ ] T041 [P] [US1] Implement POST /budget/download route in backend/src/api/routes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml with budgetId)
+- [X] T042 [P] [US1] Implement POST /suggestions/generate route in backend/src/api/routes.ts (validate budgetId, call AIService, return Suggestion[] JSON per contracts/api.yaml)
+- [ ] T043 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/routes.ts (validate suggestionId and status, update via AuditRepo with budgetId context, return updated Suggestion per contracts/api.yaml)
+- [ ] T044 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/routes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
+- [X] T045 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/routes.ts (validate budgetId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
+- [ ] T046 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7, surface drift warnings)
+- [ ] T047 [P] [US1] Integration test /budget/download endpoint in backend/tests/integration/api/budget-download.test.ts (mock Actual server, verify 200 response with budgetId and snapshot structure)
+- [ ] T048 [P] [US1] Integration test /suggestions/generate endpoint in backend/tests/integration/api/suggestions-generate.test.ts (mock OpenAI API, verify suggestions returned with budgetId and confidence scores)
 - [ ] T049 [P] [US1] Integration test /suggestions/:id PATCH endpoint in backend/tests/integration/api/suggestions-update.test.ts (verify status transitions and 400 for invalid states)
 - [ ] T050 [P] [US1] Integration test /sync-plan/build endpoint in backend/tests/integration/api/sync-plan-build.test.ts (verify plan includes only approved suggestions)
 
 ### Frontend (P1)
 
-- [X] T051 [P] [US1] Create API client service in frontend/src/services/api-client.ts (axios or fetch wrapper: downloadBudget, generateSuggestions, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
-- [X] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons)
-- [X] T053 [P] [US1] Implement SyncPlanPreview component in frontend/src/components/SyncPlanPreview.tsx (show changes count, old→new category diff list, dry-run summary)
-- [X] T054 [US1] Implement App component in frontend/src/App.tsx (orchestrate workflow: download button → generate button → SuggestionList → build plan button → SyncPlanPreview)
-- [X] T055 [US1] Add loading states and error handling in frontend/src/App.tsx (spinner during AI generation, error toast for API failures, disable buttons during operations)
-- [X] T056 [P] [US1] Style components with Tailwind CSS or basic CSS in frontend/src/styles.css (confidence color coding: green >0.8, yellow 0.5-0.8, red <0.5)
+- [ ] T051 [P] [US1] Create API client service in frontend/src/services/api-client.ts (axios or fetch wrapper: downloadBudget, generateSuggestions with budgetId, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
+- [ ] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons, budgetId context)
+- [ ] T053 [P] [US1] Implement SyncPlanPreview component in frontend/src/components/SyncPlanPreview.tsx (show changes count, old→new category diff list, dry-run summary)
+- [ ] T054 [US1] Implement App component in frontend/src/App.tsx (orchestrate workflow: download button → generate button with budgetId → SuggestionList → build plan button → SyncPlanPreview)
+- [ ] T055 [US1] Add loading states and error handling in frontend/src/App.tsx (spinner during AI generation, error toast for API failures and drift warnings, disable buttons during operations)
+- [ ] T056 [P] [US1] Style components with Tailwind CSS or basic CSS in frontend/src/styles.css (confidence color coding: green >0.8, yellow 0.5-0.8, red <0.5)
 - [ ] T057 [P] [US1] Integration test approve/reject workflow in frontend/tests/integration/suggestion-review.spec.ts (Playwright: download → generate → approve 3 suggestions → build plan → verify plan contains 3 changes)
 - [ ] T058 [P] [US1] Integration test bulk approve workflow in frontend/tests/integration/bulk-approve.spec.ts (Playwright: filter by confidence >0.8 → bulk approve → build plan → verify all approved)
 

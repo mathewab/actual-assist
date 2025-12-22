@@ -10,9 +10,10 @@ servers:
 paths:
   /budget/download:
     post:
-      summary: Download budget from Actual server
+      summary: Download budget from Actual server (initial or re-download after drift)
       description: |
-        Downloads a budget file from the Actual server and creates a local snapshot.
+        Downloads a budget file from the Actual server and creates or replaces the local snapshot.
+        Single active snapshot per session; re-download only after user explicitly requests following drift/sync warnings.
         Returns snapshot metadata including transaction and category counts.
       requestBody:
         required: true
@@ -62,12 +63,11 @@ paths:
             schema:
               type: object
               required:
-                - snapshotId
+                - budgetId
               properties:
-                snapshotId:
+                budgetId:
                   type: string
-                  format: uuid
-                  example: "abc123-snapshot-uuid"
+                  example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
                 maxSuggestions:
                   type: integer
                   minimum: 1
@@ -190,11 +190,10 @@ paths:
             schema:
               type: object
               required:
-                - snapshotId
+                - budgetId
               properties:
-                snapshotId:
+                budgetId:
                   type: string
-                  format: uuid
       responses:
         '200':
           description: Sync plan built successfully
@@ -248,6 +247,7 @@ components:
         downloadedAt:
           type: string
           format: date-time
+          description: "Audit only; drift detection relies on Actual sync signals"
         transactionCount:
           type: integer
           example: 1247
@@ -259,7 +259,7 @@ components:
       type: object
       required:
         - id
-        - snapshotId
+        - budgetId
         - transactionId
         - transactionPayee
         - transactionAmount
@@ -275,9 +275,8 @@ components:
         id:
           type: string
           format: uuid
-        snapshotId:
+        budgetId:
           type: string
-          format: uuid
         transactionId:
           type: string
         transactionPayee:
@@ -323,7 +322,7 @@ components:
       type: object
       required:
         - id
-        - snapshotId
+        - budgetId
         - changes
         - dryRunSummary
         - createdAt
@@ -331,9 +330,8 @@ components:
         id:
           type: string
           format: uuid
-        snapshotId:
+        budgetId:
           type: string
-          format: uuid
         changes:
           type: array
           items:

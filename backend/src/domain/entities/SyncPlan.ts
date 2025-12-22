@@ -1,4 +1,22 @@
-import type { Suggestion } from './Suggestion.js';
+/**
+ * Change - atomic operation to apply to Actual Budget
+ * P4 (Explicitness): Each change is explicit
+ */
+export interface Change {
+  id: string; // UUID v4
+  transactionId: string;
+  proposedCategoryId: string;
+  currentCategoryId: string | null;
+  suggestionId?: string;
+}
+
+/**
+ * DryRunSummary - preview of changes without execution
+ */
+export interface DryRunSummary {
+  totalChanges: number;
+  estimatedImpact: string; // Human-readable summary
+}
 
 /**
  * SyncPlan entity - describes changes to apply to Actual Budget
@@ -7,47 +25,62 @@ import type { Suggestion } from './Suggestion.js';
  */
 export interface SyncPlan {
   id: string; // UUID v4
-  budgetSnapshotId: string;
-  approvedSuggestions: Suggestion[];
-  operations: SyncOperation[];
-  createdAt: Date;
+  budgetId: string; // Actual Budget ID
+  changes: Change[];
+  dryRunSummary: DryRunSummary;
+  createdAt: string; // ISO 8601 timestamp
 }
 
 /**
- * Atomic operation to apply to Actual Budget
- * P4 (Explicitness): Each operation type is explicit
+ * Factory function to create a Change
  */
-export interface SyncOperation {
-  type: 'update_category';
-  transactionId: string;
-  currentCategoryId: string | null;
-  newCategoryId: string | null;
-  newCategoryName: string | null;
-  suggestionId: string;
+export function createChange(
+  transactionId: string,
+  proposedCategoryId: string,
+  currentCategoryId: string | null,
+  suggestionId?: string
+): Change {
+  return {
+    id: crypto.randomUUID(),
+    transactionId,
+    proposedCategoryId,
+    currentCategoryId,
+    ...(suggestionId && { suggestionId }),
+  };
 }
 
 /**
  * Factory function to create a SyncPlan from approved suggestions
- * P2 (Zero Duplication): Single place to convert suggestions to operations
+ * P2 (Zero Duplication): Single place to convert suggestions to plan
  */
 export function createSyncPlan(
-  budgetSnapshotId: string,
-  approvedSuggestions: Suggestion[]
+  id: string,
+  budgetId: string,
+  changes: Change[],
+  totalApprovedCount: number
 ): SyncPlan {
-  const operations: SyncOperation[] = approvedSuggestions.map((suggestion) => ({
-    type: 'update_category',
-    transactionId: suggestion.transactionId,
-    currentCategoryId: null, // Will be filled from snapshot during execution
-    newCategoryId: suggestion.suggestedCategoryId,
-    newCategoryName: suggestion.suggestedCategoryName,
-    suggestionId: suggestion.id,
-  }));
-
   return {
-    id: crypto.randomUUID(),
-    budgetSnapshotId,
-    approvedSuggestions,
-    operations,
-    createdAt: new Date(),
+    id,
+    budgetId,
+    changes,
+    dryRunSummary: {
+      totalChanges: changes.length,
+      estimatedImpact: `${changes.length} transaction(s) will be updated from ${totalApprovedCount} approved suggestion(s)`,
+    },
+    createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Validates that SyncPlan has no duplicate transaction updates
+ */
+export function validateNoDuplicateChanges(plan: SyncPlan): boolean {
+  const transactionIds = new Set<string>();
+  for (const change of plan.changes) {
+    if (transactionIds.has(change.transactionId)) {
+      throw new Error(`Duplicate change detected for transaction ${change.transactionId}`);
+    }
+    transactionIds.add(change.transactionId);
+  }
+  return true;
 }

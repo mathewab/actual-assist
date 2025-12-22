@@ -18,7 +18,7 @@ export class SnapshotService {
    * Create a new budget snapshot
    * P4 (Explicitness): Returns complete BudgetSnapshot with all data
    */
-  async createSnapshot(budgetId: string, syncId: string | null): Promise<BudgetSnapshot> {
+  async createSnapshot(budgetId: string): Promise<BudgetSnapshot> {
     logger.info('Creating budget snapshot', { budgetId });
 
     // Fetch current budget state
@@ -30,16 +30,16 @@ export class SnapshotService {
     // Create immutable snapshot
     const snapshot = createBudgetSnapshot({
       budgetId,
-      syncId,
-      transactions,
-      categories,
+      filepath: '',  // Filepath is populated when downloaded
+      transactionCount: transactions.length,
+      categoryCount: categories.length,
     });
 
     // Log audit event
     this.auditRepo.log({
       eventType: 'snapshot_created',
       entityType: 'BudgetSnapshot',
-      entityId: snapshot.id,
+      entityId: budgetId,
       metadata: {
         budgetId,
         transactionCount: transactions.length,
@@ -48,7 +48,7 @@ export class SnapshotService {
     });
 
     logger.info('Budget snapshot created', {
-      snapshotId: snapshot.id,
+      budgetId,
       transactionCount: transactions.length,
       categoryCount: categories.length,
     });

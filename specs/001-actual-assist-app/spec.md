@@ -68,17 +68,17 @@ Users request an AI-generated report (MCP-based) summarizing trends, anomalies, 
 ### Edge Cases
 
 - AI service unavailable or times out: suggestions/report generation must fail gracefully and surface actionable errors without blocking manual workflows.
-- Budget file out of date vs. server: detect drift and require refresh/rebase before applying suggestions.
+- Budget file out of date vs. server: rely on Actual sync signals to detect drift, surface a warning, and require the user to explicitly trigger a re-download/refresh before applying suggestions; no automatic replacement.
 - Conflicting suggestions (e.g., two categories for one transaction) or duplicate payee merges: user must resolve explicitly before apply.
 - Large budgets (file size/high transaction volume): generation and diff views must remain responsive and paginated.
 - User runs in read-only mode (no sync credentials): allow preview and export of suggestions/report without write attempts.
-- Sync failure mid-apply: ensure local state remains consistent and can retry safely without duplicate writes.
+- Sync failure mid-apply: ensure local state remains consistent and can retry safely without duplicate writes; surface any sync error and suggest a user-initiated re-download only when it may resolve drift.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Import the full Actual budget file to a local workspace, track its timestamp/hash, and prevent edits when stale relative to server.
+- **FR-001**: Import the full Actual budget file once to a local workspace and rely on Actual's bidirectional sync state to surface drift warnings; do not auto-block local edits, but pause sync until the user chooses to reconcile (e.g., explicit re-download) after a drift/sync warning.
 - **FR-002**: Generate AI-driven categorization suggestions with confidence scores and per-transaction previews; do not auto-apply.
 - **FR-003**: Generate payee merge suggestions with before/after examples and potential collisions flagged; require explicit approval per merge.
 - **FR-004**: Present all suggestions in a review UI that supports approve, reject, defer, and bulk actions while showing diffs of proposed changes.
@@ -93,7 +93,7 @@ Users request an AI-generated report (MCP-based) summarizing trends, anomalies, 
 
 ### Key Entities *(include if feature involves data)*
 
-- **BudgetSnapshot**: Immutable view of the downloaded budget file with metadata (timestamp, hash, source endpoint).
+- **BudgetSnapshot**: Single active immutable view of the initially downloaded budget file with minimal metadata (source endpoint and optional sync version/token); replacement occurs only when the user explicitly re-downloads following drift/sync warnings.
 - **Suggestion**: Proposed change (categorization, payee merge, category creation) with scope, confidence, rationale, and diff preview.
 - **PayeeMergeCandidate**: Structured proposal to consolidate payees with collision warnings and impacted transactions.
 - **CategoryProposal**: Suggested new category with proposed parent, example transactions, and mapping list.
@@ -111,3 +111,10 @@ Users request an AI-generated report (MCP-based) summarizing trends, anomalies, 
 - **SC-004**: At least 90% of AI suggestions (categories and payee merges) include confidence scores and human-readable rationale in the review UI.
 - **SC-005**: AI-generated report is delivered within 60 seconds for a standard monthly budget snapshot and can be exported without modifying data.
 - **SC-006**: A fresh installation via provided Dockerfile or Helm chart reaches a functional UI (able to import a budget snapshot and generate suggestions) in under 30 minutes following documented steps.
+
+## Clarifications
+
+### Session 2025-12-21
+
+- Q: How should budget snapshots be managed? → A: Single initial download; re-download only when the user explicitly requests after drift/sync warnings.
+- Q: How should drift vs. sync be handled with Actual's bidirectional sync? → A: Rely on Actual sync signals (no timestamp/hash tracking), surface drift warnings, keep local edits intact, and pause sync until the user chooses a reconcile action (e.g., explicit re-download).

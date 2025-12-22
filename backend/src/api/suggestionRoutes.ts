@@ -11,28 +11,69 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
   const router = Router();
 
   /**
-   * GET /api/suggestions?snapshotId=xxx - Get suggestions by snapshot
+   * POST /api/suggestions/generate - Generate suggestions for uncategorized transactions
    */
-  router.get('/', (req: Request, res: Response, next: NextFunction) => {
+  router.post('/generate', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { snapshotId } = req.query;
+      const { budgetId } = req.body;
 
-      if (!snapshotId || typeof snapshotId !== 'string') {
-        throw new ValidationError('snapshotId query parameter is required');
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
       }
 
-      const suggestions = suggestionService.getSuggestionsBySnapshot(snapshotId);
+      const suggestions = await suggestionService.generateSuggestions(budgetId);
 
       res.json({
         suggestions: suggestions.map((s) => ({
           id: s.id,
+          budgetId: s.budgetId,
           transactionId: s.transactionId,
-          suggestedCategoryId: s.suggestedCategoryId,
-          suggestedCategoryName: s.suggestedCategoryName,
+          transactionPayee: s.transactionPayee,
+          transactionAmount: s.transactionAmount,
+          transactionDate: s.transactionDate,
+          currentCategoryId: s.currentCategoryId,
+          proposedCategoryId: s.proposedCategoryId,
+          proposedCategoryName: s.proposedCategoryName,
           confidence: s.confidence,
-          reasoning: s.reasoning,
+          rationale: s.rationale,
           status: s.status,
-          createdAt: s.createdAt.toISOString(),
+          createdAt: s.createdAt,
+        })),
+        total: suggestions.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /api/suggestions?budgetId=xxx - Get suggestions by budget
+   */
+  router.get('/', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId } = req.query;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId query parameter is required');
+      }
+
+      const suggestions = suggestionService.getSuggestionsByBudgetId(budgetId);
+
+      res.json({
+        suggestions: suggestions.map((s) => ({
+          id: s.id,
+          budgetId: s.budgetId,
+          transactionId: s.transactionId,
+          transactionPayee: s.transactionPayee,
+          transactionAmount: s.transactionAmount,
+          transactionDate: s.transactionDate,
+          currentCategoryId: s.currentCategoryId,
+          proposedCategoryId: s.proposedCategoryId,
+          proposedCategoryName: s.proposedCategoryName,
+          confidence: s.confidence,
+          rationale: s.rationale,
+          status: s.status,
+          createdAt: s.createdAt,
         })),
       });
     } catch (error) {
@@ -50,13 +91,18 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
       res.json({
         suggestions: suggestions.map((s) => ({
           id: s.id,
+          budgetId: s.budgetId,
           transactionId: s.transactionId,
-          suggestedCategoryId: s.suggestedCategoryId,
-          suggestedCategoryName: s.suggestedCategoryName,
+          transactionPayee: s.transactionPayee,
+          transactionAmount: s.transactionAmount,
+          transactionDate: s.transactionDate,
+          currentCategoryId: s.currentCategoryId,
+          proposedCategoryId: s.proposedCategoryId,
+          proposedCategoryName: s.proposedCategoryName,
           confidence: s.confidence,
-          reasoning: s.reasoning,
+          rationale: s.rationale,
           status: s.status,
-          createdAt: s.createdAt.toISOString(),
+          createdAt: s.createdAt,
         })),
       });
     } catch (error) {

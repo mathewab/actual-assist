@@ -1,7 +1,8 @@
 import type { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
 import type { SuggestionRepository } from '../infra/repositories/SuggestionRepository.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
-import type { BudgetSnapshot, Transaction } from '../domain/entities/BudgetSnapshot.js';
+import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
+import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
 import { createSuggestion, type Suggestion } from '../domain/entities/Suggestion.js';
 import { logger } from '../infra/logger.js';
 
@@ -12,6 +13,7 @@ import { logger } from '../infra/logger.js';
  */
 export class SuggestionService {
   constructor(
+    private actualBudget: ActualBudgetAdapter,
     private openai: OpenAIAdapter,
     private suggestionRepo: SuggestionRepository,
     private auditRepo: AuditRepository
@@ -21,11 +23,17 @@ export class SuggestionService {
    * Generate suggestions for uncategorized transactions
    * P4 (Explicitness): Returns array of Suggestion entities
    */
-  async generateSuggestions(snapshot: BudgetSnapshot): Promise<Suggestion[]> {
-    logger.info('Generating suggestions', { snapshotId: snapshot.id });
+  async generateSuggestions(budgetId: string): Promise<Suggestion[]> {
+    logger.info('Generating suggestions', { budgetId });
+
+    // Fetch current budget state from Actual
+    const [transactions, categories] = await Promise.all([
+      this.actualBudget.getTransactions(),
+      this.actualBudget.getCategories(),
+    ]);
 
     // Filter uncategorized transactions
-    const uncategorized = snapshot.transactions.filter(
+    const uncategorized = transactions.filter(
       (txn) => txn.categoryId === null
     );
 
@@ -42,8 +50,10 @@ export class SuggestionService {
     for (const transaction of uncategorized) {
       try {
         const suggestion = await this.generateSuggestionForTransaction(
-          snapshot,
-          transaction
+          budgetId,
+          transaction,
+          transactions,
+          categories
         );
         
         // Save to database
@@ -62,7 +72,7 @@ export class SuggestionService {
     this.auditRepo.log({
       eventType: 'suggestions_generated',
       entityType: 'BudgetSnapshot',
-      entityId: snapshot.id,
+      entityId: budgetId,
       metadata: {
         suggestionsCount: suggestions.length,
         uncategorizedCount: uncategorized.length,
@@ -71,7 +81,7 @@ export class SuggestionService {
 
     logger.info('Suggestions generated', {
       count: suggestions.length,
-      snapshotId: snapshot.id,
+      budgetId,
     });
 
     return suggestions;
@@ -82,37 +92,43 @@ export class SuggestionService {
    * P2 (Zero duplication): Single place for suggestion logic
    */
   private async generateSuggestionForTransaction(
-    snapshot: BudgetSnapshot,
-    transaction: Transaction
+    budgetId: string,
+    transaction: Transaction,
+    allTransactions: Transaction[],
+    categories: Category[]
   ): Promise<Suggestion> {
     // Get recent transactions from same payee for context
-    const recentTransactions = snapshot.transactions
+    const recentTransactions = allTransactions
       .filter((txn) => txn.payeeId === transaction.payeeId && txn.id !== transaction.id)
       .slice(0, 10);
 
     // Call OpenAI for suggestion
     const aiResult = await this.openai.suggestCategory(
       transaction,
-      snapshot.categories,
+      categories,
       recentTransactions
     );
 
     // Create suggestion entity
     return createSuggestion({
-      budgetSnapshotId: snapshot.id,
+      budgetId,
       transactionId: transaction.id,
-      suggestedCategoryId: aiResult.categoryId,
-      suggestedCategoryName: aiResult.categoryName,
+      transactionPayee: transaction.payeeName,
+      transactionAmount: transaction.amount,
+      transactionDate: transaction.date,
+      currentCategoryId: transaction.categoryId,
+      proposedCategoryId: aiResult.categoryId || 'unknown',
+      proposedCategoryName: aiResult.categoryName || 'Unknown',
       confidence: aiResult.confidence,
-      reasoning: aiResult.reasoning,
+      rationale: aiResult.reasoning,
     });
   }
 
   /**
-   * Get all suggestions for a snapshot
+   * Get all suggestions for a budget
    */
-  getSuggestionsBySnapshot(snapshotId: string): Suggestion[] {
-    return this.suggestionRepo.findBySnapshotId(snapshotId);
+  getSuggestionsByBudgetId(budgetId: string): Suggestion[] {
+    return this.suggestionRepo.findByBudgetId(budgetId);
   }
 
   /**

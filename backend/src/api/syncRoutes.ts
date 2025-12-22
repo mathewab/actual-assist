@@ -15,19 +15,20 @@ export function createSyncRouter(syncService: SyncService): Router {
    */
   router.post('/plan', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { snapshotId } = req.body;
+      const { budgetId } = req.body;
 
-      if (!snapshotId || typeof snapshotId !== 'string') {
-        throw new ValidationError('snapshotId is required in request body');
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
       }
 
-      const syncPlan = syncService.createSyncPlan(snapshotId);
+      const syncPlan = syncService.createSyncPlan(budgetId);
 
       res.status(201).json({
         id: syncPlan.id,
-        snapshotId: syncPlan.budgetSnapshotId,
-        operations: syncPlan.operations,
-        createdAt: syncPlan.createdAt.toISOString(),
+        budgetId: syncPlan.budgetId,
+        changes: syncPlan.changes,
+        dryRunSummary: syncPlan.dryRunSummary,
+        createdAt: syncPlan.createdAt,
       });
     } catch (error) {
       next(error);
@@ -39,14 +40,14 @@ export function createSyncRouter(syncService: SyncService): Router {
    */
   router.post('/execute', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { planId, snapshotId } = req.body;
+      const { budgetId } = req.body;
 
-      if (!snapshotId || typeof snapshotId !== 'string') {
-        throw new ValidationError('snapshotId is required in request body');
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
       }
 
       // Create sync plan
-      const syncPlan = syncService.createSyncPlan(snapshotId);
+      const syncPlan = syncService.createSyncPlan(budgetId);
 
       // Execute it
       await syncService.executeSyncPlan(syncPlan);
@@ -54,7 +55,7 @@ export function createSyncRouter(syncService: SyncService): Router {
       res.json({
         success: true,
         planId: syncPlan.id,
-        operationsApplied: syncPlan.operations.length,
+        changesApplied: syncPlan.changes.length,
       });
     } catch (error) {
       next(error);

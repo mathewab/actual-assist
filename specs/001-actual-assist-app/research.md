@@ -7,15 +7,15 @@
 
 ### R1: @actual-app/api Usage Patterns
 
-**Question**: How to download budget, read transactions/categories, detect staleness, build sync plan, execute sync?
+**Question**: How to download budget, read transactions/categories, build sync plan, execute sync? How does Actual convey drift via sync signals?
 
-**Decision**: Use @actual-app/api v6.x (latest stable) with documented patterns.
+**Decision**: Use @actual-app/api v6.x (latest stable) with documented patterns; rely on Actual sync signals (not internal hash/timestamp) to detect drift.
 
 **Rationale**:
 - Official NPM package maintained by Actual Budget team
 - API operates on local file copy with explicit sync model (matches our "no direct writes" principle)
 - Provides `downloadBudget()`, `getTransactions()`, `getCategories()`, `sync()` methods
-- Staleness detection via comparing local file timestamp/hash with server
+- Drift detection: rely on Actual's sync signals (API sync errors, version mismatches) rather than local file hash/timestamp tracking; when drift occurs, prompt user to explicitly re-download
 
 **Pattern**:
 ```typescript
@@ -39,8 +39,9 @@ const categories = await api.getCategories();
 // Apply changes (via addTransactions/updateTransaction)
 await api.updateTransaction(transactionId, { category: newCategoryId });
 
-// Sync to server
-await api.sync(); // Pushes local changes; returns sync result
+// Sync to server: relies on Actual to signal drift via sync result; no internal hash/timestamp tracking
+const syncResult = await api.sync(); // Returns: { success: bool, error?: string }
+// If syncResult.error indicates drift, surface warning and require explicit user re-download
 
 await api.shutdown();
 ```

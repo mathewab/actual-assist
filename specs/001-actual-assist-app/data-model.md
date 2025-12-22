@@ -7,21 +7,18 @@
 
 ### BudgetSnapshot
 
-**Purpose**: Immutable reference to a downloaded Actual budget file with metadata for staleness detection.
+**Purpose**: Immutable reference to the currently active downloaded Actual budget file with audit metadata; single snapshot per session, replaced only on explicit user re-download following drift/sync warnings.
 
 **Attributes**:
-- `id` (string, UUID): Unique identifier for this snapshot
-- `budgetId` (string): Actual budget ID (from server)
+- `budgetId` (string): Actual budget ID (from server) - unique identifier for this snapshot
 - `filepath` (string): Local path to cached budget file
 - `downloadedAt` (ISO 8601 timestamp): When snapshot was created
-- `fileHash` (string, SHA-256): Hash of downloaded file for integrity check
 - `transactionCount` (number): Total transactions in snapshot
 - `categoryCount` (number): Total categories available
 
 **Validation Rules**:
-- `id` must be valid UUIDv4
+- `budgetId` must be non-empty string (from Actual server)
 - `downloadedAt` must not be future date
-- `fileHash` must match actual file content
 - `transactionCount` and `categoryCount` must be non-negative
 
 **Relationships**:
@@ -38,7 +35,7 @@
 
 **Attributes**:
 - `id` (string, UUID): Unique identifier
-- `snapshotId` (string, UUID): Reference to parent BudgetSnapshot
+- `budgetId` (string): Reference to parent BudgetSnapshot (Actual budget ID)
 - `transactionId` (string): Actual transaction ID
 - `transactionPayee` (string): Denormalized for UI display
 - `transactionAmount` (number): Amount in cents (per Actual convention)
@@ -53,7 +50,7 @@
 - `updatedAt` (ISO 8601 timestamp): Last status change
 
 **Validation Rules**:
-- `snapshotId` must reference existing BudgetSnapshot
+- `budgetId` must reference existing BudgetSnapshot
 - `transactionAmount` must be integer (cents)
 - `confidence` must be in [0, 1]
 - `status` can only transition: pending → approved OR pending → rejected (no reversal in POC)
@@ -78,7 +75,7 @@ pending --[reject]--> rejected
 
 **Attributes**:
 - `id` (string, UUID): Unique identifier
-- `snapshotId` (string, UUID): Reference to source BudgetSnapshot
+- `budgetId` (string): Reference to source BudgetSnapshot (Actual budget ID)
 - `changes` (array of Change): Ordered list of mutations
 - `createdAt` (ISO 8601 timestamp): When plan was built
 - `dryRunSummary` (object): Preview counts and validation results
@@ -107,7 +104,7 @@ interface DryRunSummary {
 **Validation Rules**:
 - `changes` must only include approved suggestions
 - `changes` must not duplicate transaction IDs (one change per transaction in POC)
-- `snapshotId` must reference existing BudgetSnapshot
+- `budgetId` must reference existing BudgetSnapshot
 - Plan is immutable once created; rebuild if suggestions change
 
 **Relationships**:
@@ -126,7 +123,7 @@ interface DryRunSummary {
 **Attributes**:
 - `id` (number, autoincrement): Unique identifier
 - `eventType` (enum): `snapshot_downloaded` | `suggestion_generated` | `suggestion_approved` | `suggestion_rejected` | `sync_plan_built` | `sync_executed` | `error_occurred`
-- `snapshotId` (string | null): Context reference
+- `budgetId` (string | null): Context reference (Actual budget ID)
 - `suggestionId` (string | null): Context reference
 - `details` (JSON object): Event-specific payload
 - `timestamp` (ISO 8601 timestamp): When event occurred

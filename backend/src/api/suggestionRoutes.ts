@@ -136,5 +136,46 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
     }
   });
 
+  /**
+   * POST /api/suggestions/sync-and-generate - Sync and generate suggestions (diff-based)
+   * T074: Calls diff-based generation
+   */
+  router.post('/sync-and-generate', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId, fullSnapshot } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const suggestions = await suggestionService.syncAndGenerateSuggestions(
+        budgetId,
+        fullSnapshot === true
+      );
+
+      res.json({
+        suggestions: suggestions.map((s) => ({
+          id: s.id,
+          budgetId: s.budgetId,
+          transactionId: s.transactionId,
+          transactionPayee: s.transactionPayee,
+          transactionAmount: s.transactionAmount,
+          transactionDate: s.transactionDate,
+          currentCategoryId: s.currentCategoryId,
+          proposedCategoryId: s.proposedCategoryId,
+          proposedCategoryName: s.proposedCategoryName,
+          confidence: s.confidence,
+          rationale: s.rationale,
+          status: s.status,
+          createdAt: s.createdAt,
+        })),
+        total: suggestions.length,
+        mode: fullSnapshot ? 'full' : 'diff',
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   return router;
 }

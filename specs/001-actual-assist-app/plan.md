@@ -3,23 +3,23 @@
 **Branch**: `001-actual-assist-app` | **Date**: 2025-12-21 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `specs/001-actual-assist-app/spec.md`
 
-**POC Scope**: Focus on P1 (Review and Apply AI Suggestions) with minimal UI to validate core workflow: download budget → generate categorization suggestions → review → apply → sync plan. Defer P2/P3 and deployment artifacts to post-POC.
+**POC Scope**: Focus on P1 (Review and Apply AI Suggestions) with minimal UI to validate core workflow: download/select budget → sync with diff-based suggestion generation → review → apply → sync plan. Include periodic sync capability (env-configured) and force redownload for full-snapshot re-analysis. Defer P2/P3 and deployment artifacts to post-POC.
 
 ## Summary
 
-Build a minimal viable assistant that downloads an Actual budget file, generates AI-driven categorization suggestions (no payee merge or new categories in POC), presents them in a simple CLI/web UI for review (approve/reject), applies only approved changes locally, and builds a sync plan without auto-submitting. This validates the "no direct writes" principle and the suggest→review→apply→sync workflow before investing in full features.
+Build a minimal viable assistant that manages a single Actual budget (specified via env var), syncs at a fixed interval (env-configured) to fetch latest transactions, generates AI-driven categorization suggestions (diff-based from new/changed transactions), presents them in a web UI for review (approve/reject), applies only approved changes locally, and builds a sync plan without auto-submitting. Allow explicit user-triggered force redownload for full-snapshot re-analysis. This validates the "no direct writes" principle and the suggest→review→apply→sync workflow including periodic automation before investing in full features.
 
 ## Technical Context
 
 **Language/Version**: Node.js v20 LTS with TypeScript 5.x  
-**Primary Dependencies**: @actual-app/api (budget file access), OpenAI SDK (AI categorization), Express.js (minimal API server), React (simple review UI)  
+**Primary Dependencies**: @actual-app/api (budget file access), OpenAI SDK (AI categorization), Express.js (minimal API server), React (review UI), node-cron (periodic sync scheduling)  
 **Storage**: Local filesystem for budget cache (per @actual-app/api design); SQLite for audit log and suggestion staging (exit: replace with PostgreSQL or remove if not needed)  
 **Testing**: Vitest (unit), Playwright (integration for UI flows)  
 **Target Platform**: Linux/macOS development workstation; Docker for future deployment
-**Project Type**: Web application (backend API + frontend UI)  
-**Performance Goals**: Generate 50 categorization suggestions in <10s; UI interaction <200ms p95; POC targets single-user local usage  
-**Constraints**: POC runs locally without auth; budget file <50MB; no concurrent users; no production-grade error recovery in POC  
-**Scale/Scope**: POC validates workflow only; production targets 1-5 concurrent users, monthly budget snapshots ~5k transactions
+**Project Type**: Web application (backend API + frontend UI with budget selector)  
+**Performance Goals**: Generate 50 categorization suggestions in <10s; UI interaction <200ms p95; sync runs every 6-24 hours (env-configurable); POC targets single-user local usage  
+**Constraints**: POC runs locally without auth; budget file <50MB; no concurrent users; no production-grade error recovery in POC; single budget per instance  
+**Scale/Scope**: POC validates workflow including periodic sync; production targets 1-5 concurrent users, monthly budget snapshots ~5k transactions
 
 ## Constitution Check
 
@@ -54,38 +54,58 @@ specs/[###-feature]/
 backend/
 ├── src/
 │   ├── domain/              # Core business logic (P5 separation)
-│   │   ├── budget-snapshot.ts
-│   │   ├── suggestion.ts
-│   │   └── sync-plan.ts
+│   │   ├── entities/
+│   │   │   ├── BudgetSnapshot.ts
+│   │   │   ├── Suggestion.ts
+│   │   │   └── SyncPlan.ts
+│   │   └── errors.ts
 │   ├── services/            # Orchestration (P5)
-│   │   ├── budget-service.ts
-│   │   ├── ai-service.ts
-│   │   └── sync-service.ts
+│   │   ├── SnapshotService.ts      # Download/redownload budget snapshots
+│   │   ├── SuggestionService.ts    # Diff-based and full-snapshot generation
+│   │   └── SyncService.ts          # Build/execute sync plans
 │   ├── infra/              # External adapters (P5)
-│   │   ├── actual-client.ts
-│   │   ├── openai-client.ts
-│   │   └── audit-repo.ts
+│   │   ├── ActualBudgetAdapter.ts  # Wrap @actual-app/api + listBudgets
+│   │   ├── OpenAIAdapter.ts        # Wrap OpenAI SDK
+│   │   ├── DatabaseAdapter.ts      # SQLite wrapper
+│   │   ├── repositories/
+│   │   │   ├── SuggestionRepository.ts
+│   │   │   └── AuditRepository.ts
+│   │   ├── db/
+│   │   │   └── schema.sql
+│   │   ├── env.ts
+│   │   └── logger.ts
 │   ├── api/                # HTTP interface
-│   │   └── routes.ts
-│   └── index.ts            # Server entry point
+│   │   ├── budgetRoutes.ts         # GET /api/budgets (list)
+│   │   ├── snapshotRoutes.ts       # POST /snapshots, force redownload
+│   │   ├── suggestionRoutes.ts     # POST /suggestions/sync-and-generate
+│   │   ├── syncRoutes.ts
+│   │   ├── auditRoutes.ts
+│   │   └── index.ts
+│   ├── scheduler/          # Periodic sync scheduling (NEW)
+│   │   └── SyncScheduler.ts
+│   ├── server.ts           # Server entry point
+│   └── index.ts
 ├── tests/
-│   ├── unit/               # Domain + service unit tests
-│   └── integration/        # API + actual-client integration tests
+│   ├── unit/
+│   │   ├── domain/
+│   │   ├── infra/
+│   │   └── services/
+│   └── integration/
+│       └── api/
 └── package.json
 
 frontend/
 ├── src/
 │   ├── components/         # React UI components
-│   │   ├── SuggestionList.tsx
-│   │   └── SyncPlanPreview.tsx
+│   │   ├── BudgetSelector.tsx      # List budgets, select, sync+generate (NEW)
+│   │   ├── SuggestionList.tsx      # Approve/reject suggestions
+│   │   └── SyncPlanViewer.tsx      # Review sync plan before apply
 │   ├── services/           # API client
-│   │   └── api-client.ts
+│   │   └── api.ts          # Includes listBudgets, syncAndGenerateSuggestions
 │   └── App.tsx
 ├── tests/
 │   └── integration/        # Playwright UI flows
 └── package.json
-
-shared/                     # POC defers this; merge if types duplicate
 ```
 
 **Structure Decision**: Web application (backend + frontend) selected per constitution requirement for UI. Domain logic isolated per P5; adapters wrap @actual-app/api and OpenAI SDK per P6. Tests mirror structure per constitution constraints.
@@ -114,54 +134,85 @@ shared/                     # POC defers this; merge if types duplicate
 
 ### Phase 1: Design (POC - minimal contracts)
 
-**Goal**: Define domain entities and API contracts for P1 only (categorization suggestions).
+**Goal**: Define domain entities and API contracts for P1 with budget selector, diff-based sync+generate, and periodic sync capability.
 
 **Tasks**:
-1. **data-model.md**: Define BudgetSnapshot (single active immutable snapshot: budgetId as primary identifier, downloadedAt, filePath, transactionCount, categoryCount; no hash-based staleness; replaced only on explicit user re-download), Suggestion (id, budgetId, transactionId, proposedCategoryId, confidence, rationale, status: pending|approved|rejected), SyncPlan (changeList, dryRunSummary).
-2. **contracts/**: Define backend API endpoints:
-   - `POST /budget/download` (body: {serverURL, password, budgetId}) → {budgetId, downloadedAt, transactionCount} (initial or user-triggered re-download)
-   - `POST /suggestions/generate` (body: {budgetId}) → {suggestions: Suggestion[]}
-   - `PATCH /suggestions/:id` (body: {status: approved|rejected}) → {updated: Suggestion}
-   - `POST /sync-plan/build` (body: {budgetId}) → {plan: SyncPlan}
-3. **quickstart.md**: Document how to run POC: install deps, set env vars (OPENAI_API_KEY, ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_ID), start backend, start frontend, test workflow.
+1. **data-model.md**: Define BudgetSnapshot (budgetId as primary identifier, filepath, downloadedAt, transactionCount, categoryCount; no hash-based staleness; replaced only on explicit user redownload), Suggestion (id, budgetId, transactionId, proposedCategoryId, confidence, rationale, status: pending|approved|rejected|applied), SyncPlan (id, budgetId, changes array, dryRunSummary).
+
+2. **contracts/api.yaml**: Define backend API endpoints:
+   - `GET /api/budgets` → {budgets: [{id, name, lastSync?}]} - List available budgets (MVP: single env-configured budget)
+   - `POST /api/snapshots` (body: {budgetId}) → {budgetId, filepath, downloadedAt, transactionCount, categoryCount} - Create/download snapshot
+   - `POST /api/snapshots/redownload` (body: {budgetId}) → {...} - Force full-snapshot redownload (triggers full re-analysis on next suggestion generation)
+   - `POST /api/suggestions/generate` (body: {budgetId}) → {suggestions: Suggestion[]} - Generate from full snapshot (only after redownload)
+   - `POST /api/suggestions/sync-and-generate` (body: {budgetId}) → {suggestions: Suggestion[], syncInfo: {snapshotBefore, snapshotAfter}} - **NEW**: Sync first (get new transactions), then generate diff-based suggestions
+   - `GET /api/suggestions/pending` → {suggestions: Suggestion[]} - Fetch pending suggestions
+   - `PATCH /api/suggestions/:id` (body: {status: approved|rejected}) → {updated: Suggestion} - Update suggestion status
+   - `POST /api/sync/plan` (body: {budgetId}) → {id, budgetId, changes, dryRunSummary, createdAt} - Build sync plan from approved suggestions
+   - `POST /api/sync/execute` (body: {budgetId}) → {success, planId, changesApplied} - Execute sync plan
+
+3. **quickstart.md**: Document how to run POC: install deps, set env vars (OPENAI_API_KEY, ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_ID, SYNC_INTERVAL_MINUTES), start backend, start frontend, test workflow including periodic sync.
+
+**Diff-Based vs Full-Snapshot Strategy** (NEW):
+   - **Normal sync** (`/suggestions/sync-and-generate`): Syncs with Actual server, detects new/changed transactions since last snapshot, generates suggestions only for changed set (fast, focused). Frontend button: "Sync & Generate Suggestions".
+   - **Force redownload** (`/snapshots/redownload` + next `/suggestions/generate`): Explicitly redownload entire snapshot, perform full-snapshot analysis on next generation (comprehensive re-analysis). Frontend button: "Force Redownload & Regenerate" (always visible).
 
 **Output**: [data-model.md](data-model.md), [contracts/api.yaml](contracts/api.yaml), [quickstart.md](quickstart.md).
 
-### Phase 2: Implementation (POC - P1 only)
+### Phase 2: Implementation (POC - P1 + periodic sync)
 
-**Goal**: Build and validate the core workflow end-to-end.
+**Goal**: Build and validate the core workflow end-to-end including budget selector, diff-based sync+generate, and periodic sync automation.
 
 **Foundation**:
-- Setup: Initialize Node.js/TypeScript projects for backend/frontend; install deps; configure env validation.
+- Setup: Initialize Node.js/TypeScript projects for backend/frontend; install deps (including node-cron); configure env validation (add SYNC_INTERVAL_MINUTES).
 - Domain: Implement BudgetSnapshot, Suggestion, SyncPlan entities with validation.
-- Infra: Wrap @actual-app/api (download, read transactions/categories, build sync plan), OpenAI SDK (categorization prompt), SQLite (audit/suggestions).
+- Infra: Wrap @actual-app/api (download, listBudgets, read transactions/categories, build sync plan), OpenAI SDK (categorization prompt with JSON mode), SQLite (audit/suggestions).
 
-**P1 Implementation**:
-- Backend services: BudgetService (download, read), AIService (generate suggestions), SyncService (build plan from approved suggestions).
-- Backend API: Express routes per contracts.
-- Frontend: React UI with SuggestionList (approve/reject buttons, confidence display), SyncPlanPreview (dry-run diff before sync).
-- Tests: Unit tests for domain entities, service logic, AI prompt parsing; integration tests for API flows and UI approve/reject/build-plan workflow.
+**P1 + Periodic Sync Implementation**:
+- **Backend services**: 
+  - SnapshotService: download, redownload, read snapshot
+  - SuggestionService: generateSuggestions (full-snapshot), generateSuggestionsFromDiff (diff-based, called after sync)
+  - SyncService: build sync plan from approved suggestions, execute sync
+  - SyncScheduler (NEW): use node-cron to run periodic syncs at fixed interval (env: SYNC_INTERVAL_MINUTES); on each trigger, sync then generate diff-based suggestions
+- **Backend API**: Express routes per contracts (new: budgetRoutes, updated: suggestionRoutes with sync-and-generate endpoint)
+- **Frontend**: 
+  - BudgetSelector (NEW): list budgets (from /api/budgets), select one, show "Sync & Generate Suggestions" button, show "Force Redownload" button (always visible)
+  - SuggestionList: approve/reject suggestions, show confidence and rationale
+  - SyncPlanViewer: review and execute sync plan
+  - App: route between tabs based on selected budget
+- **Tests**: Unit tests for domain entities, service logic (diff detection), AI prompt parsing; integration tests for API flows and UI approve/reject/build-plan/sync workflow; periodic sync triggered manually in tests.
 
-**Output**: Working POC demonstrating P1 acceptance scenarios from spec.
+**Output**: Working POC demonstrating P1 acceptance scenarios + periodic sync automation via env var.
 
-**Drift Handling Note (Phase 2 Deferral)**: POC assumes budget remains fresh during session (single initial download, no re-download). User-triggered re-download flow deferred to Phase 2. 
+**Periodic Sync Behavior** (NEW):
+- Backend runs SyncScheduler on startup; interval configured via `SYNC_INTERVAL_MINUTES` env var (default: 360 minutes = 6 hours)
+- On each tick: call `syncAndGenerateSuggestions(budgetId)` which syncs with Actual server, detects new transactions, generates diff-based suggestions
+- If sync fails: retry silently with exponential backoff; log failure; alert UI only if retry limit exhausted (3 attempts, then notify)
+- Generated suggestions appear in pending list; users review/approve/apply as normal
+- Frontend can refresh suggestion list manually or via polling
+
+**Force Redownload Behavior** (NEW):
+- Button always visible in BudgetSelector
+- On click: calls `POST /api/snapshots/redownload`, replaces existing snapshot with full re-download
+- Next manual sync+generate: triggers full-snapshot analysis (not diff-based)
+- Use case: user manually edited budget file or suspects stale snapshot 
 
 ## Constitution Alignment (POC)
 
-- **P1 (Modular Design)**: Domain (budget-snapshot, suggestion, sync-plan), services (orchestration), infra (adapters) with clear owners.
-- **P2 (Zero Duplication)**: Single source for suggestion state (SQLite audit table); single AI prompt template; single sync-plan builder.
-- **P3 (Testability)**: Domain entities pure functions; services injected with infra mocks; UI flows tested via Playwright.
-- **P4 (Explicitness)**: API contracts in OpenAPI; error types explicit (BudgetStale, AISuggestFailed, SyncPlanInvalid); no hidden mutations.
-- **P5 (Separation)**: Domain never imports @actual-app/api or OpenAI; adapters wrap external clients; services orchestrate.
-- **P6 (Dependency Discipline)**: @actual-app/api (official, MIT, exit: none needed), OpenAI SDK (MIT, exit: switch to Anthropic or local LLM), SQLite (public domain, exit: PostgreSQL or remove).
-- **P7 (Error Handling)**: Budget download failures → BudgetDownloadError with server URL redacted; AI timeouts → AISuggestTimeoutError with retry count; sync failures → SyncError with recoverable flag.
-- **P8 (Refactoring)**: POC allows quick iteration; refactor duplication between frontend/backend types into shared package post-POC.
-- **P9 (Minimalism)**: No speculative features; defer P2/P3, deployment artifacts, auth, multi-user until POC validated.
-- **P10 (Reviewability)**: Consistent naming (e.g., *Service, *Client, *Repo); OpenAPI contracts; quickstart for onboarding.
+- **P1 (Modular Design)**: Domain (entities/), services (snapshot, suggestion, sync, scheduler), infra (adapters, repos), api (routes) with clear owners and separation.
+- **P2 (Zero Duplication)**: Single source for suggestion state (SQLite suggestions table); single AI prompt template for categorization; single sync-plan builder; single diff detection logic (Snapshot comparison).
+- **P3 (Testability)**: Domain entities pure functions; services injected with infra mocks; snapshot diff logic unit-tested; UI flows tested via Playwright; periodic sync triggered manually in tests via mocked cron.
+- **P4 (Explicitness)**: API contracts in OpenAPI (with sync-and-generate endpoint); error types explicit (BudgetDownloadError, AISuggestError, SyncError, SnaphotRedownloadError); no hidden mutations; diff-based vs full-snapshot decision explicit in service method names.
+- **P5 (Separation)**: Domain never imports @actual-app/api, OpenAI, or node-cron; adapters wrap external clients; services orchestrate; scheduler sits between API routes and services.
+- **P6 (Dependency Discipline)**: @actual-app/api (official, MIT, exit: none), OpenAI SDK (MIT, exit: Anthropic), node-cron (ISC, exit: remove if interval via webhook preferred), SQLite (public domain, exit: PostgreSQL). 
+- **P7 (Error Handling)**: Budget download failures → BudgetDownloadError; AI timeouts → AISuggestTimeoutError; sync failures → SyncError with recoverable flag; sync failures during periodic task: retry silently with backoff, alert only on exhaustion (matches FR-011).
+- **P8 (Refactoring)**: POC allows quick iteration; post-POC refactor shared types between frontend/backend into unified package.
+- **P9 (Minimalism)**: No speculative features; defer P2 (payee merge), P3 (AI report), deployment artifacts, auth, multi-user, multi-budget UI until POC validated. Periodic sync via env var (simple) deferred to user-configurable schedule post-POC.
+- **P10 (Reviewability)**: Consistent naming (*Service, *Adapter, *Repository, *Scheduler); OpenAPI contracts with clear endpoint purposes; quickstart for onboarding; env var documentation in .env.example.
 
 ## Next Steps Post-POC
 
-1. Validate P1 workflow with real budget file and 50+ transactions.
-2. Measure AI cost and latency; optimize prompts if needed.
-3. If successful: implement P2 (payee merge), P3 (AI report), auth, Dockerfile, Helm chart.
-4. If unsuccessful: document learnings and pivot or abandon.
+1. Validate P1 workflow with real budget file and 50+ transactions; confirm periodic sync executes without blocking user interaction.
+2. Measure AI cost and latency; optimize diff detection and prompts if needed.
+3. User feedback on budget selector UX, force redownload clarity, and periodic sync interval defaults.
+4. If successful: implement P2 (payee merge, multi-budget UI), P3 (AI report), user-configurable sync schedule, auth, Dockerfile, Helm chart.
+5. If unsuccessful: document learnings and pivot or abandon.

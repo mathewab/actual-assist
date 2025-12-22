@@ -181,6 +181,43 @@ export class ActualBudgetAdapter {
   }
 
   /**
+   * List available budgets from the Actual Budget server
+   * P4 (Explicitness): Returns array of budget metadata
+   */
+  async listBudgets(): Promise<{ id: string; name: string }[]> {
+    try {
+      // Temporarily initialize to fetch budgets list
+      await api.init({
+        dataDir: this.env.DATA_DIR,
+        serverURL: this.env.ACTUAL_SERVER_URL,
+        password: this.env.ACTUAL_PASSWORD,
+      });
+
+      const budgets = await api.getBudgets();
+      logger.info('Retrieved budget list', { count: budgets.length });
+
+      const result = budgets
+        .filter((b) => b.id !== undefined && b.name !== undefined)
+        .map((b) => ({
+          id: b.id!,
+          name: b.name!,
+        }));
+
+      // Shutdown after listing if not already initialized with a specific budget
+      if (!this.initialized) {
+        await api.shutdown();
+      }
+
+      return result;
+    } catch (error) {
+      logger.error('Failed to list budgets', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ActualBudgetError('Failed to list budgets', { error });
+    }
+  }
+
+  /**
    * Shutdown API connection
    */
   async shutdown(): Promise<void> {

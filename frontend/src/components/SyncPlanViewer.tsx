@@ -3,36 +3,35 @@ import { useMutation } from '@tanstack/react-query';
 import { api, type SyncPlan } from '../services/api';
 import './SyncPlanViewer.css';
 
-export function SyncPlanViewer() {
-  const [budgetId, setBudgetId] = useState('');
+interface SyncPlanViewerProps {
+  budgetId: string;
+}
+
+export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
 
   const createPlanMutation = useMutation({
-    mutationFn: (budgetId: string) => api.buildSyncPlan(budgetId),
+    mutationFn: () => api.buildSyncPlan(budgetId),
     onSuccess: (data: SyncPlan) => {
       setSyncPlan(data);
     },
   });
 
   const executePlanMutation = useMutation({
-    mutationFn: (budgetId: string) => api.executeSyncPlan(budgetId),
+    mutationFn: () => api.executeSyncPlan(budgetId),
     onSuccess: () => {
       alert('Sync plan executed successfully!');
       setSyncPlan(null);
-      setBudgetId('');
     },
   });
 
-  const handleCreatePlan = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (budgetId.trim()) {
-      createPlanMutation.mutate(budgetId);
-    }
+  const handleCreatePlan = () => {
+    createPlanMutation.mutate();
   };
 
   const handleExecutePlan = () => {
-    if (budgetId && confirm('Execute sync plan? This will update your Actual Budget.')) {
-      executePlanMutation.mutate(budgetId);
+    if (confirm('Execute sync plan? This will update your Actual Budget.')) {
+      executePlanMutation.mutate();
     }
   };
 
@@ -40,27 +39,15 @@ export function SyncPlanViewer() {
     <div className="sync-plan-viewer">
       <h2>Sync Plan</h2>
 
-      <form onSubmit={handleCreatePlan} className="create-plan-form">
-        <div className="form-group">
-          <label htmlFor="budgetId">Budget ID:</label>
-          <input
-            id="budgetId"
-            type="text"
-            value={budgetId}
-            onChange={(e) => setBudgetId(e.target.value)}
-            placeholder="Enter budget ID"
-            required
-          />
-        </div>
-
+      <div className="create-plan-section">
         <button
-          type="submit"
           className="btn btn-primary"
+          onClick={handleCreatePlan}
           disabled={createPlanMutation.isPending}
         >
           {createPlanMutation.isPending ? 'Creating...' : 'Create Sync Plan'}
         </button>
-      </form>
+      </div>
 
       {createPlanMutation.error && (
         <div className="error">

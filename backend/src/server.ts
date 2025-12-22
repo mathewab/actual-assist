@@ -3,7 +3,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { validateEnv } from './infra/env.js';
 import { createLogger, setLogger } from './infra/logger.js';
-import { isAppError } from './domain/errors.js';
 import { DatabaseAdapter } from './infra/DatabaseAdapter.js';
 import { ActualBudgetAdapter } from './infra/ActualBudgetAdapter.js';
 import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
@@ -13,6 +12,8 @@ import { SnapshotService } from './services/SnapshotService.js';
 import { SuggestionService } from './services/SuggestionService.js';
 import { SyncService } from './services/SyncService.js';
 import { createApiRouter } from './api/index.js';
+import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
+import { startScheduler } from './scheduler/SyncScheduler.js';
 import type { Request, Response, NextFunction } from 'express';
 
 // Load environment variables
@@ -69,41 +70,15 @@ const apiRouter = createApiRouter({
   suggestionService,
   syncService,
   auditRepo,
+  actualBudget,
 });
 app.use('/api', apiRouter);
 
 // 404 handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not Found' });
-});
+app.use(notFoundHandler);
 
-// Global error handler (P7 - explicit error handling)
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  if (isAppError(err)) {
-    loggerInstance.error('Application error', {
-      code: err.code,
-      message: err.message,
-      details: err.details,
-      stack: err.stack,
-    });
-    
-    res.status(err.statusCode).json({
-      error: err.code,
-      message: err.message,
-      ...(err.details ? { details: err.details } : {}),
-    });
-  } else {
-    loggerInstance.error('Unexpected error', {
-      message: err.message,
-      stack: err.stack,
-    });
-    
-    res.status(500).json({
-      error: 'INTERNAL_SERVER_ERROR',
-      message: env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred',
-    });
-  }
-});
+// Global error handler (P7 - explicit error handling, T046)
+app.use(createErrorHandler(env));
 
 // Start server
 const server = app.listen(env.PORT, () => {
@@ -111,6 +86,14 @@ const server = app.listen(env.PORT, () => {
     port: env.PORT,
     nodeEnv: env.NODE_ENV,
   });
+
+  // Start periodic sync scheduler if interval is configured
+  if (env.SYNC_INTERVAL_MINUTES > 0) {
+    startScheduler(env, suggestionService, env.ACTUAL_BUDGET_ID);
+    loggerInstance.info('Periodic sync scheduler enabled', {
+      intervalMinutes: env.SYNC_INTERVAL_MINUTES,
+    });
+  }
 });
 
 // Graceful shutdown

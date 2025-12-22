@@ -80,16 +80,20 @@ Users request an AI-generated report (MCP-based) summarizing trends, anomalies, 
 
 - **FR-001**: Import the full Actual budget file once to a local workspace and rely on Actual's bidirectional sync state to surface drift warnings; do not auto-block local edits, but pause sync until the user chooses to reconcile (e.g., explicit re-download) after a drift/sync warning.
 - **FR-002**: Generate AI-driven categorization suggestions with confidence scores and per-transaction previews; do not auto-apply.
+- **FR-002a**: When syncing (either scheduled or manual), generate suggestions only from changed/new transactions (diff-based). On explicit redownload, perform full-snapshot re-analysis (see FR-001 for redownload flow).
 - **FR-003**: Generate payee merge suggestions with before/after examples and potential collisions flagged; require explicit approval per merge.
 - **FR-004**: Present all suggestions in a review UI that supports approve, reject, defer, and bulk actions while showing diffs of proposed changes.
+- **FR-004a**: Frontend must include a Budget Selector component that lists available budgets and provides a "Sync & Generate Suggestions" button, which triggers the sync-then-generate workflow.
+- **FR-004b**: Frontend must include a "Force Redownload" button (always visible) to allow explicit user-initiated full-snapshot refresh and re-analysis.
 - **FR-005**: Apply only approved suggestions to the local budget copy, logging each applied change with actor, timestamp, and source suggestion.
 - **FR-006**: Create and manage AI-proposed new categories with suggested parent grouping and sample transactions; creation requires explicit user confirmation.
 - **FR-007**: Build a sync plan from applied changes and execute sync to the Actual server only after user confirmation; surface a dry-run preview before submit.
 - **FR-008**: Provide an AI-generated report (MCP-based) summarizing trends, anomalies, and recommended actions without mutating budget data.
 - **FR-009**: Support read-only mode where suggestions/reports can be generated and exported without sync credentials.
 - **FR-010**: Persist an audit log of suggestions generated, actions taken (approve/reject/defer), and sync outcomes for traceability.
-- **FR-011**: Handle transient failures (AI, file IO, sync) with retry/backoff and clear user-facing errors; never leave the budget in a partial-applied state.
+- **FR-011**: Handle transient failures (AI, file IO, sync) with retry/backoff and clear user-facing errors; never leave the budget in a partial-applied state. For periodic sync failures, retry silently with exponential backoff; alert user only if retry limit exhausted.
 - **FR-012**: Deliver deployment artifacts: a Dockerfile and a Helm chart suitable for home-ops installation, each configurable for API keys, Actual server endpoint, and storage paths.
+- **FR-013**: Enable periodic syncs via environment variable (`SYNC_INTERVAL_MINUTES`). Scheduled syncs trigger sync-then-generate workflow automatically, applying diff-based suggestion generation (FR-002a).
 
 ### Key Entities *(include if feature involves data)*
 
@@ -118,3 +122,11 @@ Users request an AI-generated report (MCP-based) summarizing trends, anomalies, 
 
 - Q: How should budget snapshots be managed? → A: Single initial download; re-download only when the user explicitly requests after drift/sync warnings.
 - Q: How should drift vs. sync be handled with Actual's bidirectional sync? → A: Rely on Actual sync signals (no timestamp/hash tracking), surface drift warnings, keep local edits intact, and pause sync until the user chooses a reconcile action (e.g., explicit re-download).
+
+### Session 2025-12-22
+
+- Q: When syncing, should suggestions be generated from changed transactions (diff-based) or entire snapshot? → A: Diff-based (Option A) for normal syncs; full-snapshot re-analysis (Option B) only after explicit user redownload in UI.
+- Q: How should periodic syncs be triggered? → A: Fixed interval (Option A) controlled via `SYNC_INTERVAL_MINUTES` environment variable; allows ops teams to configure sync frequency without UI settings.
+- Q: Where should frontend get budget list and should selection persist? → A: Query Actual API each time (no persistence); MVP uses single budget ID from env var, with future UI support for multi-budget addition.
+- Q: When should Force Redownload button be visible? → A: Always visible (Option A) for safe, explicit user control without conditional UX complexity.
+- Q: On failed periodic sync, should system retry, alert, or skip? → A: Retry silently (Option A) with exponential backoff; log failures but only alert user if retry limit exhausted to avoid alert fatigue.

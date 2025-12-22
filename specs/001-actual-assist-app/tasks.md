@@ -55,6 +55,7 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
+
 - [X] T015 Implement environment validation schema in backend/src/config.ts using zod (validate all env vars from .env.example, fail fast on startup)
 - [X] T016 Create SQLite schema initialization script in backend/src/infra/db-schema.ts (suggestions table, audit_log table per research.md)
 - [X] T017 Implement database migration runner in backend/src/infra/db-migrations.ts (execute schema.sql, track version)
@@ -66,7 +67,13 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 **Checkpoint**: Foundation ready - P1 implementation can now begin in parallel
 
----
+### Additional Foundational (Periodic Sync Support)
+
+- [X] T064 [P] Add SYNC_INTERVAL_MINUTES to backend/.env.example and validate in backend/src/infra/env.ts (default 360, min 1, integer)
+- [X] T065 [P] Create scheduler in backend/src/scheduler/SyncScheduler.ts (node-cron schedule by SYNC_INTERVAL_MINUTES, exports startScheduler())
+- [X] T066 Wire scheduler startup in backend/src/server.ts (call startScheduler() after app.listen, guard with env var)
+- [X] T067 [P] Extend ActualBudgetAdapter with listBudgets() and sync() in backend/src/infra/ActualBudgetAdapter.ts (wrap @actual-app/api)
+
 
 ## Phase 3: User Story 1 - Review and Apply AI Suggestions (Priority: P1) 🎯 POC MVP
 
@@ -101,6 +108,12 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 - [ ] T039 [P] [US1] Unit test AIService suggestion generation in backend/tests/unit/services/ai-service.test.ts (mock ActualClient and OpenAIClient, verify batching and confidence filtering)
 - [ ] T040 [P] [US1] Unit test SyncService plan building in backend/tests/unit/services/sync-service.test.ts (mock AuditRepo, verify change ordering and dry-run summary)
 
+### Sync & Generation Enhancements (Diff-Based Strategy)
+
+- [X] T068 [P] [US1] Implement generateSuggestionsFromDiff(budgetId) in backend/src/services/SuggestionService.ts (sync, compute changed transactions, generate suggestions for diff only)
+- [X] T069 [P] [US1] Add full-snapshot mode toggle post-redownload in backend/src/services/SuggestionService.ts (fallback to full analysis when flagged)
+- [ ] T070 [P] [US1] Integration test diff-based generation in backend/tests/integration/services/suggestion-diff.test.ts (set up before/after snapshots, expect only changed txns suggested)
+
 ### API Layer (P1)
 
 - [ ] T041 [P] [US1] Implement POST /budget/download route in backend/src/api/routes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml with budgetId)
@@ -108,11 +121,27 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 - [ ] T043 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/routes.ts (validate suggestionId and status, update via AuditRepo with budgetId context, return updated Suggestion per contracts/api.yaml)
 - [ ] T044 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/routes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
 - [X] T045 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/routes.ts (validate budgetId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
-- [ ] T046 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7, surface drift warnings)
+- [X] T046 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7, surface drift warnings)
 - [ ] T047 [P] [US1] Integration test /budget/download endpoint in backend/tests/integration/api/budget-download.test.ts (mock Actual server, verify 200 response with budgetId and snapshot structure)
 - [ ] T048 [P] [US1] Integration test /suggestions/generate endpoint in backend/tests/integration/api/suggestions-generate.test.ts (mock OpenAI API, verify suggestions returned with budgetId and confidence scores)
 - [ ] T049 [P] [US1] Integration test /suggestions/:id PATCH endpoint in backend/tests/integration/api/suggestions-update.test.ts (verify status transitions and 400 for invalid states)
 - [ ] T050 [P] [US1] Integration test /sync-plan/build endpoint in backend/tests/integration/api/sync-plan-build.test.ts (verify plan includes only approved suggestions)
+
+#### API Extensions for Sync & Budgets (New)
+
+- [X] T071 [P] [US1] Implement GET /api/budgets in backend/src/api/budgetRoutes.ts and mount in backend/src/api/index.ts (return {budgets: []} per contracts/api.yaml)
+- [X] T072 [P] [US1] Implement POST /snapshots in backend/src/api/snapshotRoutes.ts (create/download snapshot per contracts/api.yaml)
+- [X] T073 [P] [US1] Implement POST /snapshots/redownload in backend/src/api/snapshotRoutes.ts (force redownload and respond with snapshot)
+- [X] T074 [P] [US1] Implement POST /suggestions/sync-and-generate in backend/src/api/suggestionRoutes.ts (calls diff-based generation)
+- [X] T075 [P] [US1] Implement GET /suggestions/pending in backend/src/api/suggestionRoutes.ts (list status=pending)
+
+#### API Integration Tests (New)
+
+- [ ] T076 [P] [US1] Integration test GET /api/budgets in backend/tests/integration/api/budgets-list.test.ts (verify 200 + shape)
+- [ ] T077 [P] [US1] Integration test POST /snapshots in backend/tests/integration/api/snapshots-create.test.ts (verify 201 + snapshot structure)
+- [ ] T078 [P] [US1] Integration test POST /snapshots/redownload in backend/tests/integration/api/snapshots-redownload.test.ts (verify 200 + replacement)
+- [ ] T079 [P] [US1] Integration test POST /suggestions/sync-and-generate in backend/tests/integration/api/suggestions-sync-generate.test.ts (mock Actual/OpenAI, expect only diff)
+- [ ] T080 [P] [US1] Integration test GET /suggestions/pending in backend/tests/integration/api/suggestions-pending.test.ts (verify pending list)
 
 ### Frontend (P1)
 
@@ -124,6 +153,14 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 - [ ] T056 [P] [US1] Style components with Tailwind CSS or basic CSS in frontend/src/styles.css (confidence color coding: green >0.8, yellow 0.5-0.8, red <0.5)
 - [ ] T057 [P] [US1] Integration test approve/reject workflow in frontend/tests/integration/suggestion-review.spec.ts (Playwright: download → generate → approve 3 suggestions → build plan → verify plan contains 3 changes)
 - [ ] T058 [P] [US1] Integration test bulk approve workflow in frontend/tests/integration/bulk-approve.spec.ts (Playwright: filter by confidence >0.8 → bulk approve → build plan → verify all approved)
+
+#### Budget Selector & Sync Flow (UI)
+
+- [X] T081 [P] [US1] Add listBudgets() in frontend/src/services/api.ts (GET /api/budgets; types for Budget)
+- [X] T082 [P] [US1] Add syncAndGenerateSuggestions(budgetId) in frontend/src/services/api.ts (POST /suggestions/sync-and-generate)
+- [X] T083 [US1] Create BudgetSelector component in frontend/src/components/BudgetSelector.tsx with styles in frontend/src/components/BudgetSelector.css
+- [X] T084 [US1] Wire BudgetSelector into frontend/src/App.tsx (selectedBudget gating for tabs and actions)
+- [ ] T085 [P] [US1] Playwright test budget selection + sync flow in frontend/tests/integration/setup.spec.ts (select budget → Sync & Generate → see suggestions)
 
 **Checkpoint**: At this point, P1 should be fully functional and testable independently
 

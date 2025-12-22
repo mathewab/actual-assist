@@ -50,7 +50,216 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /budgets:
+    get:
+      summary: List available budgets
+      description: |
+        Returns list of available budgets from Actual server.
+        POC MVP returns single env-configured budget; future versions support multiple budgets via UI.
+      responses:
+        '200':
+          description: Budgets retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  budgets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
+                        name:
+                          type: string
+                          example: "Personal Budget"
+                        lastSync:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          example: "2025-12-22T14:30:00Z"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /snapshots:
+    post:
+      summary: Create or download a budget snapshot
+      description: |
+        Creates a new snapshot by downloading the budget from Actual server.
+        Replaces existing snapshot if already present (re-download).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - budgetId
+              properties:
+                budgetId:
+                  type: string
+                  example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
+      responses:
+        '201':
+          description: Snapshot created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSnapshot'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /snapshots/redownload:
+    post:
+      summary: Force redownload and replace current snapshot
+      description: |
+        Explicitly redownloads the entire budget from Actual server, replacing current snapshot.
+        Triggers full-snapshot re-analysis on next suggestion generation.
+        Use case: user suspects stale snapshot, manually edited budget, or wants comprehensive re-evaluation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - budgetId
+              properties:
+                budgetId:
+                  type: string
+                  example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
+      responses:
+        '200':
+          description: Snapshot redownloaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Snapshot redownloaded successfully"
+                  snapshot:
+                    $ref: '#/components/schemas/BudgetSnapshot'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /suggestions/sync-and-generate:
+    post:
+      summary: Sync and generate diff-based suggestions
+      description: |
+        Syncs with Actual server to fetch latest transactions, detects changes since last snapshot,
+        and generates AI suggestions only for changed/new transactions (diff-based).
+        This is the primary workflow for regular periodic syncs and manual user triggers.
+        Use /suggestions/generate after force redownload for full-snapshot analysis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - budgetId
+              properties:
+                budgetId:
+                  type: string
+                  example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
+      responses:
+        '200':
+          description: Sync and generation completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Suggestion'
+                  total:
+                    type: integer
+                    example: 8
+                  syncInfo:
+                    type: object
+                    properties:
+                      snapshotBefore:
+                        type: string
+                        format: date-time
+                        example: "2025-12-22T08:00:00Z"
+                      snapshotAfter:
+                        type: string
+                        format: date-time
+                        example: "2025-12-22T14:30:00Z"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /suggestions/pending:
+    get:
+      summary: Get all pending suggestions
+      description: |
+        Retrieves suggestions with status=pending (not yet approved or rejected).
+        Includes suggestions from all budgets.
+      responses:
+        '200':
+          description: Pending suggestions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Suggestion'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /suggestions/generate:
+    post:
+      summary: Generate AI suggestions from current snapshot (full-snapshot analysis)
+      description: |
+        Analyzes the entire current snapshot and generates AI-driven categorization suggestions.
+        Use this after force redownload (/snapshots/redownload) for comprehensive re-analysis.
+        For regular syncs, use /suggestions/sync-and-generate instead (diff-based, faster).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - budgetId
+              properties:
+                budgetId:
+                  type: string
+                  example: "1cfdbb80-6274-49bf-b0c2-737235a4c81f"
+                maxSuggestions:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  default: 50
+                  description: Limit number of suggestions generated
+      responses:
+        '200':
+          description: Suggestions generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Suggestion'
+                  total:
+                    type: integer
+                    example: 42
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       summary: Generate AI categorization suggestions
       description: |

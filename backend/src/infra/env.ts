@@ -26,6 +26,13 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_FILE: z.string().optional(),
+
+  // Periodic Sync
+  SYNC_INTERVAL_MINUTES: z.string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .refine((n) => n >= 1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
+    .default('360'),
 });
 
 export type Env = z.infer<typeof envSchema>;

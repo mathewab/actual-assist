@@ -5,6 +5,11 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+export interface Budget {
+  id: string;
+  name: string;
+}
+
 export interface Suggestion {
   id: string;
   budgetId: string;
@@ -39,6 +44,20 @@ export interface SyncPlan {
 
 export const api = {
   /**
+   * List available budgets
+   * T081: GET /api/budgets
+   */
+  async listBudgets(): Promise<{ budgets: Budget[] }> {
+    const response = await fetch(`${API_BASE}/budgets`);
+
+    if (!response.ok) {
+      throw new Error('Failed to list budgets');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Create a new budget snapshot
    */
   async createSnapshot(budgetId: string, syncId?: string) {
@@ -67,6 +86,24 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to generate suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Sync and generate suggestions (diff-based)
+   * T082: POST /suggestions/sync-and-generate
+   */
+  async syncAndGenerateSuggestions(budgetId: string, fullSnapshot = false): Promise<{ suggestions: Suggestion[]; total: number; mode: string }> {
+    const response = await fetch(`${API_BASE}/suggestions/sync-and-generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, fullSnapshot }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to sync and generate suggestions');
     }
 
     return response.json();

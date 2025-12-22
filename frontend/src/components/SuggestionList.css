@@ -130,3 +130,53 @@
 .btn-reject:hover:not(:disabled) {
   background: #da190b;
 }
+
+.btn-sync {
+  background: #2196f3;
+  color: white;
+  flex: none;
+  padding: 8px 16px;
+}
+
+.btn-sync:hover:not(:disabled) {
+  background: #1976d2;
+}
+
+.suggestion-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.suggestion-list-header h2 {
+  margin: 0;
+}
+
+.status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.status-pending {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.status-approved {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-rejected {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.status-applied {
+  background: #e3f2fd;
+  color: #1565c0;
+}

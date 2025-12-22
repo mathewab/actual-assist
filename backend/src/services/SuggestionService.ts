@@ -168,4 +168,90 @@ export class SuggestionService {
 
     logger.info('Suggestion rejected', { suggestionId });
   }
+
+  /**
+   * Sync with Actual Budget and generate suggestions for changed transactions only
+   * T068: Diff-based generation - only processes new/changed uncategorized transactions
+   * P9 (Minimalism): Process only what changed, not entire budget
+   */
+  async syncAndGenerateSuggestions(
+    budgetId: string,
+    fullSnapshot = false
+  ): Promise<Suggestion[]> {
+    logger.info('Syncing and generating suggestions', { budgetId, fullSnapshot });
+
+    // Sync latest data from Actual Budget server
+    await this.actualBudget.sync();
+
+    // If full snapshot mode (e.g., after redownload), use full generation
+    if (fullSnapshot) {
+      logger.info('Full snapshot mode enabled, generating all suggestions');
+      return this.generateSuggestions(budgetId);
+    }
+
+    // Fetch current budget state
+    const [transactions, categories] = await Promise.all([
+      this.actualBudget.getTransactions(),
+      this.actualBudget.getCategories(),
+    ]);
+
+    // Get existing suggestions to determine which transactions already have suggestions
+    const existingSuggestions = this.suggestionRepo.findByBudgetId(budgetId);
+    const existingTransactionIds = new Set(
+      existingSuggestions.map((s) => s.transactionId)
+    );
+
+    // Filter to only new uncategorized transactions without suggestions
+    const uncategorized = transactions.filter(
+      (txn) => txn.categoryId === null && !existingTransactionIds.has(txn.id)
+    );
+
+    if (uncategorized.length === 0) {
+      logger.info('No new uncategorized transactions found');
+      return [];
+    }
+
+    logger.info(`Found ${uncategorized.length} new uncategorized transactions`);
+
+    // Generate suggestions only for new transactions
+    const suggestions: Suggestion[] = [];
+
+    for (const transaction of uncategorized) {
+      try {
+        const suggestion = await this.generateSuggestionForTransaction(
+          budgetId,
+          transaction,
+          transactions,
+          categories
+        );
+
+        this.suggestionRepo.save(suggestion);
+        suggestions.push(suggestion);
+      } catch (error) {
+        logger.error('Failed to generate suggestion for transaction', {
+          transactionId: transaction.id,
+          error,
+        });
+      }
+    }
+
+    // Log audit event
+    this.auditRepo.log({
+      eventType: 'suggestions_generated_diff',
+      entityType: 'BudgetSnapshot',
+      entityId: budgetId,
+      metadata: {
+        suggestionsCount: suggestions.length,
+        newUncategorizedCount: uncategorized.length,
+        mode: 'diff',
+      },
+    });
+
+    logger.info('Diff-based suggestions generated', {
+      count: suggestions.length,
+      budgetId,
+    });
+
+    return suggestions;
+  }
 }

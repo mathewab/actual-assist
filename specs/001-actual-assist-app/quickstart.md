@@ -263,3 +263,203 @@ After validating P1 workflow:
 3. Add sync execution endpoint
 4. Create Dockerfile and Helm chart
 5. Add authentication and multi-user support
+
+---
+
+## Updated Workflow (Session 2025-12-22): Budget Selector + Periodic Sync
+
+### New Environment Variables
+
+Add to `backend/.env`:
+
+```env
+# Periodic sync interval in minutes (default: 360 = 6 hours)
+SYNC_INTERVAL_MINUTES=360
+
+# Optional: log level
+LOG_LEVEL=info
+```
+
+### Step 0: Budget Selection (Frontend)
+
+1. Open http://localhost:5173
+2. Frontend displays BudgetSelector component
+   - Shows available budgets from GET /api/budgets
+   - MVP shows single env-configured budget
+3. Click on budget name to select it
+4. Two action buttons appear for selected budget:
+   - "↻ Sync & Generate Suggestions" (primary workflow)
+   - "Force Redownload & Re-analyze" (always visible)
+
+### Step 1: Sync & Generate (Normal Workflow)
+
+**Button**: "Sync & Generate Suggestions"
+
+**What happens**:
+1. Frontend calls POST /api/suggestions/sync-and-generate
+2. Backend:
+   - Syncs with Actual server (fetches latest transactions)
+   - Compares with previous snapshot (diff detection)
+   - Generates suggestions only for changed/new transactions (diff-based)
+   - Stores suggestions in database
+3. Frontend refreshes suggestion list; new suggestions appear in Review tab
+
+**Expected behavior**:
+- Fast: ~2-5 seconds for typical budget (5-20 new transactions)
+- Focused: Only suggestions for changed transactions (avoids duplicates from prior syncs)
+- Periodic: Runs automatically every SYNC_INTERVAL_MINUTES (default 6 hours)
+  - No user intervention needed
+  - Failures retry silently with exponential backoff
+  - Alert shown only if all retries exhausted
+
+### Step 2: Force Redownload (Explicit Re-Analysis)
+
+**Button**: "Force Redownload & Re-analyze" (always visible in BudgetSelector)
+
+**When to use**:
+- User suspects stale snapshot (manually edited budget file)
+- User wants comprehensive re-evaluation of all categories
+- Server-side drift detected
+
+**What happens**:
+1. Frontend calls POST /api/snapshots/redownload
+2. Backend re-downloads entire budget, replaces current snapshot
+3. Frontend shows success message with new transaction count
+4. Next "Sync & Generate" call uses full-snapshot analysis instead of diff
+   - Slower: ~10-60 seconds for typical budget (500-5000 transactions)
+   - Comprehensive: Re-analyzes all transactions
+   - Detects recategorization opportunities
+
+### Periodic Sync Behavior
+
+Backend initializes SyncScheduler on startup:
+
+```typescript
+// runs every SYNC_INTERVAL_MINUTES (e.g., 360 minutes = 6 hours)
+cron.schedule(`*/${syncIntervalMinutes} * * * *`, async () => {
+  try {
+    const suggestions = await suggestionService.syncAndGenerateSuggestions(budgetId);
+    logger.info('Periodic sync completed', { count: suggestions.length });
+  } catch (error) {
+    // Retry with exponential backoff: 1min, 5min, 15min
+    // Alert UI only if all retries exhausted
+    retryWithBackoff(error, 3);
+  }
+});
+```
+
+**Frontend sees new suggestions automatically**:
+- Optional: Poll GET /api/suggestions/pending periodically (e.g., every 30 seconds)
+- Or: Use WebSocket (future enhancement) for real-time updates
+- Or: Manual refresh in UI
+
+### Example Workflow
+
+```bash
+# 1. Budget already selected in UI
+
+# 2. Manual sync & generate (or happens periodically)
+curl -X POST http://localhost:3000/api/suggestions/sync-and-generate \
+  -H "Content-Type: application/json" \
+  -d '{"budgetId": "..."}'
+# Response: 3 new suggestions (only changed transactions)
+
+# 3. Review suggestions in UI
+# User approves 2, rejects 1
+
+# 4. Build sync plan
+curl -X POST http://localhost:3000/api/sync/plan \
+  -H "Content-Type: application/json" \
+  -d '{"budgetId": "..."}'
+# Response: sync plan with 2 changes
+
+# 5. After time passes... periodic sync runs automatically
+# (6 hours later or SYNC_INTERVAL_MINUTES)
+# → Fetches latest transactions
+# → Generates suggestions for 5 new transactions
+# → User sees new suggestions in UI next time they check
+
+# 6. User suspects stale snapshot, clicks "Force Redownload"
+curl -X POST http://localhost:3000/api/snapshots/redownload \
+  -H "Content-Type: application/json" \
+  -d '{"budgetId": "..."}'
+# Response: snapshot redownloaded
+
+# 7. User manually triggers "Sync & Generate" again
+# (or waits for next periodic sync)
+curl -X POST http://localhost:3000/api/suggestions/sync-and-generate \
+  -H "Content-Type: application/json" \
+  -d '{"budgetId": "..."}'
+# This time: full-snapshot analysis (all 500 transactions re-analyzed)
+# Response: 50 suggestions (comprehensive re-evaluation)
+```
+
+### Configuration Examples
+
+**Fast sync (3 times per day)**:
+```env
+SYNC_INTERVAL_MINUTES=480  # 8 hours
+```
+
+**Slow sync (once per day)**:
+```env
+SYNC_INTERVAL_MINUTES=1440  # 24 hours
+```
+
+**Very frequent (for testing)**:
+```env
+SYNC_INTERVAL_MINUTES=5  # Every 5 minutes
+```
+
+## Monitoring & Debugging
+
+### Check sync logs
+
+```bash
+# View recent audit log
+curl http://localhost:3000/api/audit\?eventType\=sync_plan_created
+
+# View periodic sync attempts
+grep "Periodic sync" backend/logs/*.log
+
+# View failures
+grep "error\|Error" backend/logs/*.log
+```
+
+### Database inspection
+
+```bash
+# SQLite CLI
+sqlite3 data/assistant.db
+
+# View suggestions table
+SELECT id, transactionPayee, status, createdAt FROM suggestions LIMIT 10;
+
+# View audit log
+SELECT eventType, details, timestamp FROM audit_log ORDER BY timestamp DESC LIMIT 20;
+```
+
+## Architecture Notes
+
+**Diff-based vs. Full-snapshot**:
+- **Diff-based** (normal sync): Compares current + new snapshots, generates suggestions only for changed transactions
+  - Fast (~2-5s)
+  - Avoids duplicates from prior syncs
+  - Triggered by: periodic sync, "Sync & Generate Suggestions" button
+- **Full-snapshot** (after redownload): Analyzes entire transaction set
+  - Slow (~10-60s)
+  - Comprehensive re-evaluation
+  - Triggered by: "Force Redownload & Re-analyze" button, then "Sync & Generate"
+
+**Periodic Sync Retry**:
+- 1st attempt: immediate
+- Fail → retry after 1 minute
+- Fail → retry after 5 minutes
+- Fail → retry after 15 minutes
+- All failed → log error, alert UI (next time user checks)
+
+**Future Enhancements** (post-POC):
+- Multi-budget UI (add budgets dynamically)
+- User-configurable sync schedule (UI settings)
+- WebSocket for real-time suggestion notifications
+- Drift detection and automatic recovery

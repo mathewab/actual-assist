@@ -159,3 +159,93 @@ CREATE INDEX idx_audit_snapshot ON audit_log(snapshot_id);
 - **Storage**: SQLite with denormalized suggestions table + audit log; sufficient for POC, easy exit to PostgreSQL.
 
 **No NEEDS CLARIFICATION remaining**; proceed to Phase 1 (design).
+
+## Session 2025-12-22: Clarifications Update
+
+### R4: Periodic Sync Scheduling & Automation
+
+**Question**: How to trigger periodic syncs without blocking UI? Retry on failure?
+
+**Decision**: Use node-cron for lightweight scheduling; configure interval via SYNC_INTERVAL_MINUTES env var; retry with exponential backoff on failure.
+
+**Pattern**:
+```typescript
+// scheduler/SyncScheduler.ts
+import * as cron from 'node-cron';
+
+const syncIntervalMinutes = parseInt(process.env.SYNC_INTERVAL_MINUTES || '360');
+
+// Schedule periodic sync
+cron.schedule(`*/${syncIntervalMinutes} * * * *`, async () => {
+  try {
+    const suggestions = await suggestionService.syncAndGenerateSuggestions(budgetId);
+    logger.info('Periodic sync completed', { count: suggestions.length });
+  } catch (error) {
+    // Retry with exponential backoff
+    retryWithBackoff(error, 3 /* max attempts */);
+  }
+});
+```
+
+**Behavior**:
+- Runs async (non-blocking to UI)
+- On failure: retry at 1min, 5min, 15min intervals; alert UI only if all retries exhausted
+- Audit log tracks every sync attempt (success/failure/retry count)
+- Frontend polls /api/suggestions/pending to detect new suggestions
+
+**Rationale**:
+- node-cron is lightweight (~2KB), no external process required, suitable for single-user POC
+- Env var allows ops teams to configure frequency without code changes (6hr default = 6 syncs/day)
+- Exponential backoff handles transient failures; silent retry avoids alert fatigue
+- Audit trail enables debugging and compliance tracking
+
+**Cost**: No additional cost (local scheduler, no external service)
+
+**Exit Strategy**: Post-POC, migrate to background job queue (Bull, pg-boss) for multi-instance deployment; add user-configurable schedule via UI.
+
+---
+
+### R5: Diff-Based vs. Full-Snapshot Suggestion Generation
+
+**Question**: Which approach for regular syncs vs. force redownload?
+
+**Decision**: Two-strategy approach per clarifications:
+- **Normal sync** → diff-based (fast, focused)
+- **Force redownload** → full-snapshot (comprehensive)
+
+**Rationale**:
+- Diff-based avoids duplicate suggestions from prior syncs (transaction already categorized)
+- Matches user expectation: "what changed?" vs. "re-analyze everything"
+- Full-snapshot useful for recategorization or missed patterns after explicit redownload
+- Decision justified per session 2025-12-22 clarification
+
+**Alternatives considered**:
+- Always full-snapshot: slower, redundant suggestions, confusing UX
+- Always diff-based: cannot handle user redownload requests (edge case of re-evaluation)
+
+---
+
+### R6: Force Redownload Workflow
+
+**Question**: How to trigger full-snapshot re-analysis? UI placement?
+
+**Decision**: Separate endpoint POST /api/snapshots/redownload; always-visible button in BudgetSelector.
+
+**Workflow**:
+1. User clicks "Force Redownload & Re-analyze" button
+2. Frontend calls POST /api/snapshots/redownload
+3. Backend re-downloads entire budget from Actual server, replaces current snapshot in DB
+4. Next manual sync call uses diff-based generation; full-snapshot generation only on explicit /suggestions/generate call
+5. Frontend shows success message with new transaction count
+
+**Use Cases**:
+- User manually edited budget file outside app
+- User suspects stale snapshot or drift
+- User wants comprehensive re-evaluation of all categories
+
+**Rationale**:
+- Always-visible button (no conditional UX) simplifies discoverability
+- Redownload is safe, idempotent operation (just replaces snapshot)
+- Separate from normal sync (clear mental model for users)
+
+**Exit Strategy**: Post-POC, integrate automatic drift detection and conditional prompts.

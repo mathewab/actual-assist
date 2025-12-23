@@ -14,6 +14,7 @@ export interface Suggestion {
   currentCategoryId: string | null;
   proposedCategoryId: string;
   proposedCategoryName: string;
+  suggestedPayeeName: string | null; // LLM-suggested canonical payee name from fuzzy match
   confidence: number; // 0.0 to 1.0
   rationale: string; // AI explanation
   status: SuggestionStatus;
@@ -38,6 +39,7 @@ export function createSuggestion(params: {
   currentCategoryId: string | null;
   proposedCategoryId: string;
   proposedCategoryName: string;
+  suggestedPayeeName?: string | null;
   confidence: number;
   rationale: string;
 }): Suggestion {
@@ -54,6 +56,7 @@ export function createSuggestion(params: {
     currentCategoryId: params.currentCategoryId,
     proposedCategoryId: params.proposedCategoryId,
     proposedCategoryName: params.proposedCategoryName,
+    suggestedPayeeName: params.suggestedPayeeName || null,
     confidence: params.confidence,
     rationale: params.rationale,
     status: 'pending',

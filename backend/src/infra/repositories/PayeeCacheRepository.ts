@@ -204,6 +204,21 @@ export class PayeeCacheRepository {
   }
 
   /**
+   * Get all cached payee→category mappings for a budget
+   * Used for fuzzy matching against known payees
+   */
+  getAllCachedPayees(budgetId: string): PayeeCacheEntry[] {
+    const rows = this.db.query<PayeeCacheRow>(
+      `SELECT * FROM payee_category_cache WHERE budget_id = ? ORDER BY hit_count DESC`,
+      [budgetId]
+    );
+
+    const entries = rows.map(row => this.mapRowToEntry(row));
+    logger.debug('Retrieved all cached payees', { budgetId, count: entries.length });
+    return entries;
+  }
+
+  /**
    * Clear cache for a budget (useful for testing or reset)
    */
   clearBudgetCache(budgetId: string): void {

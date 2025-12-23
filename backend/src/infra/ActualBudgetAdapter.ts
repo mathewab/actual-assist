@@ -5,6 +5,18 @@ import type { Env } from './env.js';
 import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
 
 /**
+ * Payee with a known category from historical transactions
+ * Used for fuzzy matching to suggest categories
+ */
+export interface CategorizedPayee {
+  payeeId: string;
+  payeeName: string;
+  categoryId: string;
+  categoryName: string;
+  transactionCount: number;
+}
+
+/**
  * Actual Budget API adapter following P5 (separation of concerns)
  * Wraps @actual-app/api with explicit error handling (P7)
  */
@@ -211,6 +223,85 @@ export class ActualBudgetAdapter {
         error: error instanceof Error ? error.message : String(error),
       });
       throw new ActualBudgetError('Failed to list budgets', { error });
+    }
+  }
+
+  /**
+   * Get payees that have at least one categorized non-transfer transaction
+   * Used for fuzzy matching - only match against payees with known categories
+   */
+  async getCategorizedPayees(): Promise<CategorizedPayee[]> {
+    this.ensureInitialized();
+
+    try {
+      const [accounts, payees, categories] = await Promise.all([
+        api.getAccounts(),
+        api.getPayees(),
+        api.getCategories(),
+      ]);
+
+      // Track payee -> category mappings with counts
+      const payeeCategoryMap = new Map<string, {
+        payeeId: string;
+        payeeName: string;
+        categoryId: string;
+        categoryName: string;
+        transactionCount: number;
+      }>();
+
+      for (const account of accounts) {
+        if (account.closed || account.offbudget) continue;
+
+        const accountTransactions = await api.getTransactions(
+          account.id,
+          '1970-01-01',
+          new Date().toISOString().split('T')[0]
+        );
+
+        for (const txn of accountTransactions) {
+          // Skip transfers and uncategorized
+          if ((txn as any).transfer_id || !txn.category || !txn.payee) continue;
+
+          const payee = payees.find((p: any) => p.id === txn.payee);
+          const category = categories.find((c: any) => c.id === txn.category);
+          if (!payee?.name || !category?.name) continue;
+
+          const key = `${payee.id}|${txn.category}`;
+          const existing = payeeCategoryMap.get(key);
+          if (existing) {
+            existing.transactionCount++;
+          } else {
+            payeeCategoryMap.set(key, {
+              payeeId: payee.id,
+              payeeName: payee.name,
+              categoryId: txn.category,
+              categoryName: category.name,
+              transactionCount: 1,
+            });
+          }
+        }
+      }
+
+      // Convert to array, picking the most common category for each payee
+      const payeeMap = new Map<string, CategorizedPayee>();
+      for (const entry of payeeCategoryMap.values()) {
+        const existing = payeeMap.get(entry.payeeId);
+        if (!existing || entry.transactionCount > existing.transactionCount) {
+          payeeMap.set(entry.payeeId, {
+            payeeId: entry.payeeId,
+            payeeName: entry.payeeName,
+            categoryId: entry.categoryId,
+            categoryName: entry.categoryName,
+            transactionCount: entry.transactionCount,
+          });
+        }
+      }
+
+      const result = Array.from(payeeMap.values());
+      logger.info('Retrieved categorized payees', { count: result.length });
+      return result;
+    } catch (error) {
+      throw new ActualBudgetError('Failed to fetch categorized payees', { error });
     }
   }
 

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   current_category_id TEXT,         -- Current category ID (may be NULL)
   proposed_category_id TEXT NOT NULL, -- Proposed category ID
   proposed_category_name TEXT NOT NULL,
+  suggested_payee_name TEXT,        -- LLM-suggested canonical payee name from fuzzy match
   confidence REAL NOT NULL,         -- 0.0 to 1.0
   rationale TEXT NOT NULL,          -- AI explanation
   status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'rejected', 'applied')),

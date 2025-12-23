@@ -19,9 +19,9 @@ export class SuggestionRepository {
       INSERT INTO suggestions (
         id, budget_id, transaction_id, transaction_account_id, transaction_account_name,
         transaction_payee, transaction_amount, transaction_date, current_category_id,
-        proposed_category_id, proposed_category_name, confidence, rationale, status,
+        proposed_category_id, proposed_category_name, suggested_payee_name, confidence, rationale, status,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     this.db.execute(sql, [
@@ -36,6 +36,7 @@ export class SuggestionRepository {
       suggestion.currentCategoryId,
       suggestion.proposedCategoryId,
       suggestion.proposedCategoryName,
+      suggestion.suggestedPayeeName,
       suggestion.confidence,
       suggestion.rationale,
       suggestion.status,
@@ -188,6 +189,7 @@ export class SuggestionRepository {
       currentCategoryId: row.current_category_id,
       proposedCategoryId: row.proposed_category_id,
       proposedCategoryName: row.proposed_category_name,
+      suggestedPayeeName: row.suggested_payee_name,
       confidence: row.confidence,
       rationale: row.rationale,
       status: row.status as SuggestionStatus,

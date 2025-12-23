@@ -436,6 +436,305 @@ paths:
         '501':
           description: Not implemented in POC
 
+  # ==========================================
+  # New endpoints (December 2025)
+  # ==========================================
+
+  /suggestions/{suggestionId}/approve-payee:
+    post:
+      summary: Approve only the payee suggestion component
+      description: Approves the payee suggestion independently of category
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payee suggestion approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  type:
+                    type: string
+                    example: "payee"
+
+  /suggestions/{suggestionId}/approve-category:
+    post:
+      summary: Approve only the category suggestion component
+      description: Approves the category suggestion independently of payee
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Category suggestion approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  type:
+                    type: string
+                    example: "category"
+
+  /suggestions/{suggestionId}/reject-payee:
+    post:
+      summary: Reject payee suggestion with optional correction
+      description: |
+        Rejects the payee suggestion. Optionally provides a correction
+        which will be cached for future use.
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payeeId:
+                  type: string
+                  description: Correct payee ID (optional)
+                payeeName:
+                  type: string
+                  description: Correct payee name (optional)
+      responses:
+        '200':
+          description: Payee suggestion rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  type:
+                    type: string
+                  withCorrection:
+                    type: boolean
+
+  /suggestions/{suggestionId}/reject-category:
+    post:
+      summary: Reject category suggestion with optional correction
+      description: |
+        Rejects the category suggestion. Optionally provides a correction
+        which will be cached for future use.
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categoryId:
+                  type: string
+                  description: Correct category ID (optional)
+                categoryName:
+                  type: string
+                  description: Correct category name (optional)
+      responses:
+        '200':
+          description: Category suggestion rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  type:
+                    type: string
+                  withCorrection:
+                    type: boolean
+
+  /suggestions/{suggestionId}/reset:
+    post:
+      summary: Reset suggestion back to pending
+      description: Resets both payee and category components to pending status
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Suggestion reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /suggestions/{suggestionId}/retry:
+    post:
+      summary: Retry failed suggestion
+      description: |
+        Retries LLM suggestion for this transaction. Only works for
+        suggestions that failed (empty rationale).
+      parameters:
+        - name: suggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Suggestion regenerated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suggestion'
+
+  /suggestions/bulk-reset:
+    post:
+      summary: Bulk reset suggestions to pending
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - suggestionIds
+              properties:
+                suggestionIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Suggestions reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reset:
+                    type: integer
+
+  /sync/pending:
+    get:
+      summary: Get approved suggestions ready to apply
+      parameters:
+        - name: budgetId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approved changes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovedChange'
+
+  /sync/apply:
+    post:
+      summary: Apply approved suggestions to Actual Budget
+      description: |
+        Applies the specified suggestions to the Actual Budget file.
+        Updates transactions with approved categories and payees.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - budgetId
+                - suggestionIds
+              properties:
+                budgetId:
+                  type: string
+                suggestionIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Suggestions applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: integer
+                  failed:
+                    type: integer
+
+  /budgets/categories:
+    get:
+      summary: Get all categories from current budget
+      responses:
+        '200':
+          description: Categories list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+
+  /audit:
+    get:
+      summary: Get audit log events
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+
 components:
   schemas:
     BudgetSnapshot:
@@ -466,20 +765,17 @@ components:
 
     Suggestion:
       type: object
+      description: |
+        AI-generated suggestion with independent payee and category components.
+        Each component has its own confidence, rationale, and status.
       required:
         - id
         - budgetId
         - transactionId
-        - transactionPayee
-        - transactionAmount
-        - transactionDate
-        - proposedCategoryId
-        - proposedCategoryName
-        - confidence
-        - rationale
+        - payeeSuggestion
+        - categorySuggestion
         - status
         - createdAt
-        - updatedAt
       properties:
         id:
           type: string
@@ -498,7 +794,8 @@ components:
           description: "Display name of the account"
         transactionPayee:
           type: string
-          example: "Netflix"
+          nullable: true
+          example: "AMZN MKTP US*123ABC"
         transactionAmount:
           type: integer
           description: Amount in cents
@@ -510,28 +807,185 @@ components:
         currentCategoryId:
           type: string
           nullable: true
+        currentPayeeId:
+          type: string
+          nullable: true
+        
+        # Independent suggestion components
+        payeeSuggestion:
+          $ref: '#/components/schemas/PayeeSuggestionComponent'
+        categorySuggestion:
+          $ref: '#/components/schemas/CategorySuggestionComponent'
+        correction:
+          $ref: '#/components/schemas/SuggestionCorrection'
+        
+        # Legacy fields (backward compatibility)
         proposedCategoryId:
           type: string
           format: uuid
+          deprecated: true
         proposedCategoryName:
           type: string
-          example: "Entertainment"
+          deprecated: true
+        suggestedPayeeName:
+          type: string
+          nullable: true
+          deprecated: true
+        confidence:
+          type: number
+          format: float
+          deprecated: true
+          description: "Combined confidence (max of payee/category)"
+        rationale:
+          type: string
+          deprecated: true
+        status:
+          type: string
+          enum: [pending, approved, rejected, applied]
+          description: "Computed from component statuses"
+        createdAt:
+          type: string
+          format: date-time
+
+    PayeeSuggestionComponent:
+      type: object
+      properties:
+        proposedPayeeId:
+          type: string
+          nullable: true
+        proposedPayeeName:
+          type: string
+          nullable: true
+          example: "Amazon"
         confidence:
           type: number
           format: float
           minimum: 0
           maximum: 1
-          example: 0.95
         rationale:
           type: string
-          example: "Recurring charge for streaming service matches Entertainment category"
+          example: "Matched via alias: AMZN → Amazon"
         status:
           type: string
-          enum: [pending, approved, rejected]
-        createdAt:
+          enum: [pending, approved, rejected, applied, skipped]
+
+    CategorySuggestionComponent:
+      type: object
+      properties:
+        proposedCategoryId:
           type: string
-          format: date-time
-        updatedAt:
+          nullable: true
+        proposedCategoryName:
+          type: string
+          nullable: true
+          example: "Shopping"
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        rationale:
+          type: string
+          example: "Similar payee 'Amazon Prime' mapped to Shopping"
+        status:
+          type: string
+          enum: [pending, approved, rejected, applied, skipped]
+
+    SuggestionCorrection:
+      type: object
+      description: User-provided corrections when rejecting a suggestion
+      properties:
+        correctedPayeeId:
+          type: string
+          nullable: true
+        correctedPayeeName:
+          type: string
+          nullable: true
+        correctedCategoryId:
+          type: string
+          nullable: true
+        correctedCategoryName:
+          type: string
+          nullable: true
+
+    ApprovedChange:
+      type: object
+      description: Approved suggestion ready to apply
+      properties:
+        suggestionId:
+          type: string
+        transactionId:
+          type: string
+        proposedCategoryId:
+          type: string
+        currentCategoryId:
+          type: string
+          nullable: true
+        transactionPayee:
+          type: string
+          nullable: true
+        transactionDate:
+          type: string
+          nullable: true
+        transactionAmount:
+          type: number
+          nullable: true
+        transactionAccountName:
+          type: string
+          nullable: true
+        proposedCategoryName:
+          type: string
+          nullable: true
+        currentCategoryName:
+          type: string
+          nullable: true
+        proposedPayeeName:
+          type: string
+          nullable: true
+        hasPayeeChange:
+          type: boolean
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        groupName:
+          type: string
+          nullable: true
+
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        eventType:
+          type: string
+          enum:
+            - snapshot_created
+            - suggestions_generated
+            - suggestions_generated_diff
+            - suggestion_approved
+            - suggestion_rejected
+            - suggestion_retried
+            - sync_plan_created
+            - sync_plan_built
+            - sync_executed
+            - sync_failed
+            - scheduled_sync_started
+            - scheduled_sync_completed
+            - scheduled_sync_failed
+        entityType:
+          type: string
+        entityId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        timestamp:
           type: string
           format: date-time
 
@@ -552,54 +1006,69 @@ components:
         changes:
           type: array
           items:
-            $ref: '#/components/schemas/Change'
+            $ref: '#/components/schemas/SyncPlanChange'
         dryRunSummary:
           $ref: '#/components/schemas/DryRunSummary'
         createdAt:
           type: string
           format: date-time
 
-    Change:
+    SyncPlanChange:
       type: object
-      required:
-        - transactionId
-        - field
-        - oldValue
-        - newValue
-        - suggestionId
+      description: A change in the sync plan with full context for display
       properties:
+        id:
+          type: string
         transactionId:
-          type: string
-        field:
-          type: string
-          enum: [category]
-        oldValue:
-          type: string
-          nullable: true
-        newValue:
           type: string
         suggestionId:
           type: string
-          format: uuid
+        proposedCategoryId:
+          type: string
+        currentCategoryId:
+          type: string
+          nullable: true
+        proposedCategoryName:
+          type: string
+          nullable: true
+        currentCategoryName:
+          type: string
+          nullable: true
+        proposedPayeeName:
+          type: string
+          nullable: true
+        hasPayeeChange:
+          type: boolean
+        transactionPayee:
+          type: string
+          nullable: true
+        transactionDate:
+          type: string
+          nullable: true
+        transactionAmount:
+          type: number
+          nullable: true
+        transactionAccountName:
+          type: string
+          nullable: true
 
     DryRunSummary:
       type: object
       required:
         - totalChanges
-        - approvedSuggestions
-        - conflicts
       properties:
         totalChanges:
           type: integer
           example: 15
-        approvedSuggestions:
+        categoryChanges:
           type: integer
           example: 15
-        conflicts:
-          type: array
-          items:
-            type: object
-          example: []
+        payeeChanges:
+          type: integer
+          example: 3
+        estimatedImpact:
+          type: string
+          example: "15 transactions will be categorized"
 
     Error:
       type: object

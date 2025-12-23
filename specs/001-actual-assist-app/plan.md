@@ -55,40 +55,48 @@ backend/
 ├── src/
 │   ├── domain/              # Core business logic (P5 separation)
 │   │   ├── entities/
+│   │   │   ├── AuditEntry.ts
 │   │   │   ├── BudgetSnapshot.ts
-│   │   │   ├── Suggestion.ts
+│   │   │   ├── Suggestion.ts       # Independent payee/category suggestions
 │   │   │   └── SyncPlan.ts
 │   │   └── errors.ts
 │   ├── services/            # Orchestration (P5)
 │   │   ├── SnapshotService.ts      # Download/redownload budget snapshots
-│   │   ├── SuggestionService.ts    # Diff-based and full-snapshot generation
+│   │   ├── SuggestionService.ts    # Diff-based generation, caching, retry
 │   │   └── SyncService.ts          # Build/execute sync plans
 │   ├── infra/              # External adapters (P5)
 │   │   ├── ActualBudgetAdapter.ts  # Wrap @actual-app/api + listBudgets
-│   │   ├── OpenAIAdapter.ts        # Wrap OpenAI SDK
+│   │   ├── OpenAIAdapter.ts        # Wrap OpenAI SDK with web search
 │   │   ├── DatabaseAdapter.ts      # SQLite wrapper
+│   │   ├── PayeeMatcher.ts         # Fuzzy payee matching with alias dictionary
 │   │   ├── repositories/
-│   │   │   ├── SuggestionRepository.ts
-│   │   │   └── AuditRepository.ts
+│   │   │   ├── AuditRepository.ts
+│   │   │   ├── PayeeCacheRepository.ts      # Payee→Category cache
+│   │   │   ├── PayeeMatchCacheRepository.ts # Raw→Canonical payee cache
+│   │   │   └── SuggestionRepository.ts
 │   │   ├── db/
-│   │   │   └── schema.sql
+│   │   │   ├── schema.sql
+│   │   │   └── migrations/
 │   │   ├── env.ts
 │   │   └── logger.ts
 │   ├── api/                # HTTP interface
-│   │   ├── budgetRoutes.ts         # GET /api/budgets (list)
+│   │   ├── budgetRoutes.ts         # GET /api/budgets, GET /api/budgets/categories
 │   │   ├── snapshotRoutes.ts       # POST /snapshots, force redownload
-│   │   ├── suggestionRoutes.ts     # POST /suggestions/sync-and-generate
-│   │   ├── syncRoutes.ts
-│   │   ├── auditRoutes.ts
+│   │   ├── suggestionRoutes.ts     # Full CRUD + independent approve/reject
+│   │   ├── syncRoutes.ts           # Build plan, apply, pending changes
+│   │   ├── auditRoutes.ts          # GET /api/audit
+│   │   ├── errorHandler.ts         # Global error middleware
 │   │   └── index.ts
-│   ├── scheduler/          # Periodic sync scheduling (NEW)
+│   ├── scheduler/          # Periodic sync scheduling
 │   │   └── SyncScheduler.ts
 │   ├── server.ts           # Server entry point
 │   └── index.ts
 ├── tests/
+│   ├── setup.test.ts
 │   ├── unit/
 │   │   ├── domain/
 │   │   ├── infra/
+│   │   │   └── PayeeMatcher.test.ts
 │   │   └── services/
 │   └── integration/
 │       └── api/
@@ -97,18 +105,42 @@ backend/
 frontend/
 ├── src/
 │   ├── components/         # React UI components
-│   │   ├── BudgetSelector.tsx      # List budgets, select, sync+generate (NEW)
-│   │   ├── SuggestionList.tsx      # Approve/reject suggestions
-│   │   └── SyncPlanViewer.tsx      # Review sync plan before apply
+│   │   ├── ApplyChanges.tsx        # Review and apply approved suggestions
+│   │   ├── ApplyChanges.css
+│   │   ├── Audit.tsx               # View audit log events
+│   │   ├── Audit.css
+│   │   ├── BudgetSelector.tsx      # List budgets, select, sync+generate
+│   │   ├── BudgetSelector.css
+│   │   ├── Header.tsx              # Navigation header with React Router
+│   │   ├── Header.css
+│   │   ├── History.tsx             # View applied changes
+│   │   ├── History.css
+│   │   ├── ProgressBar.tsx         # Loading indicator during async ops
+│   │   ├── ProgressBar.css
+│   │   ├── SuggestionList.tsx      # Approve/reject grouped by payee
+│   │   ├── SuggestionList.css
+│   │   ├── SyncPlanViewer.tsx      # Review sync plan (legacy)
+│   │   └── SyncPlanViewer.css
 │   ├── services/           # API client
-│   │   └── api.ts          # Includes listBudgets, syncAndGenerateSuggestions
-│   └── App.tsx
+│   │   └── api.ts          # Full API client with all endpoints
+│   ├── App.tsx             # React Router with 4 pages
+│   ├── App.css
+│   ├── main.tsx
+│   └── index.css
 ├── tests/
 │   └── integration/        # Playwright UI flows
+│       └── setup.spec.ts
 └── package.json
 ```
 
 **Structure Decision**: Web application (backend + frontend) selected per constitution requirement for UI. Domain logic isolated per P5; adapters wrap @actual-app/api and OpenAI SDK per P6. Tests mirror structure per constitution constraints.
+
+## Additional Dependencies (December 2025)
+
+| Package | Purpose | Layer |
+|---------|---------|-------|
+| `fuzzball` | Fuzzy string matching for payee names | Backend infra |
+| `react-router-dom` | Client-side routing for multi-page navigation | Frontend |
 
 ## Complexity Tracking
 
@@ -116,8 +148,9 @@ frontend/
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| SQLite dependency (P6) | Need persistent audit log and suggestion staging across server restarts in POC | In-memory storage insufficient for multi-session debugging; exit strategy: PostgreSQL (swap repo implementation) or remove if audit not required |
+| SQLite dependency (P6) | Need persistent audit log, suggestion staging, and caches across server restarts | In-memory storage insufficient for multi-session debugging; exit strategy: PostgreSQL (swap repo implementation) or remove if audit not required |
 | React frontend (P9) | UI requirement from spec; CLI insufficient for diff preview and bulk approve/reject | Pure CLI cannot show side-by-side diffs or interactive toggles without excessive scrolling; exit: replace with simpler HTML+htmx if React overhead unjustified |
+| fuzzball dependency (P6) | Fuzzy matching essential for payee normalization; no built-in JS equivalent | Manual Levenshtein too slow; fuzzball is well-maintained with MIT license |
 
 ## POC Phase Breakdown
 

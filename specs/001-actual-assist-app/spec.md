@@ -95,15 +95,35 @@ Users request an AI-generated report (MCP-based) summarizing trends, anomalies, 
 - **FR-012**: Deliver deployment artifacts: a Dockerfile and a Helm chart suitable for home-ops installation, each configurable for API keys, Actual server endpoint, and storage paths.
 - **FR-013**: Enable periodic syncs via environment variable (`SYNC_INTERVAL_MINUTES`). Scheduled syncs trigger sync-then-generate workflow automatically, applying diff-based suggestion generation (FR-002a).
 
+### Functional Requirements (Implemented - December 2025)
+
+- **FR-014**: Support **independent payee and category suggestions** with separate confidence scores, rationale, and status tracking. Users can approve/reject payee and category components independently.
+- **FR-015**: Implement **fuzzy payee matching** using multiple algorithms (WRatio, TokenSet, JaroWinkler) with configurable thresholds. Include an alias dictionary for common merchant name variations (85+ aliases for Amazon, Walmart, Starbucks, etc.).
+- **FR-016**: Implement **payee caching** with two cache layers:
+  - `payee_category_cache`: Maps normalized payee names to categories (from user approvals or high-confidence AI)
+  - `payee_match_cache`: Maps raw payee names to canonical names (from fuzzy matches or AI identification)
+  - Cache sources: `user_approved`, `high_confidence_ai`, `fuzzy_match`
+- **FR-017**: Support **user corrections** during rejection. When rejecting a suggestion, users can optionally provide the correct payee name or category. Corrections are cached for future use.
+- **FR-018**: Implement **suggestion retry** for failed LLM responses. Suggestions with empty rationale (indicating API error) can be retried individually or in bulk.
+- **FR-019**: Use **AI web search** (OpenAI `web_search` tool) for merchant identification and category suggestion when payee is unknown. This improves accuracy for unfamiliar merchants.
+- **FR-020**: Implement **suggestion deduplication**: Skip transactions that already have pending suggestions, clean up orphaned suggestions for deleted transactions, filter out transfer transactions.
+- **FR-021**: Frontend implements **React Router navigation** with four distinct pages:
+  - Suggestions: Review and approve/reject AI suggestions grouped by payee
+  - Apply Changes: Review approved changes and apply to Actual Budget
+  - History: View previously applied changes
+  - Audit Log: View system events for debugging
+
 ### Key Entities *(include if feature involves data)*
 
 - **BudgetSnapshot**: Single active immutable view of the initially downloaded budget file with minimal metadata (source endpoint and optional sync version/token); replacement occurs only when the user explicitly re-downloads following drift/sync warnings.
-- **Suggestion**: Proposed change (categorization, payee merge, category creation) with scope, confidence, rationale, and diff preview.
-- **PayeeMergeCandidate**: Structured proposal to consolidate payees with collision warnings and impacted transactions.
-- **CategoryProposal**: Suggested new category with proposed parent, example transactions, and mapping list.
-- **ReportRequest/ReportOutput**: Inputs and generated narrative (trends, anomalies, recommendations) tied to a snapshot ID.
-- **SyncPlan**: Ordered set of approved changes ready for submission, including dry-run summary and expected outcomes.
-- **AuditEntry**: Record of suggestion generation, user decisions, apply actions, and sync results for traceability.
+- **Suggestion**: AI-generated recommendation with **independent payee and category components**, each with separate confidence, rationale, status, and optional user correction. See [data-model.md](data-model.md) for full schema.
+- **PayeeSuggestion**: Component of Suggestion for payee normalization (raw → canonical payee name).
+- **CategorySuggestion**: Component of Suggestion for category assignment.
+- **SuggestionCorrection**: User-provided correction when rejecting a suggestion.
+- **PayeeCategoryCache**: Learned payee→category mappings to reduce LLM calls.
+- **PayeeMatchCache**: Learned raw payee→canonical payee mappings.
+- **SyncPlan**: Ordered set of approved changes ready for submission, including category and payee changes with dry-run summary.
+- **AuditEntry**: Record of suggestion generation, user decisions, apply actions, retries, and sync results for traceability.
 
 ## Success Criteria *(mandatory)*
 

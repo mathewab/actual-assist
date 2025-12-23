@@ -83,21 +83,29 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 ### Domain Layer (P1)
 
-- [X] T023 [P] [US1] Implement BudgetSnapshot entity in backend/src/domain/budget-snapshot.ts (budgetId as primary identifier, filepath, downloadedAt, transactionCount, categoryCount with validation per data-model.md; no hash or id fields)
-- [X] T024 [P] [US1] Implement Suggestion entity in backend/src/domain/suggestion.ts (all fields from data-model.md with budgetId reference, status state machine validation, confidence range check)
-- [X] T025 [P] [US1] Implement SyncPlan entity in backend/src/domain/sync-plan.ts (id, budgetId, changes array, dryRunSummary, immutability enforcement)
-- [X] T026 [P] [US1] Unit test BudgetSnapshot validation rules in backend/tests/unit/domain/budget-snapshot.test.ts (test budgetId, downloadedAt, counts validation)
-- [X] T027 [P] [US1] Unit test Suggestion state transitions with budgetId references in backend/tests/unit/domain/suggestion.test.ts
-- [X] T028 [P] [US1] Unit test SyncPlan change deduplication in backend/tests/unit/domain/sync-plan.test.ts
+- [X] T023 [P] [US1] Implement BudgetSnapshot entity in backend/src/domain/entities/BudgetSnapshot.ts (budgetId as primary identifier, filepath, downloadedAt, transactionCount, categoryCount with validation per data-model.md; no hash or id fields)
+- [X] T024 [P] [US1] Implement Suggestion entity in backend/src/domain/entities/Suggestion.ts (all fields from data-model.md with budgetId reference, status state machine validation, confidence range check)
+- [X] T025 [P] [US1] Implement SyncPlan entity in backend/src/domain/entities/SyncPlan.ts (id, budgetId, changes array, dryRunSummary, immutability enforcement)
+- [X] T026 [P] [US1] Unit test BudgetSnapshot validation rules in backend/tests/unit/domain/BudgetSnapshot.test.ts (test budgetId, downloadedAt, counts validation)
+- [X] T027 [P] [US1] Unit test Suggestion state transitions with budgetId references in backend/tests/unit/domain/Suggestion.test.ts
+- [X] T028 [P] [US1] Unit test SyncPlan change deduplication in backend/tests/unit/domain/SyncPlan.test.ts
 
 ### Infrastructure Layer (P1)
 
-- [ ] T029 [P] [US1] Implement ActualClient adapter in backend/src/infra/actual-client.ts (wrap @actual-app/api: init, downloadBudget, getTransactions, getCategories, shutdown per research.md; surface sync errors for drift detection)
-- [ ] T030 [P] [US1] Implement OpenAIClient adapter in backend/src/infra/openai-client.ts (wrap OpenAI SDK: categorization prompt with JSON mode per research.md, timeout handling)
-- [X] T031 [P] [US1] Implement AuditRepository in backend/src/infra/audit-repo.ts (SQLite CRUD for suggestions table with budgetId, audit_log table per research.md schema)
-- [ ] T032 [P] [US1] Unit test ActualClient error handling for connection failures in backend/tests/unit/infra/actual-client.test.ts (mock @actual-app/api, verify drift errors trigger when sync fails)
-- [ ] T033 [P] [US1] Unit test OpenAIClient prompt formatting and JSON parsing in backend/tests/unit/infra/openai-client.test.ts (mock OpenAI SDK)
-- [ ] T034 [P] [US1] Unit test AuditRepository SQLite queries in backend/tests/unit/infra/audit-repo.test.ts (in-memory SQLite)
+- [ ] T029 [P] [US1] Implement ActualBudgetAdapter in backend/src/infra/ActualBudgetAdapter.ts (wrap @actual-app/api: init, downloadBudget, getTransactions, getCategories, shutdown per research.md; surface sync errors for drift detection)
+- [ ] T030 [P] [US1] Implement OpenAIAdapter in backend/src/infra/OpenAIAdapter.ts (wrap OpenAI SDK: categorization prompt with JSON mode per research.md, timeout handling)
+- [X] T031 [P] [US1] Implement AuditRepository in backend/src/infra/repositories/AuditRepository.ts (SQLite CRUD for suggestions table with budgetId, audit_log table per research.md schema)
+- [ ] T032 [P] [US1] Unit test ActualBudgetAdapter error handling for connection failures in backend/tests/unit/infra/ActualBudgetAdapter.test.ts (mock @actual-app/api, verify drift errors trigger when sync fails)
+- [ ] T033 [P] [US1] Unit test OpenAIAdapter prompt formatting and JSON parsing in backend/tests/unit/infra/OpenAIAdapter.test.ts (mock OpenAI SDK)
+- [ ] T034 [P] [US1] Unit test AuditRepository SQLite queries in backend/tests/unit/infra/repositories/AuditRepository.test.ts (in-memory SQLite)
+
+### Infrastructure Layer (New - December 2025)
+
+- [X] T086 [P] Implement PayeeMatcher in backend/src/infra/PayeeMatcher.ts (fuzzy matching with fuzzball, alias dictionary, multi-algorithm scoring)
+- [X] T087 [P] Unit test PayeeMatcher in backend/tests/unit/infra/PayeeMatcher.test.ts (test fuzzy matching, alias lookup, threshold filtering)
+- [X] T088 [P] Implement PayeeCacheRepository in backend/src/infra/repositories/PayeeCacheRepository.ts (CRUD for payee→category cache)
+- [X] T089 [P] Implement PayeeMatchCacheRepository in backend/src/infra/repositories/PayeeMatchCacheRepository.ts (CRUD for raw→canonical cache)
+- [X] T090 Update schema.sql with payee_category_cache and payee_match_cache tables in backend/src/infra/db/schema.sql
 
 ### Service Layer (P1)
 
@@ -116,12 +124,12 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 ### API Layer (P1)
 
-- [ ] T041 [P] [US1] Implement POST /budget/download route in backend/src/api/routes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml with budgetId)
-- [X] T042 [P] [US1] Implement POST /suggestions/generate route in backend/src/api/routes.ts (validate budgetId, call AIService, return Suggestion[] JSON per contracts/api.yaml)
-- [ ] T043 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/routes.ts (validate suggestionId and status, update via AuditRepo with budgetId context, return updated Suggestion per contracts/api.yaml)
-- [ ] T044 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/routes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
-- [X] T045 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/routes.ts (validate budgetId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
-- [X] T046 [US1] Add global error handler middleware in backend/src/api/error-handler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7, surface drift warnings)
+- [ ] T041 [P] [US1] Implement POST /snapshots route in backend/src/api/snapshotRoutes.ts (validate request body with zod, call BudgetService, return BudgetSnapshot JSON per contracts/api.yaml with budgetId)
+- [X] T042 [P] [US1] Implement POST /suggestions/generate route in backend/src/api/suggestionRoutes.ts (validate budgetId, call AIService, return Suggestion[] JSON per contracts/api.yaml)
+- [ ] T043 [P] [US1] Implement PATCH /suggestions/:id route in backend/src/api/suggestionRoutes.ts (validate suggestionId and status, update via AuditRepo with budgetId context, return updated Suggestion per contracts/api.yaml)
+- [ ] T044 [P] [US1] Implement POST /suggestions/bulk-update route in backend/src/api/suggestionRoutes.ts (validate updates array, batch update via AuditRepo, return success/failure counts per contracts/api.yaml)
+- [X] T045 [P] [US1] Implement POST /sync-plan/build route in backend/src/api/syncRoutes.ts (validate budgetId, call SyncService, return SyncPlan JSON per contracts/api.yaml)
+- [X] T046 [US1] Add global error handler middleware in backend/src/api/errorHandler.ts (map domain errors to HTTP status codes, redact secrets, log with context per P7, surface drift warnings)
 - [ ] T047 [P] [US1] Integration test /budget/download endpoint in backend/tests/integration/api/budget-download.test.ts (mock Actual server, verify 200 response with budgetId and snapshot structure)
 - [ ] T048 [P] [US1] Integration test /suggestions/generate endpoint in backend/tests/integration/api/suggestions-generate.test.ts (mock OpenAI API, verify suggestions returned with budgetId and confidence scores)
 - [ ] T049 [P] [US1] Integration test /suggestions/:id PATCH endpoint in backend/tests/integration/api/suggestions-update.test.ts (verify status transitions and 400 for invalid states)
@@ -145,12 +153,12 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 
 ### Frontend (P1)
 
-- [ ] T051 [P] [US1] Create API client service in frontend/src/services/api-client.ts (axios or fetch wrapper: downloadBudget, generateSuggestions with budgetId, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
-- [X] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (table with transaction details, proposed category, confidence badge, approve/reject buttons, budgetId context)
-- [ ] T053 [P] [US1] Implement SyncPlanPreview component in frontend/src/components/SyncPlanPreview.tsx (show changes count, old→new category diff list, dry-run summary)
-- [ ] T054 [US1] Implement App component in frontend/src/App.tsx (orchestrate workflow: download button → generate button with budgetId → SuggestionList → build plan button → SyncPlanPreview)
-- [ ] T055 [US1] Add loading states and error handling in frontend/src/App.tsx (spinner during AI generation, error toast for API failures and drift warnings, disable buttons during operations)
-- [ ] T056 [P] [US1] Style components with Tailwind CSS or basic CSS in frontend/src/styles.css (confidence color coding: green >0.8, yellow 0.5-0.8, red <0.5)
+- [ ] T051 [P] [US1] Create API client service in frontend/src/services/api.ts (axios or fetch wrapper: downloadBudget, generateSuggestions with budgetId, updateSuggestion, bulkUpdateSuggestions, buildSyncPlan methods)
+- [X] T052 [P] [US1] Implement SuggestionList component in frontend/src/components/SuggestionList.tsx (grouped by payee, independent approve/reject, correction modal, bulk actions)
+- [X] T053 [P] [US1] Implement SyncPlanViewer component in frontend/src/components/SyncPlanViewer.tsx (show changes count, old→new category diff list, dry-run summary)
+- [X] T054 [US1] Implement App component in frontend/src/App.tsx (React Router with 4 pages: Suggestions, Apply, History, Audit)
+- [X] T055 [US1] Add loading states and error handling in frontend/src/App.tsx (ProgressBar during AI generation, error display for API failures)
+- [X] T056 [P] [US1] Style components with CSS in frontend/src/components/*.css (confidence color coding, payee grouping, responsive tables)
 - [ ] T057 [P] [US1] Integration test approve/reject workflow in frontend/tests/integration/suggestion-review.spec.ts (Playwright: download → generate → approve 3 suggestions → build plan → verify plan contains 3 changes)
 - [ ] T058 [P] [US1] Integration test bulk approve workflow in frontend/tests/integration/bulk-approve.spec.ts (Playwright: filter by confidence >0.8 → bulk approve → build plan → verify all approved)
 
@@ -256,6 +264,97 @@ Task: "Test BudgetSnapshot"
 
 - [P] tasks = different files, no dependencies within phase
 - [US1] label maps task to User Story 1 for traceability
+- POC excludes P2/P3, so no tasks for payee merge or AI reports
+- Sync execution endpoint (POST /sync-plan/:id/execute) deferred to post-POC
+- Authentication, multi-user support deferred to post-POC
+- **1-click run**: `docker-compose up` (T013) or `npm run dev:all` (T014)
+- **Dockerfiles** (T011-T012) enable deployment to home-ops with Helm chart (post-POC)
+- Commit after each logical group (e.g., all domain entities, all infra adapters)
+- Stop at Phase 4 checkpoint to validate POC before expanding scope
+
+---
+
+## Phase 5: Enhanced Features (December 2025)
+
+**Purpose**: Additional features implemented beyond original POC scope
+
+### Independent Payee/Category Suggestions (FR-014)
+
+- [X] T091 [P] Update Suggestion entity with independent payee/category components in backend/src/domain/entities/Suggestion.ts
+- [X] T092 [P] Update SuggestionRepository for component-level status updates in backend/src/infra/repositories/SuggestionRepository.ts
+- [X] T093 [P] Add approve-payee/reject-payee/approve-category/reject-category endpoints in backend/src/api/suggestionRoutes.ts
+- [X] T094 [P] Add reset endpoint for undoing approval/rejection in backend/src/api/suggestionRoutes.ts
+- [X] T095 [P] Update frontend API client with component-level actions in frontend/src/services/api.ts
+
+### Fuzzy Payee Matching (FR-015)
+
+- [X] T096 Implement PayeeMatcher with multi-algorithm scoring in backend/src/infra/PayeeMatcher.ts
+- [X] T097 Add merchant alias dictionary (85+ aliases) in backend/src/infra/PayeeMatcher.ts
+- [X] T098 Integrate fuzzy matching into SuggestionService in backend/src/services/SuggestionService.ts
+
+### Payee Caching (FR-016)
+
+- [X] T099 [P] Implement PayeeCacheRepository for payee→category mappings
+- [X] T100 [P] Implement PayeeMatchCacheRepository for raw→canonical mappings
+- [X] T101 Integrate cache lookup in SuggestionService.generateSuggestions()
+- [X] T102 Cache high-confidence AI results and user-approved corrections
+
+### User Corrections (FR-017)
+
+- [X] T103 Add correction fields to Suggestion entity (correctedPayeeId/Name, correctedCategoryId/Name)
+- [X] T104 [P] Implement reject-with-correction API endpoints
+- [X] T105 [P] Add correction modal UI in SuggestionList component
+
+### Suggestion Retry (FR-018)
+
+- [X] T106 [P] Implement retry endpoint in backend/src/api/suggestionRoutes.ts
+- [X] T107 [P] Add retry logic in SuggestionService for failed suggestions
+- [X] T108 [P] Add retry button in SuggestionList UI
+
+### AI Web Search (FR-019)
+
+- [X] T109 Add webSearch parameter to OpenAI completion in backend/src/infra/OpenAIAdapter.ts
+- [X] T110 Use web search for payee identification in SuggestionService
+- [X] T111 Use web search for category suggestion in SuggestionService
+
+### Transaction Deduplication (FR-020)
+
+- [X] T112 [P] Skip transactions with existing pending suggestions in generateSuggestions()
+- [X] T113 [P] Clean up orphaned suggestions for deleted transactions
+- [X] T114 [P] Filter out transfer transactions from suggestion generation
+
+### Frontend Navigation (FR-021)
+
+- [X] T115 [P] Add react-router-dom to frontend
+- [X] T116 [P] Create Header component with navigation in frontend/src/components/Header.tsx
+- [X] T117 [P] Create ApplyChanges page in frontend/src/components/ApplyChanges.tsx
+- [X] T118 [P] Create History page in frontend/src/components/History.tsx
+- [X] T119 [P] Create Audit page in frontend/src/components/Audit.tsx
+- [X] T120 [P] Create ProgressBar component in frontend/src/components/ProgressBar.tsx
+- [X] T121 Wire React Router in App.tsx with 4 pages
+
+### API Extensions
+
+- [X] T122 [P] Implement GET /api/budgets/categories endpoint
+- [X] T123 [P] Implement GET /api/audit endpoint
+- [X] T124 [P] Implement POST /sync/apply endpoint
+- [X] T125 [P] Implement GET /sync/pending endpoint
+- [X] T126 [P] Implement POST /suggestions/bulk-reset endpoint
+
+---
+
+## Summary Statistics
+
+| Phase | Total Tasks | Completed | Remaining |
+|-------|-------------|-----------|-----------|
+| Phase 1: Setup | 14 | 14 | 0 |
+| Phase 2: Foundational | 12 | 12 | 0 |
+| Phase 3: P1 Core | 50 | 35 | 15 |
+| Phase 4: Polish | 5 | 1 | 4 |
+| Phase 5: Enhanced | 36 | 36 | 0 |
+| **Total** | **117** | **98** | **19** |
+
+**Status**: POC functional with enhanced features. Remaining work is primarily integration tests.
 - POC excludes P2/P3, so no tasks for payee merge or AI reports
 - Sync execution endpoint (POST /sync-plan/:id/execute) deferred to post-POC
 - Authentication, multi-user support deferred to post-POC

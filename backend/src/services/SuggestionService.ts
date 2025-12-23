@@ -1,4 +1,4 @@
-import type { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
+import { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
 import type { SuggestionRepository } from '../infra/repositories/SuggestionRepository.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
@@ -214,63 +214,103 @@ export class SuggestionService {
   }
 
   /**
-   * Build prompt for batch category suggestion
-   * Only includes essential info: payee names and category list
-   * No dates, amounts, or notes to minimize tokens and protect privacy
+   * Build prompt for single payee category suggestion
+   * Simpler prompt = more reliable JSON response
    */
-  private buildCategoryPrompt(payeeNames: string[], categories: Category[]): string {
+  private buildSinglePayeePrompt(payeeName: string, categories: Category[]): string {
     // Compact category list: just name and group
     const categoryList = categories
       .filter(cat => !cat.hidden && !cat.isIncome)
       .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
-    const payeeList = payeeNames.join('\n');
+    return `Categorize this transaction payee for a personal budget.
 
-    return `Categorize these transaction payees for a personal budget.
-
-Payees:
-${payeeList}
+Payee: ${payeeName}
 
 Categories (id|name|group):
 ${categoryList}
 
-For each payee:
-1. Use web search to identify what business/merchant it is
+Instructions:
+1. Use web search to identify what business/merchant "${payeeName}" is
 2. Match to the most appropriate category from the list
 3. If uncertain, set categoryId and categoryName to null
 
-Respond with JSON array:
-[{"payeeName":"...","categoryId":"...","categoryName":"...","confidence":0.0-1.0,"reasoning":"..."}]`;
+Respond with a single JSON object (no markdown, no explanation):
+{"categoryId":"...","categoryName":"...","confidence":0.0-1.0,"reasoning":"..."}`;
   }
 
   /**
-   * Parse LLM response into PayeeCategorySuggestion array
+   * Parse LLM response for a single payee into PayeeCategorySuggestion
    */
-  private parseCategoryResponse(content: string): PayeeCategorySuggestion[] {
-    // Handle markdown code blocks
-    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || 
-                      content.match(/```\s*([\s\S]*?)```/) ||
-                      [null, content];
-    const jsonStr = jsonMatch[1]?.trim() || content.trim();
-    
-    const result = JSON.parse(jsonStr);
-    const suggestions: unknown[] = Array.isArray(result) ? result : result.suggestions || [];
-
-    return suggestions.map((s: unknown) => {
-      const item = s as { payeeName?: string; payee?: string; categoryId?: string | null; categoryName?: string | null; confidence?: number; reasoning?: string };
+  private parseSinglePayeeResponse(payeeName: string, content: string): PayeeCategorySuggestion {
+    try {
+      // Use robust parser from OpenAIAdapter (handles code fences + fallbacks)
+      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(content);
+      
       return {
-        payeeName: item.payeeName || item.payee || '',
-        categoryId: item.categoryId || null,
-        categoryName: item.categoryName || null,
-        confidence: item.confidence ?? 0.5,
-        reasoning: item.reasoning || 'No reasoning provided',
+        payeeName,
+        categoryId: (result.categoryId as string) || null,
+        categoryName: (result.categoryName as string) || null,
+        confidence: (result.confidence as number) ?? 0.5,
+        reasoning: (result.reasoning as string) || 'No reasoning provided',
       };
-    });
+    } catch (error) {
+      logger.warn('Failed to parse single payee response', {
+        payeeName,
+        error: error instanceof Error ? error.message : String(error),
+        contentPreview: content.slice(0, 200),
+      });
+      return {
+        payeeName,
+        categoryId: null,
+        categoryName: null,
+        confidence: 0,
+        reasoning: 'Failed to parse LLM response',
+      };
+    }
   }
 
   /**
-   * Generate suggestions for multiple payees in a single LLM call
+   * Categorize a single payee via LLM
+   * Returns null if LLM call fails (caller handles fallback)
+   */
+  private async categorizePayee(
+    payeeName: string,
+    categories: Category[]
+  ): Promise<PayeeCategorySuggestion> {
+    try {
+      const prompt = this.buildSinglePayeePrompt(payeeName, categories);
+
+      logger.debug('Calling OpenAI for single payee', { payeeName });
+
+      const responseContent = await this.openai.webSearchCompletion({ prompt });
+
+      logger.info('OpenAI response for payee', {
+        payeeName,
+        responseLength: responseContent.length,
+        response: responseContent,
+      });
+
+      return this.parseSinglePayeeResponse(payeeName, responseContent);
+    } catch (error) {
+      logger.error('LLM call failed for payee', {
+        payeeName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        payeeName,
+        categoryId: null,
+        categoryName: null,
+        confidence: 0,
+        reasoning: 'LLM call failed',
+      };
+    }
+  }
+
+  /**
+   * Generate suggestions for payees - one LLM call per unique payee
+   * More reliable than batch and enables future enhancements (payee rules, fuzzy matching)
    */
   private async generateBatchSuggestions(
     budgetId: string,
@@ -279,115 +319,79 @@ Respond with JSON array:
     categories: Category[]
   ): Promise<Suggestion[]> {
     const suggestions: Suggestion[] = [];
+    const toCache: Array<{
+      budgetId: string;
+      payeeName: string;
+      categoryId: string;
+      categoryName: string;
+      confidence: number;
+      source: 'user_approved' | 'high_confidence_ai';
+    }> = [];
 
-    try {
-      // Build prompt for category suggestions
-      const prompt = this.buildCategoryPrompt(payeeNames, categories);
+    logger.info('Processing payees one at a time', { payeeCount: payeeNames.length });
 
-      logger.info('Calling OpenAI web search completion for payee batch', {
-        payeeCount: payeeNames.length,
-        promptLength: prompt.length,
+    // Process each payee sequentially (one LLM call per payee)
+    for (let i = 0; i < payeeNames.length; i++) {
+      const payeeName = payeeNames[i];
+      const txns = transactionsByPayee.get(payeeName) || [];
+
+      logger.info(`Processing payee ${i + 1}/${payeeNames.length}`, {
+        payeeName,
+        transactionCount: txns.length,
       });
-      
-      // Single LLM call with web search for merchant identification
-      const responseContent = await this.openai.webSearchCompletion({ prompt });
-      
-      // Parse response into structured suggestions
-      const aiResults = this.parseCategoryResponse(responseContent);
 
-      logger.info('AI category suggestions received', {
-        payeeCount: payeeNames.length,
-        suggestionsCount: aiResults.length,
-      });
+      // TODO: Future enhancement points:
+      // 1. Check existing payee rules in Actual Budget
+      // 2. Fuzzy match with other known payees
+      // 3. Check user-defined mappings
 
-      // Create lookup map from AI results
-      const resultsByPayee = new Map<string, PayeeCategorySuggestion>();
-      for (const result of aiResults) {
-        resultsByPayee.set(result.payeeName, result);
+      // Call LLM for this payee
+      const result = await this.categorizePayee(payeeName, categories);
+
+      // Create suggestions for all transactions with this payee
+      for (const txn of txns) {
+        const suggestion = createSuggestion({
+          budgetId,
+          transactionId: txn.id,
+          transactionAccountId: txn.accountId,
+          transactionAccountName: txn.accountName,
+          transactionPayee: txn.payeeName,
+          transactionAmount: txn.amount,
+          transactionDate: txn.date,
+          currentCategoryId: txn.categoryId,
+          proposedCategoryId: result.categoryId || 'unknown',
+          proposedCategoryName: result.categoryName || 'Unknown',
+          confidence: result.confidence,
+          rationale: result.reasoning,
+        });
+        this.suggestionRepo.save(suggestion);
+        suggestions.push(suggestion);
       }
 
-      // Cache high-confidence results for future use
-      const toCache: Array<{
-        budgetId: string;
-        payeeName: string;
-        categoryId: string;
-        categoryName: string;
-        confidence: number;
-        source: 'user_approved' | 'high_confidence_ai';
-      }> = [];
-
-      // Create suggestions for each transaction
-      for (const payeeName of payeeNames) {
-        const result = resultsByPayee.get(payeeName);
-        const txns = transactionsByPayee.get(payeeName) || [];
-
-        for (const txn of txns) {
-          const suggestion = createSuggestion({
-            budgetId,
-            transactionId: txn.id,
-            transactionAccountId: txn.accountId,
-            transactionAccountName: txn.accountName,
-            transactionPayee: txn.payeeName,
-            transactionAmount: txn.amount,
-            transactionDate: txn.date,
-            currentCategoryId: txn.categoryId,
-            proposedCategoryId: result?.categoryId || 'unknown',
-            proposedCategoryName: result?.categoryName || 'Unknown',
-            confidence: result?.confidence || 0,
-            rationale: result?.reasoning || 'No AI response for this payee',
-          });
-          this.suggestionRepo.save(suggestion);
-          suggestions.push(suggestion);
-        }
-
-        // Cache high-confidence results
-        if (result && result.categoryId && result.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
-          toCache.push({
-            budgetId,
-            payeeName,
-            categoryId: result.categoryId,
-            categoryName: result.categoryName || 'Unknown',
-            confidence: result.confidence,
-            source: 'high_confidence_ai',
-          });
-        }
-      }
-
-      // Batch save to cache
-      if (this.payeeCache && toCache.length > 0) {
-        this.payeeCache.saveBatch(toCache);
-        logger.info('Cached high-confidence suggestions', { count: toCache.length });
-      }
-
-    } catch (error) {
-      logger.error('Failed to generate batch suggestions', {
-        error: error instanceof Error ? error.message : String(error),
-        payeeCount: payeeNames.length,
-        payeesSample: payeeNames.slice(0, 5),
-      });
-      // Create unknown suggestions for all transactions on failure
-      for (const payeeName of payeeNames) {
-        const txns = transactionsByPayee.get(payeeName) || [];
-        for (const txn of txns) {
-          const suggestion = createSuggestion({
-            budgetId,
-            transactionId: txn.id,
-            transactionAccountId: txn.accountId,
-            transactionAccountName: txn.accountName,
-            transactionPayee: txn.payeeName,
-            transactionAmount: txn.amount,
-            transactionDate: txn.date,
-            currentCategoryId: txn.categoryId,
-            proposedCategoryId: 'unknown',
-            proposedCategoryName: 'Unknown',
-            confidence: 0,
-            rationale: 'LLM call failed',
-          });
-          this.suggestionRepo.save(suggestion);
-          suggestions.push(suggestion);
-        }
+      // Cache high-confidence results
+      if (result.categoryId && result.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+        toCache.push({
+          budgetId,
+          payeeName,
+          categoryId: result.categoryId,
+          categoryName: result.categoryName || 'Unknown',
+          confidence: result.confidence,
+          source: 'high_confidence_ai',
+        });
       }
     }
+
+    // Batch save to cache
+    if (this.payeeCache && toCache.length > 0) {
+      this.payeeCache.saveBatch(toCache);
+      logger.info('Cached high-confidence suggestions', { count: toCache.length });
+    }
+
+    logger.info('Finished processing all payees', {
+      payeeCount: payeeNames.length,
+      suggestionsCount: suggestions.length,
+      cachedCount: toCache.length,
+    });
 
     return suggestions;
   }

@@ -113,10 +113,13 @@ export class OpenAIAdapter {
    * Parse JSON from LLM response (handles markdown code blocks)
    */
   static parseJsonResponse<T>(content: string): T {
-    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || 
-                      content.match(/```\s*([\s\S]*?)```/) ||
-                      [null, content];
-    const jsonStr = jsonMatch[1]?.trim() || content.trim();
-    return JSON.parse(jsonStr);
+    const trimmed = content.trim();
+
+    // Strip common markdown code fences with optional language (case-insensitive)
+    // Matches: ```json\n...``` or ```JSON\n...``` or ```anything\n...```
+    const fencedMatch = trimmed.match(/```[^\n]*\n([\s\S]*?)```/i);
+    const candidate = (fencedMatch && fencedMatch[1]) ? fencedMatch[1].trim() : trimmed;
+
+    return JSON.parse(candidate);
   }
 }

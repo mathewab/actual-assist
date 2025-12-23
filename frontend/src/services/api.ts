@@ -200,4 +200,38 @@ export const api = {
 
     return response.json();
   },
+
+  /**
+   * Bulk approve multiple suggestions
+   */
+  async bulkApproveSuggestions(suggestionIds: string[]): Promise<{ approved: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/bulk-approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suggestionIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to bulk approve suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Bulk reject multiple suggestions
+   */
+  async bulkRejectSuggestions(suggestionIds: string[]): Promise<{ rejected: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/bulk-reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suggestionIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to bulk reject suggestions');
+    }
+
+    return response.json();
+  },
 };

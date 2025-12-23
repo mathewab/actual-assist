@@ -185,5 +185,59 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
     }
   });
 
+  /**
+   * POST /api/suggestions/bulk-approve - Bulk approve multiple suggestions
+   */
+  router.post('/bulk-approve', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionIds } = req.body;
+
+      if (!Array.isArray(suggestionIds) || suggestionIds.length === 0) {
+        throw new ValidationError('suggestionIds array is required');
+      }
+
+      let approved = 0;
+      for (const id of suggestionIds) {
+        try {
+          suggestionService.approveSuggestion(id);
+          approved++;
+        } catch {
+          // Skip suggestions that can't be approved (e.g., not found)
+        }
+      }
+
+      res.json({ approved });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/suggestions/bulk-reject - Bulk reject multiple suggestions
+   */
+  router.post('/bulk-reject', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionIds } = req.body;
+
+      if (!Array.isArray(suggestionIds) || suggestionIds.length === 0) {
+        throw new ValidationError('suggestionIds array is required');
+      }
+
+      let rejected = 0;
+      for (const id of suggestionIds) {
+        try {
+          suggestionService.rejectSuggestion(id);
+          rejected++;
+        } catch {
+          // Skip suggestions that can't be rejected (e.g., not found)
+        }
+      }
+
+      res.json({ rejected });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   return router;
 }

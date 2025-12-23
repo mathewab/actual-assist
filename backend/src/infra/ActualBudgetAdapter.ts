@@ -176,15 +176,135 @@ export class ActualBudgetAdapter {
   }
 
   /**
-   * Sync changes back to server
+   * Update transaction payee
+   */
+  async updateTransactionPayee(
+    transactionId: string,
+    payeeId: string | null
+  ): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      await api.updateTransaction(transactionId, {
+        payee: payeeId || undefined,
+      });
+
+      logger.info('Updated transaction payee', {
+        transactionId,
+        payeeId,
+      });
+    } catch (error) {
+      throw new ActualBudgetError('Failed to update transaction payee', {
+        transactionId,
+        payeeId,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Update transaction with multiple fields (category and/or payee)
+   */
+  async updateTransaction(
+    transactionId: string,
+    updates: { categoryId?: string | null; payeeId?: string | null }
+  ): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      const updatePayload: Record<string, unknown> = {};
+      
+      if (updates.categoryId !== undefined) {
+        updatePayload.category = updates.categoryId || undefined;
+      }
+      if (updates.payeeId !== undefined) {
+        updatePayload.payee = updates.payeeId || undefined;
+      }
+
+      if (Object.keys(updatePayload).length === 0) {
+        return; // Nothing to update
+      }
+
+      await api.updateTransaction(transactionId, updatePayload);
+
+      logger.info('Updated transaction', {
+        transactionId,
+        updates,
+      });
+    } catch (error) {
+      throw new ActualBudgetError('Failed to update transaction', {
+        transactionId,
+        updates,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Get all payees from the budget
+   */
+  async getPayees(): Promise<{ id: string; name: string }[]> {
+    this.ensureInitialized();
+
+    try {
+      const payees = await api.getPayees();
+      return payees
+        .filter((p: any) => p.id && p.name)
+        .map((p: any) => ({ id: p.id, name: p.name }));
+    } catch (error) {
+      throw new ActualBudgetError('Failed to fetch payees', { error });
+    }
+  }
+
+  /**
+   * Find a payee by name (case-insensitive)
+   */
+  async findPayeeByName(name: string): Promise<{ id: string; name: string } | null> {
+    const payees = await this.getPayees();
+    const normalizedName = name.toLowerCase().trim();
+    return payees.find(p => p.name.toLowerCase().trim() === normalizedName) || null;
+  }
+
+  /**
+   * Create a new payee
+   */
+  async createPayee(name: string): Promise<string> {
+    this.ensureInitialized();
+
+    try {
+      const payeeId = await api.createPayee({ name });
+      logger.info('Created new payee', { payeeId, name });
+      return payeeId;
+    } catch (error) {
+      throw new ActualBudgetError('Failed to create payee', { name, error });
+    }
+  }
+
+  /**
+   * Find or create a payee by name
+   */
+  async findOrCreatePayee(name: string): Promise<string> {
+    const existing = await this.findPayeeByName(name);
+    if (existing) {
+      return existing.id;
+    }
+    return this.createPayee(name);
+  }
+
+  /**
+   * Sync changes with server (bi-directional: push local changes, pull remote changes)
    */
   async sync(): Promise<void> {
     this.ensureInitialized();
 
     try {
+      logger.info('Starting Actual Budget sync...');
       await api.sync();
-      logger.info('Synced changes to Actual Budget server');
+      logger.info('Actual Budget sync completed successfully');
     } catch (error) {
+      logger.error('Actual Budget sync failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw new ActualBudgetError('Failed to sync changes', { error });
     }
   }

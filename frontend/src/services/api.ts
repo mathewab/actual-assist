@@ -80,20 +80,60 @@ export interface Suggestion {
   createdAt: string;
 }
 
+export interface SyncPlanChange {
+  id: string;
+  transactionId: string;
+  proposedCategoryId: string;
+  currentCategoryId: string | null;
+  suggestionId?: string;
+  // Human-readable fields for display
+  transactionPayee: string | null;
+  transactionDate: string | null;
+  transactionAmount: number | null;
+  transactionAccountName: string | null;
+  proposedCategoryName: string | null;
+  currentCategoryName: string | null;
+  proposedPayeeName: string | null;
+  hasPayeeChange: boolean;
+}
+
 export interface SyncPlan {
   id: string;
   budgetId: string;
-  changes: Array<{
-    id: string;
-    transactionId: string;
-    proposedCategoryId: string;
-    currentCategoryId: string | null;
-  }>;
+  changes: SyncPlanChange[];
   dryRunSummary: {
     totalChanges: number;
+    categoryChanges: number;
+    payeeChanges: number;
     estimatedImpact: string;
   };
   createdAt: string;
+}
+
+/** Approved change ready to apply */
+export interface ApprovedChange {
+  suggestionId: string;
+  transactionId: string;
+  proposedCategoryId: string;
+  currentCategoryId: string | null;
+  transactionPayee: string | null;
+  transactionDate: string | null;
+  transactionAmount: number | null;
+  transactionAccountName: string | null;
+  proposedCategoryName: string | null;
+  currentCategoryName: string | null;
+  proposedPayeeName: string | null;
+  hasPayeeChange: boolean;
+}
+
+/** Audit event from backend */
+export interface AuditEvent {
+  id: string;
+  eventType: string;
+  entityType: string;
+  entityId: string;
+  metadata: Record<string, unknown> | null;
+  timestamp: string;
 }
 
 export const api = {
@@ -106,6 +146,19 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to list budgets');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get all categories from the current budget
+   */
+  async getCategories(): Promise<{ categories: Category[] }> {
+    const response = await fetch(`${API_BASE}/budgets/categories`);
+
+    if (!response.ok) {
+      throw new Error('Failed to get categories');
     }
 
     return response.json();
@@ -290,7 +343,39 @@ export const api = {
   },
 
   /**
-   * Build a sync plan
+   * Reset a suggestion back to pending (undo approve/reject)
+   */
+  async resetSuggestion(suggestionId: string) {
+    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reset`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to reset suggestion');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Bulk reset suggestions back to pending
+   */
+  async bulkResetSuggestions(suggestionIds: string[]): Promise<{ reset: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/bulk-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suggestionIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to bulk reset suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Build a sync plan (legacy)
    */
   async buildSyncPlan(budgetId: string): Promise<SyncPlan> {
     const response = await fetch(`${API_BASE}/sync/plan`, {
@@ -307,7 +392,7 @@ export const api = {
   },
 
   /**
-   * Execute a sync plan
+   * Execute a sync plan (legacy)
    */
   async executeSyncPlan(budgetId: string) {
     const response = await fetch(`${API_BASE}/sync/execute`, {
@@ -318,6 +403,52 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to execute sync plan');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get approved suggestions ready to apply
+   */
+  async getApprovedChanges(budgetId: string): Promise<{ changes: ApprovedChange[] }> {
+    const response = await fetch(`${API_BASE}/sync/pending?budgetId=${budgetId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to get approved changes');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Apply specific suggestions
+   */
+  async applySuggestions(budgetId: string, suggestionIds: string[]): Promise<{ success: boolean; applied: number }> {
+    const response = await fetch(`${API_BASE}/sync/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, suggestionIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to apply suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Retry LLM suggestion for better result
+   * Retries all suggestions in the same payee group
+   */
+  async retrySuggestion(suggestionId: string): Promise<{ success: boolean; suggestions: Suggestion[]; count: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/retry`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to retry suggestion');
     }
 
     return response.json();
@@ -352,6 +483,19 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to bulk reject suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get audit events
+   */
+  async getAuditEvents(limit = 200): Promise<{ events: AuditEvent[] }> {
+    const response = await fetch(`${API_BASE}/audit?limit=${limit}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch audit events');
     }
 
     return response.json();

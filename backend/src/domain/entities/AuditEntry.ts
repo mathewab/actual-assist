@@ -17,6 +17,8 @@ export type AuditEventType =
   | 'suggestions_generated_diff'
   | 'suggestion_approved'
   | 'suggestion_rejected'
+  | 'suggestion_reset'
+  | 'suggestion_retried'
   | 'sync_plan_created'
   | 'sync_executed'
   | 'sync_failed'

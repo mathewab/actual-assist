@@ -13,12 +13,39 @@ export class SyncScheduler {
   private retryCount = 0;
   private readonly maxRetries = 3;
   private readonly retryDelays = [60000, 300000, 900000]; // 1min, 5min, 15min
+  private isPaused = false;
+  private static instance: SyncScheduler | null = null;
 
   constructor(
     private env: Env,
     private suggestionService: SuggestionService,
     private budgetId: string
-  ) {}
+  ) {
+    SyncScheduler.instance = this;
+  }
+
+  /**
+   * Get singleton instance
+   */
+  static getInstance(): SyncScheduler | null {
+    return SyncScheduler.instance;
+  }
+
+  /**
+   * Pause the scheduler (for use during apply operations)
+   */
+  pause(): void {
+    this.isPaused = true;
+    logger.info('SyncScheduler paused');
+  }
+
+  /**
+   * Resume the scheduler after pause
+   */
+  resume(): void {
+    this.isPaused = false;
+    logger.info('SyncScheduler resumed');
+  }
 
   /**
    * Start the periodic sync scheduler
@@ -70,6 +97,11 @@ export class SyncScheduler {
    * P7 (Error handling): Exponential backoff on failure
    */
   private async runSync(): Promise<void> {
+    if (this.isPaused) {
+      logger.info('Periodic sync skipped - scheduler is paused');
+      return;
+    }
+
     try {
       logger.info('Periodic sync starting', { budgetId: this.budgetId });
 

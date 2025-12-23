@@ -239,6 +239,24 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
   });
 
   /**
+   * POST /api/suggestions/:id/retry - Retry LLM suggestion for better result
+   * Retries all suggestions in the same payee group
+   */
+  router.post('/:id/retry', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const updatedSuggestions = await suggestionService.retryPayeeGroup(id);
+      res.json({
+        success: true,
+        suggestions: updatedSuggestions.map(mapSuggestionToResponse),
+        count: updatedSuggestions.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * POST /api/suggestions/bulk-approve - Bulk approve multiple suggestions
    */
   router.post('/bulk-approve', (req: Request, res: Response, next: NextFunction) => {
@@ -287,6 +305,46 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
       }
 
       res.json({ rejected });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/suggestions/:id/reset - Reset a suggestion back to pending
+   */
+  router.post('/:id/reset', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      suggestionService.resetSuggestion(id);
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/suggestions/bulk-reset - Bulk reset multiple suggestions back to pending
+   */
+  router.post('/bulk-reset', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionIds } = req.body;
+
+      if (!Array.isArray(suggestionIds) || suggestionIds.length === 0) {
+        throw new ValidationError('suggestionIds array is required');
+      }
+
+      let reset = 0;
+      for (const id of suggestionIds) {
+        try {
+          suggestionService.resetSuggestion(id);
+          reset++;
+        } catch {
+          // Skip suggestions that can't be reset (e.g., not found)
+        }
+      }
+
+      res.json({ reset });
     } catch (error) {
       next(error);
     }

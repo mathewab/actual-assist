@@ -32,7 +32,7 @@ const envSchema = z.object({
     .regex(/^\d+$/)
     .transform(Number)
     .refine((n) => n >= 1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
-    .default('360'),
+    .default('5'),
 });
 
 export type Env = z.infer<typeof envSchema>;

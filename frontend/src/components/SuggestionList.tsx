@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Suggestion, type SuggestionComponentStatus } from '../services/api';
+import { api, type Suggestion, type SuggestionComponentStatus, type Category } from '../services/api';
+import { ProgressBar } from './ProgressBar';
 import './SuggestionList.css';
 
 interface SuggestionListProps {
@@ -38,6 +39,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const [expandedPayees, setExpandedPayees] = useState<Set<string>>(new Set());
   const [correctionModal, setCorrectionModal] = useState<CorrectionModalState | null>(null);
   const [correctionInput, setCorrectionInput] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['suggestions', budgetId],
@@ -45,24 +47,33 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     enabled: !!budgetId,
   });
 
+  // Fetch categories for the dropdown
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.getCategories(),
+  });
+
+  const categories = categoriesData?.categories || [];
+
+  // Group categories by group name for better UX
+  const groupedCategories = categories.reduce((acc, cat) => {
+    const group = cat.groupName || 'Uncategorized';
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(cat);
+    return acc;
+  }, {} as Record<string, Category[]>);
+
   const syncAndGenerateMutation = useMutation({
-    mutationFn: () => api.syncAndGenerateSuggestions(budgetId),
+    mutationFn: () => api.syncAndGenerateSuggestions(budgetId, false),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions', budgetId] });
     },
   });
 
-  const approvePayeeMutation = useMutation({
-    mutationFn: (id: string) => api.approvePayeeSuggestion(id),
+  const fullResyncMutation = useMutation({
+    mutationFn: () => api.syncAndGenerateSuggestions(budgetId, true),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
-    },
-  });
-
-  const approveCategoryMutation = useMutation({
-    mutationFn: (id: string) => api.approveCategorySuggestion(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+      queryClient.invalidateQueries({ queryKey: ['suggestions', budgetId] });
     },
   });
 
@@ -100,6 +111,20 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     },
   });
 
+  const bulkResetMutation = useMutation({
+    mutationFn: (ids: string[]) => api.bulkResetSuggestions(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+    },
+  });
+
+  const retrySuggestionMutation = useMutation({
+    mutationFn: (id: string) => api.retrySuggestion(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+    },
+  });
+
   const toggleExpanded = (payeeName: string) => {
     setExpandedPayees(prev => {
       const next = new Set(prev);
@@ -115,6 +140,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const openCorrectionModal = (type: 'payee' | 'category', suggestionId: string, currentValue: string) => {
     setCorrectionModal({ isOpen: true, type, suggestionId, currentValue });
     setCorrectionInput('');
+    setSelectedCategoryId('');
   };
 
   const handleCorrectionSubmit = () => {
@@ -126,9 +152,14 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
         correction: correctionInput ? { payeeName: correctionInput } : undefined,
       });
     } else {
+      // For category, use the selected category from dropdown
+      const selectedCategory = categories.find(c => c.id === selectedCategoryId);
       rejectCategoryMutation.mutate({
         id: correctionModal.suggestionId,
-        correction: correctionInput ? { categoryName: correctionInput } : undefined,
+        correction: selectedCategoryId ? { 
+          categoryId: selectedCategoryId,
+          categoryName: selectedCategory?.name 
+        } : undefined,
       });
     }
   };
@@ -141,7 +172,10 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     return <div className="error">Error loading suggestions: {error.message}</div>;
   }
 
-  const suggestions = data?.suggestions || [];
+  // Filter out applied suggestions - they appear in History page
+  const suggestions = (data?.suggestions || []).filter(
+    (s) => s.status !== 'applied'
+  );
   
   // Group suggestions by payee
   const payeeGroups = groupByPayee(suggestions);
@@ -150,18 +184,35 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     <div className="suggestion-list">
       <div className="suggestion-list-header">
         <h2>Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)</h2>
-        <button
-          className="btn btn-sync"
-          onClick={() => syncAndGenerateMutation.mutate()}
-          disabled={syncAndGenerateMutation.isPending}
-        >
-          {syncAndGenerateMutation.isPending ? 'Syncing...' : '🔄 Sync & Generate'}
-        </button>
+        <div className="header-buttons">
+          <button
+            className="btn btn-sync"
+            onClick={() => syncAndGenerateMutation.mutate()}
+            disabled={syncAndGenerateMutation.isPending || fullResyncMutation.isPending}
+          >
+            {syncAndGenerateMutation.isPending ? 'Syncing...' : '🔄 Sync'}
+          </button>
+          <button
+            className="btn btn-resync"
+            onClick={() => fullResyncMutation.mutate()}
+            disabled={syncAndGenerateMutation.isPending || fullResyncMutation.isPending}
+          >
+            {fullResyncMutation.isPending ? 'Resyncing...' : '⚠️ Resync'}
+          </button>
+        </div>
       </div>
       
-      {syncAndGenerateMutation.error && (
+      {(syncAndGenerateMutation.isPending || fullResyncMutation.isPending) && (
+        <ProgressBar message={fullResyncMutation.isPending ? "Full resync: downloading and regenerating all suggestions..." : "Syncing transactions and generating AI suggestions..."} />
+      )}
+
+      {retrySuggestionMutation.isPending && (
+        <ProgressBar message="Retrying AI suggestion for payee group..." />
+      )}
+
+      {(syncAndGenerateMutation.error || fullResyncMutation.error) && (
         <div className="error">
-          Sync failed: {syncAndGenerateMutation.error.message}
+          Sync failed: {(syncAndGenerateMutation.error || fullResyncMutation.error)?.message}
         </div>
       )}
 
@@ -171,179 +222,162 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           <p className="hint">Click "Sync & Generate" to fetch new suggestions</p>
         </div>
       ) : (
-        <div className="payee-cards">
+        <div className="payee-list">
           {payeeGroups.map((group) => {
             const isExpanded = expandedPayees.has(group.payeeName);
             const pendingIds = group.suggestions
               .filter(s => s.status === 'pending')
               .map(s => s.id);
+            const approvedIds = group.suggestions
+              .filter(s => s.status === 'approved')
+              .map(s => s.id);
             const hasPending = pendingIds.length > 0;
+            const hasApproved = approvedIds.length > 0;
             const firstSuggestion = group.suggestions[0];
 
             return (
               <div 
                 key={group.payeeName} 
-                className={`payee-card confidence-card-${getConfidenceLevel(group.avgConfidence)}`}
+                className={`payee-row ${isExpanded ? 'expanded' : ''} ${hasApproved && !hasPending ? 'all-approved' : ''}`}
               >
-                <div className="payee-card-header" onClick={() => toggleExpanded(group.payeeName)}>
-                  <div className="payee-info">
-                    <div className="payee-name-container">
-                      <span className="payee-name">{group.payeeName}</span>
-                      {group.suggestedPayeeName && group.suggestedPayeeName !== group.payeeName && (
-                        <span className="suggested-payee-badge" title="AI-suggested canonical name">
-                          → {group.suggestedPayeeName}
-                        </span>
-                      )}
-                    </div>
-                    <span className="transaction-count">
-                      {group.suggestions.length} transaction{group.suggestions.length !== 1 ? 's' : ''}
-                      {group.pendingCount > 0 && ` (${group.pendingCount} pending)`}
-                    </span>
+                {/* Main row - always visible */}
+                <div className="payee-row-main" onClick={() => toggleExpanded(group.payeeName)}>
+                  <span className="expand-toggle">{isExpanded ? '▼' : '▶'}</span>
+                  
+                  <div className="payee-details">
+                    <span className="payee-name">{group.payeeName}</span>
+                    <span className="payee-count">{group.suggestions.length} txn{group.suggestions.length !== 1 ? 's' : ''}</span>
                   </div>
-                  <div className="payee-meta">
-                    <span className="category-badge">{group.proposedCategory}</span>
-                    <span className={`confidence-badge confidence-${getConfidenceLevel(group.avgConfidence)}`}>
+
+                  <div className="payee-chips">
+                    {group.hasPayeeSuggestion && (group.payeeStatus === 'pending' || group.payeeStatus === 'approved') && (
+                      <span className={`chip payee-chip ${group.payeeStatus === 'approved' ? 'approved' : ''}`}>→ {group.suggestedPayeeName}</span>
+                    )}
+                    <span className={`chip category-chip ${group.categoryStatus === 'approved' ? 'approved' : ''}`}>{group.proposedCategory}</span>
+                    <span className={`chip confidence-chip confidence-${getConfidenceLevel(group.avgConfidence)}`}>
                       {Math.round(group.avgConfidence * 100)}%
                     </span>
-                    <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
                   </div>
-                </div>
 
-                {/* Separate Payee and Category sections */}
-                <div className="suggestion-components">
-                  {/* Payee Suggestion */}
-                  {group.hasPayeeSuggestion && group.payeeStatus === 'pending' && (
-                    <div className="suggestion-component payee-component">
-                      <div className="component-header">
-                        <span className="component-label">📝 Payee</span>
-                        <span className={`confidence-mini confidence-${getConfidenceLevel(group.payeeConfidence)}`}>
-                          {Math.round(group.payeeConfidence * 100)}%
-                        </span>
-                      </div>
-                      <div className="component-value">
-                        {group.payeeName} → <strong>{group.suggestedPayeeName}</strong>
-                      </div>
-                      <div className="component-rationale" title={group.payeeRationale}>
-                        {group.payeeRationale}
-                      </div>
-                      <div className="component-actions">
-                        <button
-                          className="btn btn-sm btn-approve"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            approvePayeeMutation.mutate(firstSuggestion.id);
-                          }}
-                          disabled={approvePayeeMutation.isPending}
-                        >
-                          ✓ Accept
-                        </button>
-                        <button
-                          className="btn btn-sm btn-reject"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCorrectionModal('payee', firstSuggestion.id, group.suggestedPayeeName || '');
-                          }}
-                        >
-                          ✗ Correct
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Category Suggestion */}
-                  {group.categoryStatus === 'pending' && (
-                    <div className="suggestion-component category-component">
-                      <div className="component-header">
-                        <span className="component-label">📁 Category</span>
-                        <span className={`confidence-mini confidence-${getConfidenceLevel(group.categoryConfidence)}`}>
-                          {Math.round(group.categoryConfidence * 100)}%
-                        </span>
-                      </div>
-                      <div className="component-value">
-                        <strong>{group.proposedCategory}</strong>
-                      </div>
-                      <div className="component-rationale" title={group.categoryRationale}>
-                        {group.categoryRationale}
-                      </div>
-                      <div className="component-actions">
-                        <button
-                          className="btn btn-sm btn-approve"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            approveCategoryMutation.mutate(firstSuggestion.id);
-                          }}
-                          disabled={approveCategoryMutation.isPending}
-                        >
-                          ✓ Accept
-                        </button>
-                        <button
-                          className="btn btn-sm btn-reject"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCorrectionModal('category', firstSuggestion.id, group.proposedCategory);
-                          }}
-                        >
-                          ✗ Correct
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {hasPending && (
-                  <div className="payee-actions">
+                  {/* Action buttons */}
+                  {hasPending ? (
                     <button
-                      className="btn btn-approve-all"
+                      className="approve-btn"
                       onClick={(e) => {
                         e.stopPropagation();
                         bulkApproveMutation.mutate(pendingIds);
                       }}
                       disabled={bulkApproveMutation.isPending}
+                      title="Approve all suggestions"
                     >
-                      ✓ Approve All ({pendingIds.length})
+                      ✓ Approve
                     </button>
+                  ) : hasApproved && (
                     <button
-                      className="btn btn-reject-all"
+                      className="undo-btn"
                       onClick={(e) => {
                         e.stopPropagation();
-                        bulkRejectMutation.mutate(pendingIds);
+                        bulkResetMutation.mutate(approvedIds);
                       }}
-                      disabled={bulkRejectMutation.isPending}
+                      disabled={bulkResetMutation.isPending}
+                      title="Undo approval"
                     >
-                      ✗ Reject All
+                      ↩ Undo
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
 
+                {/* Expanded section - reasoning + actions + transactions */}
                 {isExpanded && (
-                  <div className="payee-transactions">
-                    <table className="transaction-table">
-                      <thead>
-                        <tr>
-                          <th className="col-date">Date</th>
-                          <th className="col-account">Account</th>
-                          <th className="col-amount">Amount</th>
-                          <th className="col-status">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.suggestions.map((suggestion) => (
-                          <tr 
-                            key={suggestion.id}
-                            className={`status-row-${suggestion.status}`}
-                          >
-                            <td className="col-date">{formatDate(suggestion.transactionDate)}</td>
-                            <td className="col-account">{suggestion.transactionAccountName || '—'}</td>
-                            <td className="col-amount">{formatAmount(suggestion.transactionAmount)}</td>
-                            <td className="col-status">
-                              <span className={`status-badge status-${suggestion.status}`}>
-                                {suggestion.status}
-                              </span>
-                            </td>
+                  <div className="payee-expanded">
+                    {/* Suggestion details with reasoning */}
+                    <div className="suggestion-details">
+                      {/* Category suggestion */}
+                      {group.categoryStatus === 'pending' && (
+                        <div className="suggestion-detail">
+                          <div className="detail-header">
+                            <span className="detail-label">Category</span>
+                            <span className="detail-value">{group.proposedCategory}</span>
+                            <span className={`detail-confidence confidence-${getConfidenceLevel(group.categoryConfidence)}`}>
+                              {Math.round(group.categoryConfidence * 100)}%
+                            </span>
+                          </div>
+                          <p className="detail-rationale">{group.categoryRationale}</p>
+                          <div className="detail-actions">
+                            <button
+                              className="detail-btn correct"
+                              onClick={() => openCorrectionModal('category', firstSuggestion.id, group.proposedCategory)}
+                            >
+                              ✎ Correct
+                            </button>
+                            <button
+                              className="detail-btn retry"
+                              onClick={() => retrySuggestionMutation.mutate(firstSuggestion.id)}
+                              disabled={retrySuggestionMutation.isPending}
+                            >
+                              {retrySuggestionMutation.isPending ? '⏳' : '↻'} Retry
+                            </button>
+                            <button
+                              className="detail-btn reject"
+                              onClick={() => bulkRejectMutation.mutate(pendingIds)}
+                              disabled={bulkRejectMutation.isPending}
+                            >
+                              ✕ Reject
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Payee suggestion (if different from original) */}
+                      {group.hasPayeeSuggestion && group.payeeStatus === 'pending' && (
+                        <div className="suggestion-detail">
+                          <div className="detail-header">
+                            <span className="detail-label">Payee</span>
+                            <span className="detail-value">{group.payeeName} → {group.suggestedPayeeName}</span>
+                            <span className={`detail-confidence confidence-${getConfidenceLevel(group.payeeConfidence)}`}>
+                              {Math.round(group.payeeConfidence * 100)}%
+                            </span>
+                          </div>
+                          <p className="detail-rationale">{group.payeeRationale}</p>
+                          <div className="detail-actions">
+                            <button
+                              className="detail-btn correct"
+                              onClick={() => openCorrectionModal('payee', firstSuggestion.id, group.suggestedPayeeName || '')}
+                            >
+                              ✎ Correct
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Transactions table */}
+                    <div className="transactions-section">
+                      <table className="compact-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Account</th>
+                            <th>Amount</th>
+                            <th>Status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {group.suggestions.map((suggestion) => (
+                            <tr key={suggestion.id} className={`status-${suggestion.status}`}>
+                              <td>{formatDate(suggestion.transactionDate)}</td>
+                              <td>{suggestion.transactionAccountName || '—'}</td>
+                              <td className="amount">{formatAmount(suggestion.transactionAmount)}</td>
+                              <td>
+                                <span className={`status-tag status-${suggestion.status}`}>
+                                  {suggestion.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
@@ -360,14 +394,36 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
             <p className="modal-hint">
               Current suggestion: <strong>{correctionModal.currentValue}</strong>
             </p>
-            <input
-              type="text"
-              className="correction-input"
-              placeholder={`Enter correct ${correctionModal.type}...`}
-              value={correctionInput}
-              onChange={(e) => setCorrectionInput(e.target.value)}
-              autoFocus
-            />
+            
+            {correctionModal.type === 'payee' ? (
+              <input
+                type="text"
+                className="correction-input"
+                placeholder="Enter correct payee name..."
+                value={correctionInput}
+                onChange={(e) => setCorrectionInput(e.target.value)}
+                autoFocus
+              />
+            ) : (
+              <select
+                className="correction-select"
+                value={selectedCategoryId}
+                onChange={(e) => setSelectedCategoryId(e.target.value)}
+                autoFocus
+              >
+                <option value="">-- Select a category --</option>
+                {Object.entries(groupedCategories).map(([groupName, cats]) => (
+                  <optgroup key={groupName} label={groupName}>
+                    {cats.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            )}
+            
             <div className="modal-actions">
               <button
                 className="btn btn-secondary"
@@ -380,7 +436,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                 onClick={handleCorrectionSubmit}
                 disabled={rejectPayeeMutation.isPending || rejectCategoryMutation.isPending}
               >
-                {correctionInput ? 'Submit Correction' : 'Reject Without Correction'}
+                {(correctionModal.type === 'payee' ? correctionInput : selectedCategoryId) 
+                  ? 'Submit Correction' 
+                  : 'Reject Without Correction'}
               </button>
             </div>
           </div>
@@ -389,15 +447,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
       
       <div className="legend">
         <span className="legend-item">
-          <span className="legend-color confidence-high"></span> High confidence (≥80%)
+          <span className="legend-color confidence-high"></span> ≥80%
         </span>
         <span className="legend-item">
-          <span className="legend-color confidence-medium"></span> Medium (50-79%)
+          <span className="legend-color confidence-medium"></span> 50-79%
         </span>
         <span className="legend-item">
-          <span className="legend-color confidence-low"></span> Low (&lt;50%)
+          <span className="legend-color confidence-low"></span> &lt;50%
         </span>
-        <span className="legend-hint">Click a payee card to expand transactions</span>
+        <span className="legend-hint">Click row to expand</span>
       </div>
     </div>
   );

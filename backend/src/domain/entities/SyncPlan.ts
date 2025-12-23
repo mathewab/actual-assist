@@ -8,6 +8,15 @@ export interface Change {
   proposedCategoryId: string;
   currentCategoryId: string | null;
   suggestionId?: string;
+  // Human-readable fields for display
+  transactionPayee: string | null;
+  transactionDate: string | null;
+  transactionAmount: number | null;
+  transactionAccountName: string | null;
+  proposedCategoryName: string | null;
+  currentCategoryName: string | null;
+  proposedPayeeName: string | null;
+  hasPayeeChange: boolean;
 }
 
 /**
@@ -15,6 +24,8 @@ export interface Change {
  */
 export interface DryRunSummary {
   totalChanges: number;
+  categoryChanges: number;
+  payeeChanges: number;
   estimatedImpact: string; // Human-readable summary
 }
 
@@ -31,21 +42,40 @@ export interface SyncPlan {
   createdAt: string; // ISO 8601 timestamp
 }
 
+/** Input data for creating a change from a suggestion */
+export interface ChangeInput {
+  transactionId: string;
+  proposedCategoryId: string;
+  currentCategoryId: string | null;
+  suggestionId?: string;
+  transactionPayee: string | null;
+  transactionDate: string | null;
+  transactionAmount: number | null;
+  transactionAccountName: string | null;
+  proposedCategoryName: string | null;
+  currentCategoryName: string | null;
+  proposedPayeeName: string | null;
+  hasPayeeChange: boolean;
+}
+
 /**
  * Factory function to create a Change
  */
-export function createChange(
-  transactionId: string,
-  proposedCategoryId: string,
-  currentCategoryId: string | null,
-  suggestionId?: string
-): Change {
+export function createChange(input: ChangeInput): Change {
   return {
     id: crypto.randomUUID(),
-    transactionId,
-    proposedCategoryId,
-    currentCategoryId,
-    ...(suggestionId && { suggestionId }),
+    transactionId: input.transactionId,
+    proposedCategoryId: input.proposedCategoryId,
+    currentCategoryId: input.currentCategoryId,
+    suggestionId: input.suggestionId,
+    transactionPayee: input.transactionPayee,
+    transactionDate: input.transactionDate,
+    transactionAmount: input.transactionAmount,
+    transactionAccountName: input.transactionAccountName,
+    proposedCategoryName: input.proposedCategoryName,
+    currentCategoryName: input.currentCategoryName,
+    proposedPayeeName: input.proposedPayeeName,
+    hasPayeeChange: input.hasPayeeChange,
   };
 }
 
@@ -56,16 +86,20 @@ export function createChange(
 export function createSyncPlan(
   id: string,
   budgetId: string,
-  changes: Change[],
-  totalApprovedCount: number
+  changes: Change[]
 ): SyncPlan {
+  const categoryChanges = changes.filter(c => c.proposedCategoryId).length;
+  const payeeChanges = changes.filter(c => c.hasPayeeChange).length;
+  
   return {
     id,
     budgetId,
     changes,
     dryRunSummary: {
       totalChanges: changes.length,
-      estimatedImpact: `${changes.length} transaction(s) will be updated from ${totalApprovedCount} approved suggestion(s)`,
+      categoryChanges,
+      payeeChanges,
+      estimatedImpact: `${changes.length} transaction(s) will be updated (${categoryChanges} category, ${payeeChanges} payee changes)`,
     },
     createdAt: new Date().toISOString(),
   };

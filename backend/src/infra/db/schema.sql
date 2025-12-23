@@ -52,11 +52,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
   event_type TEXT NOT NULL CHECK(event_type IN (
     'snapshot_created',
     'suggestions_generated',
+    'suggestions_generated_diff',
     'suggestion_approved',
     'suggestion_rejected',
+    'suggestion_retried',
+    'sync_plan_created',
     'sync_plan_built',
     'sync_executed',
-    'sync_failed'
+    'sync_failed',
+    'scheduled_sync_started',
+    'scheduled_sync_completed',
+    'scheduled_sync_failed'
   )),
   entity_type TEXT NOT NULL,        -- e.g., 'BudgetSnapshot', 'Suggestion'
   entity_id TEXT NOT NULL,

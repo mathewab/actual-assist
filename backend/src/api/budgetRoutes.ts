@@ -28,5 +28,24 @@ export function createBudgetRouter(actualBudget: ActualBudgetAdapter): Router {
     }
   });
 
+  /**
+   * GET /api/budgets/categories - Get all categories from the current budget
+   */
+  router.get('/categories', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const categories = await actualBudget.getCategories();
+
+      res.json({
+        categories: categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          groupName: c.groupName || null,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   return router;
 }

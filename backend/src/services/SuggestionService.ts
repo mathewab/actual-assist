@@ -68,12 +68,16 @@ export class SuggestionService {
 
   /**
    * Identify transactions that need an LLM retry because the previous attempt failed
+   * Only retry on actual LLM/API errors (indicated by empty rationale)
+   * Do NOT retry valid responses from the LLM (even "unknown" ones)
    */
   private getRetryableTransactionIds(suggestions: Suggestion[]): string[] {
-    const retryable = suggestions.filter((s) =>
-      s.status === 'pending' &&
-      (s.proposedCategoryId === 'unknown' || s.confidence === 0 || s.rationale.toLowerCase().includes('llm'))
-    );
+    const retryable = suggestions.filter((s) => {
+      if (s.status !== 'pending') return false;
+      
+      // Only retry if rationale is empty string (indicates LLM error)
+      return s.rationale === '';
+    });
 
     return Array.from(new Set(retryable.map((s) => s.transactionId)));
   }
@@ -362,7 +366,7 @@ ${categoryList}`;
         canonicalPayeeId: null,
         canonicalPayeeName: rawPayeeName,
         confidence: 0,
-        rationale: 'Payee identification failed',
+        rationale: '',
         source: 'ai',
       };
     }
@@ -418,7 +422,7 @@ ${categoryList}`;
         categoryId: null,
         categoryName: null,
         confidence: 0,
-        rationale: 'Category suggestion failed',
+        rationale: '',
         source: 'ai_web_search',
       };
     }
@@ -588,7 +592,7 @@ ${categoryList}`;
           canonicalPayeeId: null,
           canonicalPayeeName: null,
           confidence: 0,
-          rationale: 'Fuzzy match verification failed',
+          rationale: '',
           source: 'fuzzy_match',
         },
         category: {
@@ -596,7 +600,7 @@ ${categoryList}`;
           categoryId: null,
           categoryName: null,
           confidence: 0,
-          rationale: 'Fuzzy match verification failed',
+          rationale: '',
           source: 'fuzzy_match',
         },
       };
@@ -738,7 +742,7 @@ ${categoryList}`;
           canonicalPayeeId: null,
           canonicalPayeeName: null,
           confidence: 0,
-          rationale: 'Disambiguation failed',
+          rationale: '',
           source: 'fuzzy_match',
         },
         category: {
@@ -746,7 +750,7 @@ ${categoryList}`;
           categoryId: null,
           categoryName: null,
           confidence: 0,
-          rationale: 'Disambiguation failed',
+          rationale: '',
           source: 'fuzzy_match',
         },
       };
@@ -1235,6 +1239,217 @@ ${categoryList}`;
     });
 
     logger.info('Category suggestion rejected', { suggestionId, withCorrection: !!correction });
+  }
+
+  /**
+   * Reset a suggestion back to pending status
+   * Allows users to undo an approve/reject action
+   */
+  resetSuggestion(suggestionId: string): void {
+    const suggestion = this.suggestionRepo.findById(suggestionId);
+    if (!suggestion) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    // Reset both payee and category status back to pending (or skipped if no suggestion)
+    const newPayeeStatus = suggestion.payeeSuggestion?.proposedPayeeName ? 'pending' : 'skipped';
+    const newCategoryStatus = 'pending';
+    
+    this.suggestionRepo.updatePayeeStatus(suggestionId, newPayeeStatus as any);
+    this.suggestionRepo.updateCategoryStatus(suggestionId, newCategoryStatus);
+    this.suggestionRepo.updateStatus(suggestionId, 'pending');
+
+    this.auditRepo.log({
+      eventType: 'suggestion_reset',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+    });
+
+    logger.info('Suggestion reset to pending', { suggestionId });
+  }
+
+  /**
+   * Retry LLM suggestion for a specific suggestion
+   * Deletes the existing suggestion and regenerates it using AI
+   */
+  async retrySuggestion(suggestionId: string): Promise<Suggestion> {
+    const existing = this.suggestionRepo.findById(suggestionId);
+    if (!existing) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    logger.info('Retrying suggestion', {
+      suggestionId,
+      payee: existing.transactionPayee,
+      budgetId: existing.budgetId,
+    });
+
+    // Fetch categories from budget
+    const categories = await this.actualBudget.getCategories();
+
+    // Force regeneration using AI (bypass cache by calling AI directly)
+    const payeeName = existing.transactionPayee || 'Unknown';
+    
+    // First identify the payee
+    const payeeResult = await this.identifyPayee(payeeName);
+    
+    // Then suggest category with web search
+    const categoryResult = await this.suggestCategory(
+      payeeName,
+      payeeResult.canonicalPayeeName,
+      categories,
+      [] // No matched payees - force fresh AI suggestion
+    );
+
+    // Update the suggestion with new values
+    const updated = createSuggestion({
+      budgetId: existing.budgetId,
+      transactionId: existing.transactionId,
+      transactionAccountId: existing.transactionAccountId,
+      transactionAccountName: existing.transactionAccountName,
+      transactionPayee: existing.transactionPayee,
+      transactionAmount: existing.transactionAmount,
+      transactionDate: existing.transactionDate,
+      currentCategoryId: existing.currentCategoryId,
+      currentPayeeId: existing.currentPayeeId,
+
+      // Payee suggestion from retry
+      proposedPayeeId: payeeResult.canonicalPayeeId,
+      proposedPayeeName: payeeResult.canonicalPayeeName,
+      payeeConfidence: payeeResult.confidence,
+      payeeRationale: `Retry: ${payeeResult.rationale}`,
+      payeeStatus: payeeResult.canonicalPayeeName ? 'pending' : 'skipped',
+
+      // Category suggestion from retry
+      proposedCategoryId: categoryResult.categoryId,
+      proposedCategoryName: categoryResult.categoryName,
+      categoryConfidence: categoryResult.confidence,
+      categoryRationale: `Retry: ${categoryResult.rationale}`,
+      categoryStatus: 'pending',
+    });
+
+    // Keep the same ID for the updated suggestion
+    (updated as any).id = existing.id;
+
+    this.suggestionRepo.save(updated);
+
+    this.auditRepo.log({
+      eventType: 'suggestion_retried',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+      metadata: {
+        oldConfidence: existing.confidence,
+        newConfidence: updated.confidence,
+      },
+    });
+
+    logger.info('Suggestion retried successfully', {
+      suggestionId,
+      oldConfidence: existing.confidence,
+      newConfidence: updated.confidence,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Retry LLM suggestions for all suggestions with the same payee in a budget
+   * This is useful when suggestions are grouped by payee in the UI
+   */
+  async retryPayeeGroup(suggestionId: string): Promise<Suggestion[]> {
+    const existing = this.suggestionRepo.findById(suggestionId);
+    if (!existing) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    const payeeName = existing.transactionPayee;
+    if (!payeeName) {
+      // If no payee name, just retry the single suggestion
+      return [await this.retrySuggestion(suggestionId)];
+    }
+
+    // Find all pending suggestions with the same payee
+    const allSuggestions = this.suggestionRepo.findByBudgetId(existing.budgetId);
+    const payeeGroup = allSuggestions.filter(
+      s => s.transactionPayee === payeeName && s.status === 'pending'
+    );
+
+    if (payeeGroup.length === 0) {
+      // No pending suggestions, just retry the one
+      return [await this.retrySuggestion(suggestionId)];
+    }
+
+    logger.info('Retrying payee group', {
+      payeeName,
+      suggestionCount: payeeGroup.length,
+      budgetId: existing.budgetId,
+    });
+
+    // Fetch categories from budget
+    const categories = await this.actualBudget.getCategories();
+
+    // Generate new suggestion once (same for all transactions with this payee)
+    const payeeResult = await this.identifyPayee(payeeName);
+    const categoryResult = await this.suggestCategory(
+      payeeName,
+      payeeResult.canonicalPayeeName,
+      categories,
+      [] // No matched payees - force fresh AI suggestion
+    );
+
+    // Update all suggestions in the group
+    const updatedSuggestions: Suggestion[] = [];
+    for (const suggestion of payeeGroup) {
+      const updated = createSuggestion({
+        budgetId: suggestion.budgetId,
+        transactionId: suggestion.transactionId,
+        transactionAccountId: suggestion.transactionAccountId,
+        transactionAccountName: suggestion.transactionAccountName,
+        transactionPayee: suggestion.transactionPayee,
+        transactionAmount: suggestion.transactionAmount,
+        transactionDate: suggestion.transactionDate,
+        currentCategoryId: suggestion.currentCategoryId,
+        currentPayeeId: suggestion.currentPayeeId,
+
+        // Payee suggestion from retry
+        proposedPayeeId: payeeResult.canonicalPayeeId,
+        proposedPayeeName: payeeResult.canonicalPayeeName,
+        payeeConfidence: payeeResult.confidence,
+        payeeRationale: `Retry: ${payeeResult.rationale}`,
+        payeeStatus: payeeResult.canonicalPayeeName ? 'pending' : 'skipped',
+
+        // Category suggestion from retry
+        proposedCategoryId: categoryResult.categoryId,
+        proposedCategoryName: categoryResult.categoryName,
+        categoryConfidence: categoryResult.confidence,
+        categoryRationale: `Retry: ${categoryResult.rationale}`,
+        categoryStatus: 'pending',
+      });
+
+      // Keep the same ID
+      (updated as any).id = suggestion.id;
+      this.suggestionRepo.save(updated);
+      updatedSuggestions.push(updated);
+    }
+
+    this.auditRepo.log({
+      eventType: 'suggestion_retried',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+      metadata: {
+        payeeName,
+        count: updatedSuggestions.length,
+        newConfidence: categoryResult.confidence,
+      },
+    });
+
+    logger.info('Payee group retried successfully', {
+      payeeName,
+      count: updatedSuggestions.length,
+      newConfidence: categoryResult.confidence,
+    });
+
+    return updatedSuggestions;
   }
 
   /**

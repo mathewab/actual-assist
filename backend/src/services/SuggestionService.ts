@@ -54,6 +54,9 @@ export class SuggestionService {
    * Generate suggestions for uncategorized transactions
    * Optimized: Groups by payee and uses cache
    * P4 (Explicitness): Returns array of Suggestion entities
+   * 
+   * Deduplication: Skips transactions that already have pending suggestions
+   * Cleanup: Removes suggestions for deleted transactions
    */
   async generateSuggestions(budgetId: string): Promise<Suggestion[]> {
     logger.info('Generating suggestions', { budgetId });
@@ -74,8 +77,30 @@ export class SuggestionService {
       this.actualBudget.getCategories(),
     ]);
 
-    // Filter uncategorized transactions
-    const uncategorized = transactions.filter((txn) => txn.categoryId === null && !txn.isTransfer);
+    // Cleanup orphaned suggestions (transactions that no longer exist in budget)
+    const validTransactionIds = new Set(transactions.map(t => t.id));
+    const cleanedUp = this.suggestionRepo.cleanupOrphanedSuggestions(budgetId, validTransactionIds);
+    if (cleanedUp > 0) {
+      logger.info('Cleaned up orphaned suggestions for deleted transactions', { count: cleanedUp });
+    }
+
+    // Get existing pending suggestion transaction IDs for deduplication
+    // (excluding retryable ones which will be regenerated)
+    const existingPendingTxIds = this.suggestionRepo.getExistingPendingTransactionIds(budgetId);
+    const skipTxIds = new Set(
+      [...existingPendingTxIds].filter(id => !retryableTxIds.includes(id))
+    );
+
+    logger.info('Deduplication check', {
+      existingPendingCount: existingPendingTxIds.size,
+      retryableCount: retryableTxIds.length,
+      skippingCount: skipTxIds.size,
+    });
+
+    // Filter uncategorized transactions, excluding those with existing pending suggestions
+    const uncategorized = transactions.filter(
+      (txn) => txn.categoryId === null && !txn.isTransfer && !skipTxIds.has(txn.id)
+    );
 
     const transferSkipped = transactions.filter((txn) => txn.isTransfer).length;
     if (transferSkipped > 0) {
@@ -466,6 +491,7 @@ Respond with a single JSON object (no markdown, no explanation):
    * P9 (Minimalism): Process only what changed, not entire budget
    * 
    * Optimized: Uses batch LLM calls and payee caching
+   * Cleanup: Removes suggestions for deleted transactions
    */
   async syncAndGenerateSuggestions(
     budgetId: string,
@@ -487,6 +513,13 @@ Respond with a single JSON object (no markdown, no explanation):
       this.actualBudget.getTransactions(),
       this.actualBudget.getCategories(),
     ]);
+
+    // Cleanup orphaned suggestions (transactions that no longer exist in budget)
+    const validTransactionIds = new Set(transactions.map(t => t.id));
+    const cleanedUp = this.suggestionRepo.cleanupOrphanedSuggestions(budgetId, validTransactionIds);
+    if (cleanedUp > 0) {
+      logger.info('Cleaned up orphaned suggestions for deleted transactions', { count: cleanedUp });
+    }
 
     // Get existing suggestions to determine which transactions already have suggestions
     const existingSuggestions = this.suggestionRepo.findByBudgetId(budgetId);

@@ -102,6 +102,76 @@ export class SuggestionRepository {
   }
 
   /**
+   * Find suggestion by transaction ID (most recent pending one)
+   * Used for deduplication during suggestion generation
+   */
+  findByTransactionId(budgetId: string, transactionId: string): Suggestion | null {
+    const sql = `
+      SELECT * FROM suggestions 
+      WHERE budget_id = ? AND transaction_id = ? AND status = 'pending'
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `;
+    const row = this.db.queryOne<any>(sql, [budgetId, transactionId]);
+    return row ? this.mapRowToSuggestion(row) : null;
+  }
+
+  /**
+   * Get set of transaction IDs that already have pending suggestions
+   * Used for efficient deduplication during batch suggestion generation
+   */
+  getExistingPendingTransactionIds(budgetId: string): Set<string> {
+    const sql = `
+      SELECT DISTINCT transaction_id 
+      FROM suggestions 
+      WHERE budget_id = ? AND status = 'pending'
+    `;
+    const rows = this.db.query<{ transaction_id: string }>(sql, [budgetId]);
+    return new Set(rows.map(row => row.transaction_id));
+  }
+
+  /**
+   * Delete orphaned suggestions whose transactions no longer exist in the budget
+   * Called after sync/redownload to clean up stale data
+   * @param budgetId The budget ID to clean up
+   * @param validTransactionIds Set of transaction IDs that still exist in the budget
+   * @returns Number of deleted suggestions
+   */
+  cleanupOrphanedSuggestions(budgetId: string, validTransactionIds: Set<string>): number {
+    // Get all pending suggestions for this budget
+    const allPending = this.db.query<{ id: string; transaction_id: string }>(
+      `SELECT id, transaction_id FROM suggestions WHERE budget_id = ? AND status = 'pending'`,
+      [budgetId]
+    );
+
+    // Find orphaned ones (transaction no longer exists)
+    const orphanedIds = allPending
+      .filter(row => !validTransactionIds.has(row.transaction_id))
+      .map(row => row.id);
+
+    if (orphanedIds.length === 0) {
+      return 0;
+    }
+
+    // Delete orphaned suggestions
+    const placeholders = orphanedIds.map(() => '?').join(',');
+    const deleteCount = this.db.execute(
+      `DELETE FROM suggestions WHERE id IN (${placeholders})`,
+      orphanedIds
+    );
+
+    logger.info('Cleaned up orphaned suggestions', {
+      budgetId,
+      deletedCount: deleteCount,
+      orphanedTransactionIds: allPending
+        .filter(row => !validTransactionIds.has(row.transaction_id))
+        .map(row => row.transaction_id),
+    });
+
+    return deleteCount;
+  }
+
+  /**
    * Map database row to Suggestion entity
    * P2 (Zero duplication): Single mapping function
    */

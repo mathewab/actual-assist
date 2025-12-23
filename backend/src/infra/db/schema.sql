@@ -59,6 +59,13 @@ CREATE TABLE IF NOT EXISTS payee_category_cache (
 -- Indexes for common query patterns
 CREATE INDEX IF NOT EXISTS idx_suggestions_budget ON suggestions(budget_id);
 CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
+CREATE INDEX IF NOT EXISTS idx_suggestions_transaction ON suggestions(transaction_id);
+
+-- Unique constraint: Only one suggestion per transaction per budget
+-- If regeneration is needed, the existing row should be updated or deleted first
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_budget_transaction 
+  ON suggestions(budget_id, transaction_id);
+
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_payee_cache_budget ON payee_category_cache(budget_id);

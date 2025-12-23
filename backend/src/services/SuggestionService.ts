@@ -39,12 +39,34 @@ export class SuggestionService {
   ) {}
 
   /**
+   * Identify transactions that need an LLM retry because the previous attempt failed
+   */
+  private getRetryableTransactionIds(suggestions: Suggestion[]): string[] {
+    const retryable = suggestions.filter((s) =>
+      s.status === 'pending' &&
+      (s.proposedCategoryId === 'unknown' || s.confidence === 0 || s.rationale.toLowerCase().includes('llm'))
+    );
+
+    return Array.from(new Set(retryable.map((s) => s.transactionId)));
+  }
+
+  /**
    * Generate suggestions for uncategorized transactions
    * Optimized: Groups by payee and uses cache
    * P4 (Explicitness): Returns array of Suggestion entities
    */
   async generateSuggestions(budgetId: string): Promise<Suggestion[]> {
     logger.info('Generating suggestions', { budgetId });
+
+    // Get existing suggestions and filter out failed ones so they can be retried
+    const existingSuggestions = this.suggestionRepo.findByBudgetId(budgetId);
+    const retryableTxIds = this.getRetryableTransactionIds(existingSuggestions);
+    if (retryableTxIds.length > 0) {
+      logger.info('Found retryable suggestions (will be regenerated)', {
+        budgetId,
+        retryableTransactions: retryableTxIds.length,
+      });
+    }
 
     // Fetch current budget state from Actual
     const [transactions, categories] = await Promise.all([
@@ -464,8 +486,22 @@ Respond with JSON array:
 
     // Get existing suggestions to determine which transactions already have suggestions
     const existingSuggestions = this.suggestionRepo.findByBudgetId(budgetId);
+    const retryableTxIds = this.getRetryableTransactionIds(existingSuggestions);
+
+    if (retryableTxIds.length > 0) {
+      logger.info('Found retryable suggestions (will be regenerated)', {
+        budgetId,
+        retryableTransactions: retryableTxIds.length,
+      });
+    }
+
+    // Only consider non-failed suggestions as "already processed"
+    const successfulSuggestions = existingSuggestions.filter(
+      (s) => !retryableTxIds.includes(s.transactionId)
+    );
+
     const existingTransactionIds = new Set(
-      existingSuggestions.map((s) => s.transactionId)
+      successfulSuggestions.map((s) => s.transactionId)
     );
 
     // Filter to only new uncategorized transactions without suggestions

@@ -1,5 +1,14 @@
 import type { DatabaseAdapter } from '../DatabaseAdapter.js';
-import type { Suggestion, SuggestionStatus } from '../../domain/entities/Suggestion.js';
+import type { 
+  Suggestion, 
+  SuggestionStatus, 
+  SuggestionComponentStatus,
+} from '../../domain/entities/Suggestion.js';
+import { 
+  computeCombinedStatus, 
+  computeCombinedConfidence, 
+  computeCombinedRationale 
+} from '../../domain/entities/Suggestion.js';
 import { NotFoundError } from '../../domain/errors.js';
 import { logger } from '../logger.js';
 
@@ -12,16 +21,22 @@ export class SuggestionRepository {
 
   /**
    * Save a suggestion to the database
+   * Uses INSERT OR REPLACE to handle unique constraint on (budget_id, transaction_id)
+   * If a suggestion already exists for this transaction, it will be replaced
    * P4 (Explicitness): All fields explicitly mapped
    */
   save(suggestion: Suggestion): void {
     const sql = `
-      INSERT INTO suggestions (
+      INSERT OR REPLACE INTO suggestions (
         id, budget_id, transaction_id, transaction_account_id, transaction_account_name,
-        transaction_payee, transaction_amount, transaction_date, current_category_id,
-        proposed_category_id, proposed_category_name, suggested_payee_name, confidence, rationale, status,
+        transaction_payee, transaction_amount, transaction_date, 
+        current_category_id, current_payee_id,
+        proposed_payee_id, proposed_payee_name, payee_confidence, payee_rationale, payee_status,
+        proposed_category_id, proposed_category_name, category_confidence, category_rationale, category_status,
+        suggested_payee_name, confidence, rationale, status,
+        corrected_payee_id, corrected_payee_name, corrected_category_id, corrected_category_name,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     this.db.execute(sql, [
@@ -34,12 +49,25 @@ export class SuggestionRepository {
       suggestion.transactionAmount,
       suggestion.transactionDate,
       suggestion.currentCategoryId,
-      suggestion.proposedCategoryId,
-      suggestion.proposedCategoryName,
+      suggestion.currentPayeeId,
+      suggestion.payeeSuggestion.proposedPayeeId,
+      suggestion.payeeSuggestion.proposedPayeeName,
+      suggestion.payeeSuggestion.confidence,
+      suggestion.payeeSuggestion.rationale,
+      suggestion.payeeSuggestion.status,
+      suggestion.categorySuggestion.proposedCategoryId,
+      suggestion.categorySuggestion.proposedCategoryName,
+      suggestion.categorySuggestion.confidence,
+      suggestion.categorySuggestion.rationale,
+      suggestion.categorySuggestion.status,
       suggestion.suggestedPayeeName,
       suggestion.confidence,
       suggestion.rationale,
       suggestion.status,
+      suggestion.correction.correctedPayeeId,
+      suggestion.correction.correctedPayeeName,
+      suggestion.correction.correctedCategoryId,
+      suggestion.correction.correctedCategoryName,
       suggestion.createdAt,
       suggestion.updatedAt,
     ]);
@@ -80,18 +108,128 @@ export class SuggestionRepository {
   }
 
   /**
-   * Update suggestion status
+   * Find suggestions with pending payee or category components
+   */
+  findWithPendingComponents(budgetId: string): Suggestion[] {
+    const sql = `
+      SELECT * FROM suggestions 
+      WHERE budget_id = ? 
+        AND (payee_status = 'pending' OR category_status = 'pending')
+      ORDER BY created_at DESC
+    `;
+    const rows = this.db.query<any>(sql, [budgetId]);
+    return rows.map(row => this.mapRowToSuggestion(row));
+  }
+
+  /**
+   * Update suggestion status (legacy - updates both components)
    * P2 (Zero duplication): Single place to update status
    */
   updateStatus(id: string, status: SuggestionStatus): void {
-    const sql = 'UPDATE suggestions SET status = ?, updated_at = ? WHERE id = ?';
-    const changes = this.db.execute(sql, [status, new Date().toISOString(), id]);
+    // Map legacy status to component statuses
+    let payeeStatus: SuggestionComponentStatus;
+    let categoryStatus: SuggestionComponentStatus;
+    
+    if (status === 'approved') {
+      payeeStatus = 'approved';
+      categoryStatus = 'approved';
+    } else if (status === 'rejected') {
+      payeeStatus = 'rejected';
+      categoryStatus = 'rejected';
+    } else if (status === 'applied') {
+      payeeStatus = 'applied';
+      categoryStatus = 'applied';
+    } else {
+      payeeStatus = 'pending';
+      categoryStatus = 'pending';
+    }
+
+    const sql = `
+      UPDATE suggestions 
+      SET status = ?, payee_status = ?, category_status = ?, updated_at = ? 
+      WHERE id = ?
+    `;
+    const changes = this.db.execute(sql, [
+      status, 
+      payeeStatus, 
+      categoryStatus, 
+      new Date().toISOString(), 
+      id
+    ]);
 
     if (changes === 0) {
       throw new NotFoundError('Suggestion', id);
     }
 
     logger.debug('Suggestion status updated', { id, status });
+  }
+
+  /**
+   * Update payee suggestion status independently
+   */
+  updatePayeeStatus(
+    id: string, 
+    payeeStatus: SuggestionComponentStatus,
+    correction?: { payeeId?: string | null; payeeName?: string | null }
+  ): void {
+    const suggestion = this.findById(id);
+    if (!suggestion) {
+      throw new NotFoundError('Suggestion', id);
+    }
+
+    const newCombinedStatus = computeCombinedStatus(payeeStatus, suggestion.categorySuggestion.status);
+    const now = new Date().toISOString();
+
+    let sql = `
+      UPDATE suggestions 
+      SET payee_status = ?, status = ?, updated_at = ?
+    `;
+    const params: any[] = [payeeStatus, newCombinedStatus, now];
+
+    if (correction) {
+      sql += `, corrected_payee_id = ?, corrected_payee_name = ?`;
+      params.push(correction.payeeId ?? null, correction.payeeName ?? null);
+    }
+
+    sql += ` WHERE id = ?`;
+    params.push(id);
+
+    this.db.execute(sql, params);
+    logger.debug('Suggestion payee status updated', { id, payeeStatus, correction });
+  }
+
+  /**
+   * Update category suggestion status independently
+   */
+  updateCategoryStatus(
+    id: string, 
+    categoryStatus: SuggestionComponentStatus,
+    correction?: { categoryId?: string | null; categoryName?: string | null }
+  ): void {
+    const suggestion = this.findById(id);
+    if (!suggestion) {
+      throw new NotFoundError('Suggestion', id);
+    }
+
+    const newCombinedStatus = computeCombinedStatus(suggestion.payeeSuggestion.status, categoryStatus);
+    const now = new Date().toISOString();
+
+    let sql = `
+      UPDATE suggestions 
+      SET category_status = ?, status = ?, updated_at = ?
+    `;
+    const params: any[] = [categoryStatus, newCombinedStatus, now];
+
+    if (correction) {
+      sql += `, corrected_category_id = ?, corrected_category_name = ?`;
+      params.push(correction.categoryId ?? null, correction.categoryName ?? null);
+    }
+
+    sql += ` WHERE id = ?`;
+    params.push(id);
+
+    this.db.execute(sql, params);
+    logger.debug('Suggestion category status updated', { id, categoryStatus, correction });
   }
 
   /**
@@ -174,9 +312,18 @@ export class SuggestionRepository {
 
   /**
    * Map database row to Suggestion entity
+   * Handles both new schema and legacy schema for backward compatibility
    * P2 (Zero duplication): Single mapping function
    */
   private mapRowToSuggestion(row: any): Suggestion {
+    // Handle new schema with separate payee/category fields
+    const payeeStatus = (row.payee_status || 'skipped') as SuggestionComponentStatus;
+    const categoryStatus = (row.category_status || 'pending') as SuggestionComponentStatus;
+    const payeeConfidence = row.payee_confidence ?? 0;
+    const categoryConfidence = row.category_confidence ?? row.confidence ?? 0;
+    const payeeRationale = row.payee_rationale || '';
+    const categoryRationale = row.category_rationale || row.rationale || '';
+
     return {
       id: row.id,
       budgetId: row.budget_id,
@@ -187,12 +334,39 @@ export class SuggestionRepository {
       transactionAccountId: row.transaction_account_id,
       transactionAccountName: row.transaction_account_name,
       currentCategoryId: row.current_category_id,
-      proposedCategoryId: row.proposed_category_id,
-      proposedCategoryName: row.proposed_category_name,
+      currentPayeeId: row.current_payee_id || null,
+      
+      payeeSuggestion: {
+        proposedPayeeId: row.proposed_payee_id || null,
+        proposedPayeeName: row.proposed_payee_name || row.suggested_payee_name || null,
+        confidence: payeeConfidence,
+        rationale: payeeRationale,
+        status: payeeStatus,
+      },
+      
+      categorySuggestion: {
+        proposedCategoryId: row.proposed_category_id,
+        proposedCategoryName: row.proposed_category_name,
+        confidence: categoryConfidence,
+        rationale: categoryRationale,
+        status: categoryStatus,
+      },
+      
+      correction: {
+        correctedPayeeId: row.corrected_payee_id || null,
+        correctedPayeeName: row.corrected_payee_name || null,
+        correctedCategoryId: row.corrected_category_id || null,
+        correctedCategoryName: row.corrected_category_name || null,
+      },
+      
+      // Legacy fields
       suggestedPayeeName: row.suggested_payee_name,
-      confidence: row.confidence,
-      rationale: row.rationale,
-      status: row.status as SuggestionStatus,
+      confidence: row.confidence ?? computeCombinedConfidence(payeeConfidence, categoryConfidence, payeeStatus, categoryStatus),
+      rationale: row.rationale || computeCombinedRationale(payeeRationale, categoryRationale, payeeStatus, categoryStatus),
+      status: (row.status || computeCombinedStatus(payeeStatus, categoryStatus)) as SuggestionStatus,
+      proposedCategoryId: row.proposed_category_id || 'unknown',
+      proposedCategoryName: row.proposed_category_name || 'Unknown',
+      
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

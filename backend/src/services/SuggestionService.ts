@@ -3,8 +3,12 @@ import type { SuggestionRepository } from '../infra/repositories/SuggestionRepos
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { PayeeCacheRepository } from '../infra/repositories/PayeeCacheRepository.js';
+import type { PayeeMatchCacheRepository } from '../infra/repositories/PayeeMatchCacheRepository.js';
 import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
-import { createSuggestion, type Suggestion } from '../domain/entities/Suggestion.js';
+import { 
+  createSuggestion, 
+  type Suggestion,
+} from '../domain/entities/Suggestion.js';
 import { logger } from '../infra/logger.js';
 import {
   payeeMatcher,
@@ -15,26 +19,42 @@ import {
 /** Threshold for caching high-confidence AI suggestions */
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;
 
+/** Result of payee suggestion for a transaction */
+interface PayeeSuggestionResult {
+  payeeName: string;
+  canonicalPayeeId: string | null;
+  canonicalPayeeName: string | null;
+  confidence: number;
+  rationale: string;
+  source: 'cache' | 'fuzzy_match' | 'ai';
+}
+
 /** Result of category suggestion for a payee */
-interface PayeeCategorySuggestion {
+interface CategorySuggestionResult {
   payeeName: string;
   categoryId: string | null;
   categoryName: string | null;
   confidence: number;
-  reasoning: string;
-  /** Suggested canonical payee name from fuzzy match or LLM */
-  suggestedPayeeName?: string;
+  rationale: string;
+  source: 'cache' | 'fuzzy_match' | 'ai_with_context' | 'ai_web_search';
+}
+
+/** Combined suggestion result for a payee */
+interface CombinedSuggestionResult {
+  payee: PayeeSuggestionResult;
+  category: CategorySuggestionResult;
 }
 
 /**
- * SuggestionService - generates AI category suggestions
+ * SuggestionService - generates AI suggestions for payees and categories
  * P1 (Single Responsibility): Focused on suggestion generation
  * P3 (Testability): Dependencies injected for easy mocking
  * 
- * Optimizations:
- * - Groups uncategorized transactions by payee before LLM call
- * - Uses payee→category cache to avoid redundant LLM calls
- * - Caches high-confidence results and user-approved mappings
+ * Architecture:
+ * - Payee and Category suggestions are independent with separate confidence/rationale
+ * - Payee matches are cached in payee_match_cache
+ * - Payee->Category mappings are cached in payee_category_cache
+ * - Web search is used for unknown payees when no cache/fuzzy match exists
  */
 export class SuggestionService {
   constructor(
@@ -42,7 +62,8 @@ export class SuggestionService {
     private openai: OpenAIAdapter,
     private suggestionRepo: SuggestionRepository,
     private auditRepo: AuditRepository,
-    private payeeCache?: PayeeCacheRepository // Optional for backward compatibility
+    private payeeCache?: PayeeCacheRepository,
+    private payeeMatchCache?: PayeeMatchCacheRepository
   ) {}
 
   /**
@@ -127,28 +148,36 @@ export class SuggestionService {
 
     logger.info(`Grouped into ${uniquePayees.length} unique payees`);
 
-    // Check cache for known payee→category mappings
-    const { cached, uncached } = await this.checkPayeeCache(budgetId, uniquePayees);
+    // Check cache for known payee→category mappings (combined lookup)
+    const { cached: cachedCategories, uncached } = await this.checkPayeeCategoryCache(budgetId, uniquePayees);
 
-    logger.info(`Cache lookup: ${cached.size} hits, ${uncached.length} misses`);
+    logger.info(`Cache lookup: ${cachedCategories.size} category hits, ${uncached.length} misses`);
 
     // Generate suggestions from cache hits (no LLM call needed)
     const suggestions: Suggestion[] = [];
     
-    for (const [payeeName, cacheEntry] of cached) {
+    for (const [payeeName, cacheEntry] of cachedCategories) {
       const txns = byPayee.get(payeeName) || [];
       for (const txn of txns) {
         const suggestion = createSuggestion({
           budgetId,
           transactionId: txn.id,
+          transactionAccountId: txn.accountId,
+          transactionAccountName: txn.accountName,
           transactionPayee: txn.payeeName,
           transactionAmount: txn.amount,
           transactionDate: txn.date,
           currentCategoryId: txn.categoryId,
+          currentPayeeId: null,
+          
+          // Payee - skip for cached (already known)
+          payeeStatus: 'skipped',
+          
+          // Category from cache
           proposedCategoryId: cacheEntry.categoryId,
           proposedCategoryName: cacheEntry.categoryName,
-          confidence: cacheEntry.confidence,
-          rationale: `Cached: ${cacheEntry.source === 'user_approved' ? 'Previously approved by user' : 'High-confidence AI suggestion'}`,
+          categoryConfidence: cacheEntry.confidence,
+          categoryRationale: `Cached: ${cacheEntry.source === 'user_approved' ? 'Previously approved by user' : 'High-confidence AI suggestion'}`,
         });
         this.suggestionRepo.save(suggestion);
         suggestions.push(suggestion);
@@ -174,14 +203,14 @@ export class SuggestionService {
       metadata: {
         suggestionsCount: suggestions.length,
         uncategorizedCount: uncategorized.length,
-        cacheHits: cached.size,
+        cacheHits: cachedCategories.size,
         llmCalls: uncached.length > 0 ? 1 : 0,
       },
     });
 
     logger.info('Suggestions generated', {
       count: suggestions.length,
-      cacheHits: cached.size,
+      cacheHits: cachedCategories.size,
       llmPayees: uncached.length,
       budgetId,
     });
@@ -207,9 +236,9 @@ export class SuggestionService {
   }
 
   /**
-   * Check payee cache and split into cached/uncached payees
+   * Check payee category cache for known payee→category mappings
    */
-  private async checkPayeeCache(
+  private async checkPayeeCategoryCache(
     budgetId: string,
     payeeNames: string[]
   ): Promise<{
@@ -220,7 +249,6 @@ export class SuggestionService {
     const uncached: string[] = [];
 
     if (!this.payeeCache) {
-      // No cache configured, all payees need LLM
       return { cached, uncached: payeeNames };
     }
 
@@ -245,88 +273,143 @@ export class SuggestionService {
     return { cached, uncached };
   }
 
+  /** System instructions for payee identification */
+  private readonly PAYEE_IDENTIFICATION_INSTRUCTIONS = `You are a personal finance assistant helping identify transaction payees.
+
+Your task:
+1. Use web search to identify what business/merchant this is
+2. Determine the canonical/clean name of this merchant
+3. If it's a well-known business, provide the standard name (e.g., "AMZN MKTP" → "Amazon")
+4. If uncertain, return the cleaned-up version of the input
+
+Respond with a single JSON object (no markdown, no explanation):
+{"canonicalPayeeName":"...","confidence":0.0-1.0,"reasoning":"..."}`;
+
   /**
-   * Build prompt for single payee category suggestion
-   * Simpler prompt = more reliable JSON response
+   * Build input for payee identification
    */
-  private buildSinglePayeePrompt(payeeName: string, categories: Category[]): string {
-    // Compact category list: just name and group
+  private buildPayeeIdentificationInput(rawPayeeName: string): string {
+    return `Raw payee name from bank: "${rawPayeeName}"`;
+  }
+
+  /** System instructions for category suggestion */
+  private readonly CATEGORY_SUGGESTION_INSTRUCTIONS = `You are a personal finance assistant helping categorize transactions.
+
+Your task:
+1. Consider any similar payees provided as hints
+2. Use web search if needed to identify merchant type
+3. Match to the most appropriate category from the provided list
+4. If uncertain, set categoryId and categoryName to null
+
+Respond with a single JSON object (no markdown, no explanation):
+{"categoryId":"...","categoryName":"...","confidence":0.0-1.0,"reasoning":"..."}`;
+
+  /**
+   * Build input for category suggestion with context from matched payees
+   */
+  private buildCategorySuggestionInput(
+    payeeName: string,
+    canonicalPayeeName: string | null,
+    categories: Category[],
+    matchedPayeeCategories: Array<{ payeeName: string; categoryName: string; categoryId: string }>
+  ): string {
     const categoryList = categories
       .filter(cat => !cat.hidden && !cat.isIncome)
       .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
-    return `Categorize this transaction payee for a personal budget.
+    const contextSection = matchedPayeeCategories.length > 0
+      ? `\nSimilar payees in this budget:\n${matchedPayeeCategories.map(p => `- "${p.payeeName}" → ${p.categoryName}`).join('\n')}\n`
+      : '';
 
-Payee: ${payeeName}
-
+    return `Payee: ${canonicalPayeeName || payeeName}
+${canonicalPayeeName && canonicalPayeeName !== payeeName ? `(Original: ${payeeName})` : ''}
+${contextSection}
 Categories (id|name|group):
-${categoryList}
-
-Instructions:
-1. Use web search to identify what business/merchant "${payeeName}" is
-2. Match to the most appropriate category from the list
-3. If uncertain, set categoryId and categoryName to null
-
-Respond with a single JSON object (no markdown, no explanation):
-{"categoryId":"...","categoryName":"...","confidence":0.0-1.0,"reasoning":"..."}`;
+${categoryList}`;
   }
 
   /**
-   * Parse LLM response for a single payee into PayeeCategorySuggestion
+   * Identify canonical payee name via LLM with web search
    */
-  private parseSinglePayeeResponse(payeeName: string, content: string): PayeeCategorySuggestion {
+  private async identifyPayee(rawPayeeName: string): Promise<PayeeSuggestionResult> {
     try {
-      // Use robust parser from OpenAIAdapter (handles code fences + fallbacks)
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(content);
-      
+      const input = this.buildPayeeIdentificationInput(rawPayeeName);
+      logger.debug('Calling OpenAI for payee identification', { rawPayeeName });
+
+      const response = await this.openai.completion({
+        instructions: this.PAYEE_IDENTIFICATION_INSTRUCTIONS,
+        input,
+        webSearch: true,
+      });
+      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
+
       return {
-        payeeName,
-        categoryId: (result.categoryId as string) || null,
-        categoryName: (result.categoryName as string) || null,
-        confidence: (result.confidence as number) ?? 0.5,
-        reasoning: (result.reasoning as string) || 'No reasoning provided',
+        payeeName: rawPayeeName,
+        canonicalPayeeId: null, // Will be matched later if payee exists in budget
+        canonicalPayeeName: (result.canonicalPayeeName as string) || rawPayeeName,
+        confidence: (result.confidence as number) ?? 0.7,
+        rationale: (result.reasoning as string) || 'AI-identified payee',
+        source: 'ai',
       };
     } catch (error) {
-      logger.warn('Failed to parse single payee response', {
-        payeeName,
+      logger.warn('Payee identification failed', {
+        rawPayeeName,
         error: error instanceof Error ? error.message : String(error),
-        contentPreview: content.slice(0, 200),
       });
       return {
-        payeeName,
-        categoryId: null,
-        categoryName: null,
+        payeeName: rawPayeeName,
+        canonicalPayeeId: null,
+        canonicalPayeeName: rawPayeeName,
         confidence: 0,
-        reasoning: 'Failed to parse LLM response',
+        rationale: 'Payee identification failed',
+        source: 'ai',
       };
     }
   }
 
   /**
-   * Categorize a single payee via LLM
-   * Returns null if LLM call fails (caller handles fallback)
+   * Suggest category for a payee via LLM with web search
+   * Always uses web search to properly identify merchant type
    */
-  private async categorizePayee(
+  private async suggestCategory(
     payeeName: string,
-    categories: Category[]
-  ): Promise<PayeeCategorySuggestion> {
+    canonicalPayeeName: string | null,
+    categories: Category[],
+    matchedPayeeCategories: Array<{ payeeName: string; categoryName: string; categoryId: string }>
+  ): Promise<CategorySuggestionResult> {
     try {
-      const prompt = this.buildSinglePayeePrompt(payeeName, categories);
-
-      logger.debug('Calling OpenAI for single payee', { payeeName });
-
-      const responseContent = await this.openai.webSearchCompletion({ prompt });
-
-      logger.info('OpenAI response for payee', {
+      const input = this.buildCategorySuggestionInput(
         payeeName,
-        responseLength: responseContent.length,
-        response: responseContent,
+        canonicalPayeeName,
+        categories,
+        matchedPayeeCategories
+      );
+
+      logger.debug('Calling OpenAI for category suggestion with web search', { 
+        payeeName, 
+        canonicalPayeeName, 
+        matchedPayeesCount: matchedPayeeCategories.length,
       });
 
-      return this.parseSinglePayeeResponse(payeeName, responseContent);
+      const response = await this.openai.completion({
+        instructions: this.CATEGORY_SUGGESTION_INSTRUCTIONS,
+        input,
+        webSearch: true,
+      });
+
+      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
+
+      return {
+        payeeName,
+        categoryId: (result.categoryId as string) || null,
+        categoryName: (result.categoryName as string) || null,
+        confidence: (result.confidence as number) ?? 0.5,
+        rationale: (result.reasoning as string) || 'AI-suggested category',
+        source: 'ai_web_search',
+      };
     } catch (error) {
-      logger.error('LLM call failed for payee', {
+      logger.warn('Category suggestion failed', {
         payeeName,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -335,7 +418,8 @@ Respond with a single JSON object (no markdown, no explanation):
         categoryId: null,
         categoryName: null,
         confidence: 0,
-        reasoning: 'LLM call failed',
+        rationale: 'Category suggestion failed',
+        source: 'ai_web_search',
       };
     }
   }
@@ -389,116 +473,163 @@ Respond with a single JSON object (no markdown, no explanation):
     return candidates;
   }
 
+  /** System instructions for fuzzy match verification */
+  private readonly FUZZY_MATCH_INSTRUCTIONS = `You are a personal finance assistant verifying if two payee names refer to the same merchant.
+
+Your task:
+1. Determine if the two payee names refer to the same merchant/entity
+2. If they match, suggest the appropriate category (could be same or different)
+3. Suggest a canonical/clean payee name if the names are variants of the same merchant
+
+Respond with JSON only (no markdown):
+{
+  "isSameMerchant": true/false,
+  "canonicalPayeeName": "...",
+  "payeeConfidence": 0.0-1.0,
+  "payeeReasoning": "...",
+  "categoryId": "...", 
+  "categoryName": "...",
+  "categoryConfidence": 0.0-1.0,
+  "categoryReasoning": "..."
+}`;
+
   /**
    * Verify a high-confidence fuzzy match with LLM
-   * Asks LLM if the matched payee is correct and what category to use
+   * Returns separate payee and category suggestions
    */
   private async verifyFuzzyMatch(
-    newPayee: string,
+    rawPayee: string,
     matchedPayee: string,
     matchedCategory: string,
+    matchedCategoryId: string,
     matchScore: number,
     categories: Category[]
-  ): Promise<PayeeCategorySuggestion> {
+  ): Promise<CombinedSuggestionResult> {
     const categoryList = categories
       .filter(cat => !cat.hidden && !cat.isIncome)
       .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
-    const prompt = `You are a personal finance assistant. A transaction has payee "${newPayee}".
-
-I found a similar payee "${matchedPayee}" (similarity score: ${matchScore}%) that is usually categorized as "${matchedCategory}".
-
-Tasks:
-1. Determine if "${newPayee}" and "${matchedPayee}" refer to the same merchant/entity
-2. If they match, suggest the appropriate category (could be the same or different)
-3. Suggest a canonical/clean payee name if the names are variants of the same merchant
+    const input = `Transaction payee: "${rawPayee}"
+Similar payee found: "${matchedPayee}" (similarity score: ${matchScore}%)
+Usually categorized as: "${matchedCategory}"
 
 Categories (id|name|group):
-${categoryList}
-
-Respond with JSON only (no markdown):
-{
-  "isSameMerchant": true/false,
-  "categoryId": "...", 
-  "categoryName": "...",
-  "confidence": 0.0-1.0,
-  "suggestedPayeeName": "...",
-  "reasoning": "..."
-}`;
+${categoryList}`;
 
     try {
-      const response = await this.openai.chatCompletion({
-        userPrompt: prompt,
-        jsonResponse: true,
-        temperature: 0.3,
+      const response = await this.openai.completion({
+        instructions: this.FUZZY_MATCH_INSTRUCTIONS,
+        input,
+        webSearch: false,
       });
 
       logger.info('OpenAI response for fuzzy match verification', {
-        newPayee,
+        rawPayee,
         matchedPayee,
         responseLength: response.length,
-        response,
       });
 
       const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
 
       if (result.isSameMerchant === true) {
         return {
-          payeeName: newPayee,
-          categoryId: (result.categoryId as string) || null,
-          categoryName: (result.categoryName as string) || null,
-          confidence: (result.confidence as number) ?? 0.8,
-          reasoning: `Fuzzy match verified: "${matchedPayee}" (${matchScore}% similar). ${result.reasoning || ''}`,
-          suggestedPayeeName: (result.suggestedPayeeName as string) || undefined,
+          payee: {
+            payeeName: rawPayee,
+            canonicalPayeeId: null,
+            canonicalPayeeName: (result.canonicalPayeeName as string) || matchedPayee,
+            confidence: (result.payeeConfidence as number) ?? 0.8,
+            rationale: `Matched "${matchedPayee}" (${matchScore}%). ${result.payeeReasoning || ''}`,
+            source: 'fuzzy_match',
+          },
+          category: {
+            payeeName: rawPayee,
+            categoryId: (result.categoryId as string) || matchedCategoryId,
+            categoryName: (result.categoryName as string) || matchedCategory,
+            confidence: (result.categoryConfidence as number) ?? 0.8,
+            rationale: `Matched payee "${matchedPayee}". ${result.categoryReasoning || ''}`,
+            source: 'fuzzy_match',
+          },
         };
       } else {
         logger.info('Fuzzy match rejected by LLM', {
-          newPayee,
+          rawPayee,
           matchedPayee,
-          reasoning: result.reasoning,
+          reasoning: result.payeeReasoning,
         });
         return {
-          payeeName: newPayee,
-          categoryId: null,
-          categoryName: null,
-          confidence: 0,
-          reasoning: `Fuzzy match rejected: "${matchedPayee}" is not the same as "${newPayee}". ${result.reasoning || ''}`,
+          payee: {
+            payeeName: rawPayee,
+            canonicalPayeeId: null,
+            canonicalPayeeName: null,
+            confidence: 0,
+            rationale: `Not same as "${matchedPayee}". ${result.payeeReasoning || ''}`,
+            source: 'fuzzy_match',
+          },
+          category: {
+            payeeName: rawPayee,
+            categoryId: null,
+            categoryName: null,
+            confidence: 0,
+            rationale: 'Fuzzy match rejected',
+            source: 'fuzzy_match',
+          },
         };
       }
     } catch (error) {
       logger.error('Failed to verify fuzzy match', {
-        newPayee,
+        rawPayee,
         matchedPayee,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Fall back to using the fuzzy match anyway with lower confidence
       return {
-        payeeName: newPayee,
-        categoryId: null,
-        categoryName: null,
-        confidence: 0,
-        reasoning: 'Fuzzy match verification failed',
+        payee: {
+          payeeName: rawPayee,
+          canonicalPayeeId: null,
+          canonicalPayeeName: null,
+          confidence: 0,
+          rationale: 'Fuzzy match verification failed',
+          source: 'fuzzy_match',
+        },
+        category: {
+          payeeName: rawPayee,
+          categoryId: null,
+          categoryName: null,
+          confidence: 0,
+          rationale: 'Fuzzy match verification failed',
+          source: 'fuzzy_match',
+        },
       };
     }
   }
 
   /**
    * Disambiguate between multiple potential fuzzy matches using LLM
-   * Sends candidate list to LLM to determine best match
+   * Returns separate payee and category suggestions
    */
   private async disambiguateFuzzyMatches(
-    newPayee: string,
+    rawPayee: string,
     candidates: FuzzyMatchResult[],
     categories: Category[]
-  ): Promise<PayeeCategorySuggestion> {
+  ): Promise<CombinedSuggestionResult> {
     if (candidates.length === 0) {
       return {
-        payeeName: newPayee,
-        categoryId: null,
-        categoryName: null,
-        confidence: 0,
-        reasoning: 'No fuzzy match candidates available',
+        payee: {
+          payeeName: rawPayee,
+          canonicalPayeeId: null,
+          canonicalPayeeName: null,
+          confidence: 0,
+          rationale: 'No fuzzy match candidates available',
+          source: 'fuzzy_match',
+        },
+        category: {
+          payeeName: rawPayee,
+          categoryId: null,
+          categoryName: null,
+          confidence: 0,
+          rationale: 'No fuzzy match candidates available',
+          source: 'fuzzy_match',
+        },
       };
     }
 
@@ -511,41 +642,44 @@ Respond with JSON only (no markdown):
       .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
-    const prompt = `You are a personal finance assistant. A transaction has payee "${newPayee}".
+    const instructions = `You are a personal finance assistant helping match payees from transaction data.
 
-I found these similar payees in the user's budget:
-${candidateList}
-
-Tasks:
-1. Determine if any of these payees match "${newPayee}" (same merchant/entity)
+Your task:
+1. Determine if any of the candidate payees match the transaction payee (same merchant/entity)
 2. If a match is found, return its index and suggest the appropriate category
-3. If no match, return matchIndex: null and suggest a new category
-
-Categories (id|name|group):
-${categoryList}
+3. If no match, return matchIndex: null and suggest a category based on your knowledge
 
 Respond with JSON only (no markdown):
 {
   "matchIndex": 1-${candidates.length} or null,
+  "canonicalPayeeName": "...",
+  "payeeConfidence": 0.0-1.0,
+  "payeeReasoning": "...",
   "categoryId": "...",
   "categoryName": "...",
-  "confidence": 0.0-1.0,
-  "suggestedPayeeName": "...",
-  "reasoning": "..."
+  "categoryConfidence": 0.0-1.0,
+  "categoryReasoning": "..."
 }`;
 
+    const input = `Transaction payee: "${rawPayee}"
+
+Similar payees found in budget:
+${candidateList}
+
+Categories (id|name|group):
+${categoryList}`;
+
     try {
-      const response = await this.openai.chatCompletion({
-        userPrompt: prompt,
-        jsonResponse: true,
-        temperature: 0.3,
+      const response = await this.openai.completion({
+        instructions,
+        input,
+        webSearch: false,
       });
 
       logger.info('OpenAI response for fuzzy match disambiguation', {
-        newPayee,
+        rawPayee,
         candidateCount: candidates.length,
         responseLength: response.length,
-        response,
       });
 
       const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
@@ -554,119 +688,223 @@ Respond with JSON only (no markdown):
       if (matchIndex !== null && matchIndex >= 1 && matchIndex <= candidates.length) {
         const matchedCandidate = candidates[matchIndex - 1];
         return {
-          payeeName: newPayee,
-          categoryId: (result.categoryId as string) || matchedCandidate.categoryId,
-          categoryName: (result.categoryName as string) || matchedCandidate.categoryName,
-          confidence: (result.confidence as number) ?? 0.7,
-          reasoning: `Disambiguated: Matched "${matchedCandidate.payeeName}" (${matchedCandidate.score}%). ${result.reasoning || ''}`,
-          suggestedPayeeName: (result.suggestedPayeeName as string) || undefined,
+          payee: {
+            payeeName: rawPayee,
+            canonicalPayeeId: null,
+            canonicalPayeeName: (result.canonicalPayeeName as string) || matchedCandidate.payeeName,
+            confidence: (result.payeeConfidence as number) ?? 0.7,
+            rationale: `Matched "${matchedCandidate.payeeName}" (${matchedCandidate.score}%). ${result.payeeReasoning || ''}`,
+            source: 'fuzzy_match',
+          },
+          category: {
+            payeeName: rawPayee,
+            categoryId: (result.categoryId as string) || matchedCandidate.categoryId,
+            categoryName: (result.categoryName as string) || matchedCandidate.categoryName,
+            confidence: (result.categoryConfidence as number) ?? 0.7,
+            rationale: `Matched payee category. ${result.categoryReasoning || ''}`,
+            source: 'fuzzy_match',
+          },
         };
       } else {
-        // No match found among candidates, but LLM may have suggested a category
-        if (result.categoryId) {
-          return {
-            payeeName: newPayee,
-            categoryId: result.categoryId as string,
-            categoryName: (result.categoryName as string) || null,
-            confidence: (result.confidence as number) ?? 0.5,
-            reasoning: `No fuzzy match found. ${result.reasoning || ''}`,
-            suggestedPayeeName: (result.suggestedPayeeName as string) || undefined,
-          };
-        }
+        // No match found, but LLM may have suggested a category
         return {
-          payeeName: newPayee,
-          categoryId: null,
-          categoryName: null,
-          confidence: 0,
-          reasoning: `No matching payee found among candidates. ${result.reasoning || ''}`,
+          payee: {
+            payeeName: rawPayee,
+            canonicalPayeeId: null,
+            canonicalPayeeName: (result.canonicalPayeeName as string) || null,
+            confidence: (result.payeeConfidence as number) ?? 0,
+            rationale: `No match found. ${result.payeeReasoning || ''}`,
+            source: 'fuzzy_match',
+          },
+          category: {
+            payeeName: rawPayee,
+            categoryId: (result.categoryId as string) || null,
+            categoryName: (result.categoryName as string) || null,
+            confidence: (result.categoryConfidence as number) ?? 0.5,
+            rationale: result.categoryReasoning as string || 'No matching payee',
+            source: 'fuzzy_match',
+          },
         };
       }
     } catch (error) {
       logger.error('Failed to disambiguate fuzzy matches', {
-        newPayee,
+        rawPayee,
         candidateCount: candidates.length,
         error: error instanceof Error ? error.message : String(error),
       });
       return {
-        payeeName: newPayee,
-        categoryId: null,
-        categoryName: null,
-        confidence: 0,
-        reasoning: 'Fuzzy match disambiguation failed',
+        payee: {
+          payeeName: rawPayee,
+          canonicalPayeeId: null,
+          canonicalPayeeName: null,
+          confidence: 0,
+          rationale: 'Disambiguation failed',
+          source: 'fuzzy_match',
+        },
+        category: {
+          payeeName: rawPayee,
+          categoryId: null,
+          categoryName: null,
+          confidence: 0,
+          rationale: 'Disambiguation failed',
+          source: 'fuzzy_match',
+        },
       };
     }
   }
 
   /**
-   * Categorize a payee using fuzzy matching first, then falling back to LLM
-   * This reduces LLM calls by leveraging existing payee→category mappings
+   * Generate combined payee and category suggestions for a payee
+   * Uses fuzzy matching first, then falls back to AI with web search
    */
-  private async categorizePayeeWithFuzzyMatch(
-    payeeName: string,
+  private async generateCombinedSuggestion(
+    rawPayeeName: string,
     categories: Category[],
-    fuzzyMatchCandidates: PayeeCandidate[]
-  ): Promise<PayeeCategorySuggestion> {
-    // Step 1: Check for high-confidence fuzzy match (score >= 85)
-    const highConfidenceMatch = payeeMatcher.findHighConfidenceMatch(payeeName, fuzzyMatchCandidates);
+    fuzzyMatchCandidates: PayeeCandidate[],
+    budgetId: string
+  ): Promise<CombinedSuggestionResult> {
+    // Step 1: Check payee match cache
+    if (this.payeeMatchCache) {
+      const cachedPayee = this.payeeMatchCache.findByPayee(budgetId, rawPayeeName);
+      if (cachedPayee) {
+        logger.debug('Payee match cache hit', { rawPayeeName, canonicalPayeeName: cachedPayee.canonicalPayeeName });
+        
+        // Use cached payee, but still need to get category
+        const categoryResult = await this.getCategorySuggestionForPayee(
+          rawPayeeName,
+          cachedPayee.canonicalPayeeName,
+          categories,
+          budgetId,
+          fuzzyMatchCandidates
+        );
+        
+        return {
+          payee: {
+            payeeName: rawPayeeName,
+            canonicalPayeeId: cachedPayee.canonicalPayeeId,
+            canonicalPayeeName: cachedPayee.canonicalPayeeName,
+            confidence: cachedPayee.confidence,
+            rationale: `Cached: ${cachedPayee.source === 'user_approved' ? 'Previously approved' : 'High-confidence match'}`,
+            source: 'cache',
+          },
+          category: categoryResult,
+        };
+      }
+    }
+
+    // Step 2: Try high-confidence fuzzy match
+    const highConfidenceMatch = payeeMatcher.findHighConfidenceMatch(rawPayeeName, fuzzyMatchCandidates);
     
     if (highConfidenceMatch) {
       logger.info('Found high-confidence fuzzy match', {
-        payeeName,
+        rawPayeeName,
         matchedPayee: highConfidenceMatch.payeeName,
         score: highConfidenceMatch.score,
-        category: highConfidenceMatch.categoryName,
       });
 
-      // Verify with LLM to determine if match is correct and get category
       const verified = await this.verifyFuzzyMatch(
-        payeeName,
+        rawPayeeName,
         highConfidenceMatch.payeeName,
         highConfidenceMatch.categoryName,
+        highConfidenceMatch.categoryId,
         highConfidenceMatch.score,
         categories
       );
 
-      if (verified.categoryId) {
+      if (verified.payee.confidence > 0 || verified.category.confidence > 0) {
         return verified;
       }
-      // If verification failed, fall through to regular LLM categorization
     }
 
-    // Step 2: Check for potential matches to disambiguate (score 50-84)
+    // Step 3: Try disambiguation with multiple candidates
     const disambiguationCandidates = payeeMatcher.getCandidatesForDisambiguation(
-      payeeName,
+      rawPayeeName,
       fuzzyMatchCandidates
     );
 
     if (disambiguationCandidates.length > 0) {
       logger.info('Found candidates for disambiguation', {
-        payeeName,
+        rawPayeeName,
         candidateCount: disambiguationCandidates.length,
-        topCandidate: disambiguationCandidates[0]?.payeeName,
-        topScore: disambiguationCandidates[0]?.score,
       });
 
-      // Ask LLM to disambiguate
       const disambiguated = await this.disambiguateFuzzyMatches(
-        payeeName,
+        rawPayeeName,
         disambiguationCandidates,
         categories
       );
 
-      if (disambiguated.categoryId) {
+      if (disambiguated.payee.confidence > 0 || disambiguated.category.confidence > 0) {
         return disambiguated;
       }
-      // If disambiguation didn't find a match, fall through to web search
     }
 
-    // Step 3: No fuzzy match found, use regular LLM categorization with web search
-    logger.info('No fuzzy match found, using web search categorization', { payeeName });
-    return this.categorizePayee(payeeName, categories);
+    // Step 4: No fuzzy match - use AI with web search
+    logger.info('No fuzzy match, using AI with web search', { rawPayeeName });
+
+    // First identify the payee
+    const payeeResult = await this.identifyPayee(rawPayeeName);
+    
+    // Then suggest category with web search
+    const categoryResult = await this.suggestCategory(
+      rawPayeeName,
+      payeeResult.canonicalPayeeName,
+      categories,
+      [] // No matched payees
+    );
+
+    return {
+      payee: payeeResult,
+      category: categoryResult,
+    };
   }
 
   /**
-   * Generate suggestions for payees - one LLM call per unique payee
-   * Uses fuzzy matching to reduce LLM calls by leveraging known payee→category mappings
+   * Get category suggestion for a known payee (from cache or fuzzy match)
+   */
+  private async getCategorySuggestionForPayee(
+    rawPayeeName: string,
+    canonicalPayeeName: string,
+    categories: Category[],
+    budgetId: string,
+    fuzzyMatchCandidates: PayeeCandidate[]
+  ): Promise<CategorySuggestionResult> {
+    // Check payee->category cache
+    if (this.payeeCache) {
+      const cachedCategory = this.payeeCache.findByPayee(budgetId, canonicalPayeeName);
+      if (cachedCategory) {
+        return {
+          payeeName: rawPayeeName,
+          categoryId: cachedCategory.categoryId,
+          categoryName: cachedCategory.categoryName,
+          confidence: cachedCategory.confidence,
+          rationale: `Cached: ${cachedCategory.source === 'user_approved' ? 'Previously approved' : 'High-confidence AI'}`,
+          source: 'cache',
+        };
+      }
+    }
+
+    // Find similar payees to provide context
+    const similarPayees = payeeMatcher.findMatches(canonicalPayeeName, fuzzyMatchCandidates, 60)
+      .slice(0, 3)
+      .map(m => ({
+        payeeName: m.payeeName,
+        categoryName: m.categoryName,
+        categoryId: m.categoryId,
+      }));
+
+    // Similar payees provide context hints in the prompt
+    return this.suggestCategory(
+      rawPayeeName,
+      canonicalPayeeName,
+      categories,
+      similarPayees
+    );
+  }
+
+  /**
+   * Generate suggestions for payees - one set of LLM calls per unique payee
+   * Creates independent payee and category suggestions
    */
   private async generateBatchSuggestions(
     budgetId: string,
@@ -675,7 +913,15 @@ Respond with JSON only (no markdown):
     categories: Category[]
   ): Promise<Suggestion[]> {
     const suggestions: Suggestion[] = [];
-    const toCache: Array<{
+    const payeeMatchesToCache: Array<{
+      budgetId: string;
+      rawPayeeName: string;
+      canonicalPayeeId?: string | null;
+      canonicalPayeeName: string;
+      confidence: number;
+      source: 'user_approved' | 'high_confidence_ai' | 'fuzzy_match';
+    }> = [];
+    const categoryMappingsToCache: Array<{
       budgetId: string;
       payeeName: string;
       categoryId: string;
@@ -684,15 +930,16 @@ Respond with JSON only (no markdown):
       source: 'user_approved' | 'high_confidence_ai';
     }> = [];
 
-    logger.info('Processing payees with fuzzy matching', { payeeCount: payeeNames.length });
+    logger.info('Processing payees with independent payee/category suggestions', { payeeCount: payeeNames.length });
 
-    // Build fuzzy match candidates pool (from cache + categorized payees)
+    // Build fuzzy match candidates pool
     const fuzzyMatchCandidates = await this.buildFuzzyMatchCandidates(budgetId);
     logger.info('Fuzzy match candidates loaded', { candidateCount: fuzzyMatchCandidates.length });
 
     // Track stats
+    let cacheHits = 0;
     let fuzzyMatchHits = 0;
-    let webSearchCalls = 0;
+    let aiCalls = 0;
 
     // Process each payee sequentially
     for (let i = 0; i < payeeNames.length; i++) {
@@ -704,18 +951,21 @@ Respond with JSON only (no markdown):
         transactionCount: txns.length,
       });
 
-      // Use fuzzy matching first, then fall back to LLM web search
-      const result = await this.categorizePayeeWithFuzzyMatch(
+      // Generate combined suggestion
+      const result = await this.generateCombinedSuggestion(
         payeeName,
         categories,
-        fuzzyMatchCandidates
+        fuzzyMatchCandidates,
+        budgetId
       );
 
-      // Track whether this was a fuzzy match or web search
-      if (result.reasoning.includes('Fuzzy match') || result.reasoning.includes('Disambiguated')) {
+      // Track source
+      if (result.payee.source === 'cache') {
+        cacheHits++;
+      } else if (result.payee.source === 'fuzzy_match') {
         fuzzyMatchHits++;
       } else {
-        webSearchCalls++;
+        aiCalls++;
       }
 
       // Create suggestions for all transactions with this payee
@@ -729,42 +979,78 @@ Respond with JSON only (no markdown):
           transactionAmount: txn.amount,
           transactionDate: txn.date,
           currentCategoryId: txn.categoryId,
-          proposedCategoryId: result.categoryId || 'unknown',
-          proposedCategoryName: result.categoryName || 'Unknown',
-          suggestedPayeeName: result.suggestedPayeeName || null,
-          confidence: result.confidence,
-          rationale: result.reasoning,
+          currentPayeeId: null, // Would need to look up from actual budget
+
+          // Payee suggestion
+          proposedPayeeId: result.payee.canonicalPayeeId,
+          proposedPayeeName: result.payee.canonicalPayeeName,
+          payeeConfidence: result.payee.confidence,
+          payeeRationale: result.payee.rationale,
+          payeeStatus: result.payee.canonicalPayeeName ? 'pending' : 'skipped',
+
+          // Category suggestion
+          proposedCategoryId: result.category.categoryId,
+          proposedCategoryName: result.category.categoryName,
+          categoryConfidence: result.category.confidence,
+          categoryRationale: result.category.rationale,
+          categoryStatus: 'pending',
         });
         this.suggestionRepo.save(suggestion);
         suggestions.push(suggestion);
       }
 
-      // Cache high-confidence results
-      if (result.categoryId && result.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
-        toCache.push({
+      // Cache high-confidence payee matches
+      if (
+        result.payee.canonicalPayeeName &&
+        result.payee.confidence >= HIGH_CONFIDENCE_THRESHOLD &&
+        result.payee.source !== 'cache'
+      ) {
+        payeeMatchesToCache.push({
           budgetId,
-          payeeName,
-          categoryId: result.categoryId,
-          categoryName: result.categoryName || 'Unknown',
-          confidence: result.confidence,
+          rawPayeeName: payeeName,
+          canonicalPayeeId: result.payee.canonicalPayeeId,
+          canonicalPayeeName: result.payee.canonicalPayeeName,
+          confidence: result.payee.confidence,
+          source: result.payee.source === 'fuzzy_match' ? 'fuzzy_match' : 'high_confidence_ai',
+        });
+      }
+
+      // Cache high-confidence category mappings
+      if (
+        result.category.categoryId &&
+        result.category.confidence >= HIGH_CONFIDENCE_THRESHOLD &&
+        result.category.source !== 'cache'
+      ) {
+        categoryMappingsToCache.push({
+          budgetId,
+          payeeName: result.payee.canonicalPayeeName || payeeName,
+          categoryId: result.category.categoryId,
+          categoryName: result.category.categoryName || 'Unknown',
+          confidence: result.category.confidence,
           source: 'high_confidence_ai',
         });
       }
     }
 
-    // Batch save to cache
-    if (this.payeeCache && toCache.length > 0) {
-      this.payeeCache.saveBatch(toCache);
-      logger.info('Cached high-confidence suggestions', { count: toCache.length });
+    // Batch save to caches
+    if (this.payeeMatchCache && payeeMatchesToCache.length > 0) {
+      this.payeeMatchCache.saveBatch(payeeMatchesToCache);
+      logger.info('Cached high-confidence payee matches', { count: payeeMatchesToCache.length });
+    }
+
+    if (this.payeeCache && categoryMappingsToCache.length > 0) {
+      this.payeeCache.saveBatch(categoryMappingsToCache);
+      logger.info('Cached high-confidence category mappings', { count: categoryMappingsToCache.length });
     }
 
     logger.info('Finished processing all payees', {
       payeeCount: payeeNames.length,
       suggestionsCount: suggestions.length,
-      cachedCount: toCache.length,
+      cacheHits,
       fuzzyMatchHits,
-      webSearchCalls,
-      fuzzyMatchCandidatesAvailable: fuzzyMatchCandidates.length,
+      aiCalls,
+      payeeMatchesCached: payeeMatchesToCache.length,
+      categoryMappingsCached: categoryMappingsToCache.length,
     });
 
     return suggestions;
@@ -785,30 +1071,20 @@ Respond with JSON only (no markdown):
   }
 
   /**
-   * Approve a suggestion and cache the payee→category mapping
+   * Approve a suggestion (legacy - approves both payee and category)
    * P7 (Explicit error handling): Throws NotFoundError if suggestion doesn't exist
    */
   approveSuggestion(suggestionId: string): void {
-    // Get the suggestion to cache its payee→category mapping
     const suggestion = this.suggestionRepo.findById(suggestionId);
+    if (!suggestion) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
     
     this.suggestionRepo.updateStatus(suggestionId, 'approved');
 
-    // Cache the user-approved mapping for future use
-    if (this.payeeCache && suggestion && suggestion.transactionPayee && suggestion.proposedCategoryId !== 'unknown') {
-      this.payeeCache.save({
-        budgetId: suggestion.budgetId,
-        payeeName: suggestion.transactionPayee,
-        categoryId: suggestion.proposedCategoryId,
-        categoryName: suggestion.proposedCategoryName,
-        confidence: 1.0, // User approval = 100% confidence
-        source: 'user_approved',
-      });
-      logger.debug('Cached user-approved mapping', {
-        payee: suggestion.transactionPayee,
-        category: suggestion.proposedCategoryName,
-      });
-    }
+    // Cache both payee and category mappings
+    this.cacheApprovedPayeeMatch(suggestion);
+    this.cacheApprovedCategoryMapping(suggestion);
 
     this.auditRepo.log({
       eventType: 'suggestion_approved',
@@ -816,11 +1092,55 @@ Respond with JSON only (no markdown):
       entityId: suggestionId,
     });
 
-    logger.info('Suggestion approved', { suggestionId });
+    logger.info('Suggestion approved (full)', { suggestionId });
   }
 
   /**
-   * Reject a suggestion
+   * Approve only the payee suggestion
+   */
+  approvePayeeSuggestion(suggestionId: string): void {
+    const suggestion = this.suggestionRepo.findById(suggestionId);
+    if (!suggestion) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    this.suggestionRepo.updatePayeeStatus(suggestionId, 'approved');
+    this.cacheApprovedPayeeMatch(suggestion);
+
+    this.auditRepo.log({
+      eventType: 'suggestion_approved',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+      metadata: { type: 'payee' },
+    });
+
+    logger.info('Payee suggestion approved', { suggestionId });
+  }
+
+  /**
+   * Approve only the category suggestion
+   */
+  approveCategorySuggestion(suggestionId: string): void {
+    const suggestion = this.suggestionRepo.findById(suggestionId);
+    if (!suggestion) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    this.suggestionRepo.updateCategoryStatus(suggestionId, 'approved');
+    this.cacheApprovedCategoryMapping(suggestion);
+
+    this.auditRepo.log({
+      eventType: 'suggestion_approved',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+      metadata: { type: 'category' },
+    });
+
+    logger.info('Category suggestion approved', { suggestionId });
+  }
+
+  /**
+   * Reject a suggestion (legacy - rejects both payee and category)
    */
   rejectSuggestion(suggestionId: string): void {
     this.suggestionRepo.updateStatus(suggestionId, 'rejected');
@@ -831,7 +1151,141 @@ Respond with JSON only (no markdown):
       entityId: suggestionId,
     });
 
-    logger.info('Suggestion rejected', { suggestionId });
+    logger.info('Suggestion rejected (full)', { suggestionId });
+  }
+
+  /**
+   * Reject payee suggestion with optional correction
+   */
+  rejectPayeeSuggestion(
+    suggestionId: string, 
+    correction?: { payeeId?: string; payeeName?: string }
+  ): void {
+    const suggestion = this.suggestionRepo.findById(suggestionId);
+    if (!suggestion) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    this.suggestionRepo.updatePayeeStatus(suggestionId, 'rejected', correction);
+
+    // If user provided correction, cache it
+    if (correction?.payeeName && this.payeeMatchCache) {
+      this.payeeMatchCache.save({
+        budgetId: suggestion.budgetId,
+        rawPayeeName: suggestion.transactionPayee || '',
+        canonicalPayeeId: correction.payeeId || null,
+        canonicalPayeeName: correction.payeeName,
+        confidence: 1.0,
+        source: 'user_approved',
+      });
+      logger.debug('Cached user-corrected payee mapping', {
+        rawPayee: suggestion.transactionPayee,
+        correctedPayee: correction.payeeName,
+      });
+    }
+
+    this.auditRepo.log({
+      eventType: 'suggestion_rejected',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+      metadata: { type: 'payee', correction },
+    });
+
+    logger.info('Payee suggestion rejected', { suggestionId, withCorrection: !!correction });
+  }
+
+  /**
+   * Reject category suggestion with optional correction
+   */
+  rejectCategorySuggestion(
+    suggestionId: string,
+    correction?: { categoryId?: string; categoryName?: string }
+  ): void {
+    const suggestion = this.suggestionRepo.findById(suggestionId);
+    if (!suggestion) {
+      throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    this.suggestionRepo.updateCategoryStatus(suggestionId, 'rejected', correction);
+
+    // If user provided correction, cache it
+    if (correction?.categoryId && this.payeeCache) {
+      const payeeName = suggestion.payeeSuggestion.proposedPayeeName || suggestion.transactionPayee;
+      if (payeeName) {
+        this.payeeCache.save({
+          budgetId: suggestion.budgetId,
+          payeeName,
+          categoryId: correction.categoryId,
+          categoryName: correction.categoryName || 'Unknown',
+          confidence: 1.0,
+          source: 'user_approved',
+        });
+        logger.debug('Cached user-corrected category mapping', {
+          payee: payeeName,
+          correctedCategory: correction.categoryName,
+        });
+      }
+    }
+
+    this.auditRepo.log({
+      eventType: 'suggestion_rejected',
+      entityType: 'Suggestion',
+      entityId: suggestionId,
+      metadata: { type: 'category', correction },
+    });
+
+    logger.info('Category suggestion rejected', { suggestionId, withCorrection: !!correction });
+  }
+
+  /**
+   * Cache approved payee match
+   */
+  private cacheApprovedPayeeMatch(suggestion: Suggestion): void {
+    if (
+      this.payeeMatchCache && 
+      suggestion.transactionPayee && 
+      suggestion.payeeSuggestion.proposedPayeeName
+    ) {
+      this.payeeMatchCache.save({
+        budgetId: suggestion.budgetId,
+        rawPayeeName: suggestion.transactionPayee,
+        canonicalPayeeId: suggestion.payeeSuggestion.proposedPayeeId,
+        canonicalPayeeName: suggestion.payeeSuggestion.proposedPayeeName,
+        confidence: 1.0,
+        source: 'user_approved',
+      });
+      logger.debug('Cached user-approved payee match', {
+        rawPayee: suggestion.transactionPayee,
+        canonicalPayee: suggestion.payeeSuggestion.proposedPayeeName,
+      });
+    }
+  }
+
+  /**
+   * Cache approved category mapping
+   */
+  private cacheApprovedCategoryMapping(suggestion: Suggestion): void {
+    if (
+      this.payeeCache && 
+      suggestion.categorySuggestion.proposedCategoryId &&
+      suggestion.categorySuggestion.proposedCategoryId !== 'unknown'
+    ) {
+      const payeeName = suggestion.payeeSuggestion.proposedPayeeName || suggestion.transactionPayee;
+      if (payeeName) {
+        this.payeeCache.save({
+          budgetId: suggestion.budgetId,
+          payeeName,
+          categoryId: suggestion.categorySuggestion.proposedCategoryId,
+          categoryName: suggestion.categorySuggestion.proposedCategoryName || 'Unknown',
+          confidence: 1.0,
+          source: 'user_approved',
+        });
+        logger.debug('Cached user-approved category mapping', {
+          payee: payeeName,
+          category: suggestion.categorySuggestion.proposedCategoryName,
+        });
+      }
+    }
   }
 
   /**
@@ -912,14 +1366,14 @@ Respond with JSON only (no markdown):
     const uniquePayees = Array.from(byPayee.keys());
 
     // Check cache for known payees
-    const { cached, uncached } = await this.checkPayeeCache(budgetId, uniquePayees);
+    const { cached: cachedCategories, uncached } = await this.checkPayeeCategoryCache(budgetId, uniquePayees);
 
-    logger.info(`Diff sync: ${cached.size} cached, ${uncached.length} need LLM`);
+    logger.info(`Diff sync: ${cachedCategories.size} cached, ${uncached.length} need LLM`);
 
     // Create suggestions from cache
     const suggestions: Suggestion[] = [];
     
-    for (const [payeeName, cacheEntry] of cached) {
+    for (const [payeeName, cacheEntry] of cachedCategories) {
       const txns = byPayee.get(payeeName) || [];
       for (const txn of txns) {
         const suggestion = createSuggestion({
@@ -931,10 +1385,16 @@ Respond with JSON only (no markdown):
           transactionAmount: txn.amount,
           transactionDate: txn.date,
           currentCategoryId: txn.categoryId,
+          currentPayeeId: null,
+          
+          // Payee - skip for cached
+          payeeStatus: 'skipped',
+          
+          // Category from cache
           proposedCategoryId: cacheEntry.categoryId,
           proposedCategoryName: cacheEntry.categoryName,
-          confidence: cacheEntry.confidence,
-          rationale: `Cached: ${cacheEntry.source === 'user_approved' ? 'Previously approved by user' : 'High-confidence AI suggestion'}`,
+          categoryConfidence: cacheEntry.confidence,
+          categoryRationale: `Cached: ${cacheEntry.source === 'user_approved' ? 'Previously approved by user' : 'High-confidence AI suggestion'}`,
         });
         this.suggestionRepo.save(suggestion);
         suggestions.push(suggestion);
@@ -960,7 +1420,7 @@ Respond with JSON only (no markdown):
       metadata: {
         suggestionsCount: suggestions.length,
         newUncategorizedCount: uncategorized.length,
-        cacheHits: cached.size,
+        cacheHits: cachedCategories.size,
         llmCalls: uncached.length > 0 ? 1 : 0,
         mode: 'diff',
       },
@@ -968,7 +1428,7 @@ Respond with JSON only (no markdown):
 
     logger.info('Diff-based suggestions generated', {
       count: suggestions.length,
-      cacheHits: cached.size,
+      cacheHits: cachedCategories.size,
       llmPayees: uncached.length,
       budgetId,
     });

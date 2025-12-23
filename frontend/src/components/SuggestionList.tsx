@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Suggestion } from '../services/api';
+import { api, type Suggestion, type SuggestionComponentStatus } from '../services/api';
 import './SuggestionList.css';
 
 interface SuggestionListProps {
@@ -10,17 +10,34 @@ interface SuggestionListProps {
 /** Group of suggestions for a single payee */
 interface PayeeGroup {
   payeeName: string;
+  suggestedPayeeName: string | null;
   suggestions: Suggestion[];
   pendingCount: number;
   proposedCategory: string;
   proposedCategoryId: string;
   avgConfidence: number;
-  rationale: string;
+  payeeConfidence: number;
+  categoryConfidence: number;
+  payeeRationale: string;
+  categoryRationale: string;
+  hasPayeeSuggestion: boolean;
+  payeeStatus: SuggestionComponentStatus;
+  categoryStatus: SuggestionComponentStatus;
+}
+
+/** Correction modal state */
+interface CorrectionModalState {
+  isOpen: boolean;
+  type: 'payee' | 'category';
+  suggestionId: string;
+  currentValue: string;
 }
 
 export function SuggestionList({ budgetId }: SuggestionListProps) {
   const queryClient = useQueryClient();
   const [expandedPayees, setExpandedPayees] = useState<Set<string>>(new Set());
+  const [correctionModal, setCorrectionModal] = useState<CorrectionModalState | null>(null);
+  const [correctionInput, setCorrectionInput] = useState('');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['suggestions', budgetId],
@@ -32,6 +49,40 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     mutationFn: () => api.syncAndGenerateSuggestions(budgetId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions', budgetId] });
+    },
+  });
+
+  const approvePayeeMutation = useMutation({
+    mutationFn: (id: string) => api.approvePayeeSuggestion(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+    },
+  });
+
+  const approveCategoryMutation = useMutation({
+    mutationFn: (id: string) => api.approveCategorySuggestion(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+    },
+  });
+
+  const rejectPayeeMutation = useMutation({
+    mutationFn: ({ id, correction }: { id: string; correction?: { payeeName?: string } }) => 
+      api.rejectPayeeSuggestion(id, correction),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+      setCorrectionModal(null);
+      setCorrectionInput('');
+    },
+  });
+
+  const rejectCategoryMutation = useMutation({
+    mutationFn: ({ id, correction }: { id: string; correction?: { categoryId?: string; categoryName?: string } }) =>
+      api.rejectCategorySuggestion(id, correction),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+      setCorrectionModal(null);
+      setCorrectionInput('');
     },
   });
 
@@ -59,6 +110,27 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
       }
       return next;
     });
+  };
+
+  const openCorrectionModal = (type: 'payee' | 'category', suggestionId: string, currentValue: string) => {
+    setCorrectionModal({ isOpen: true, type, suggestionId, currentValue });
+    setCorrectionInput('');
+  };
+
+  const handleCorrectionSubmit = () => {
+    if (!correctionModal) return;
+    
+    if (correctionModal.type === 'payee') {
+      rejectPayeeMutation.mutate({
+        id: correctionModal.suggestionId,
+        correction: correctionInput ? { payeeName: correctionInput } : undefined,
+      });
+    } else {
+      rejectCategoryMutation.mutate({
+        id: correctionModal.suggestionId,
+        correction: correctionInput ? { categoryName: correctionInput } : undefined,
+      });
+    }
   };
 
   if (isLoading) {
@@ -106,6 +178,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               .filter(s => s.status === 'pending')
               .map(s => s.id);
             const hasPending = pendingIds.length > 0;
+            const firstSuggestion = group.suggestions[0];
 
             return (
               <div 
@@ -114,7 +187,14 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               >
                 <div className="payee-card-header" onClick={() => toggleExpanded(group.payeeName)}>
                   <div className="payee-info">
-                    <span className="payee-name">{group.payeeName}</span>
+                    <div className="payee-name-container">
+                      <span className="payee-name">{group.payeeName}</span>
+                      {group.suggestedPayeeName && group.suggestedPayeeName !== group.payeeName && (
+                        <span className="suggested-payee-badge" title="AI-suggested canonical name">
+                          → {group.suggestedPayeeName}
+                        </span>
+                      )}
+                    </div>
                     <span className="transaction-count">
                       {group.suggestions.length} transaction{group.suggestions.length !== 1 ? 's' : ''}
                       {group.pendingCount > 0 && ` (${group.pendingCount} pending)`}
@@ -129,8 +209,85 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                   </div>
                 </div>
 
-                <div className="payee-rationale" title={group.rationale}>
-                  {group.rationale}
+                {/* Separate Payee and Category sections */}
+                <div className="suggestion-components">
+                  {/* Payee Suggestion */}
+                  {group.hasPayeeSuggestion && group.payeeStatus === 'pending' && (
+                    <div className="suggestion-component payee-component">
+                      <div className="component-header">
+                        <span className="component-label">📝 Payee</span>
+                        <span className={`confidence-mini confidence-${getConfidenceLevel(group.payeeConfidence)}`}>
+                          {Math.round(group.payeeConfidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="component-value">
+                        {group.payeeName} → <strong>{group.suggestedPayeeName}</strong>
+                      </div>
+                      <div className="component-rationale" title={group.payeeRationale}>
+                        {group.payeeRationale}
+                      </div>
+                      <div className="component-actions">
+                        <button
+                          className="btn btn-sm btn-approve"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            approvePayeeMutation.mutate(firstSuggestion.id);
+                          }}
+                          disabled={approvePayeeMutation.isPending}
+                        >
+                          ✓ Accept
+                        </button>
+                        <button
+                          className="btn btn-sm btn-reject"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCorrectionModal('payee', firstSuggestion.id, group.suggestedPayeeName || '');
+                          }}
+                        >
+                          ✗ Correct
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category Suggestion */}
+                  {group.categoryStatus === 'pending' && (
+                    <div className="suggestion-component category-component">
+                      <div className="component-header">
+                        <span className="component-label">📁 Category</span>
+                        <span className={`confidence-mini confidence-${getConfidenceLevel(group.categoryConfidence)}`}>
+                          {Math.round(group.categoryConfidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="component-value">
+                        <strong>{group.proposedCategory}</strong>
+                      </div>
+                      <div className="component-rationale" title={group.categoryRationale}>
+                        {group.categoryRationale}
+                      </div>
+                      <div className="component-actions">
+                        <button
+                          className="btn btn-sm btn-approve"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            approveCategoryMutation.mutate(firstSuggestion.id);
+                          }}
+                          disabled={approveCategoryMutation.isPending}
+                        >
+                          ✓ Accept
+                        </button>
+                        <button
+                          className="btn btn-sm btn-reject"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCorrectionModal('category', firstSuggestion.id, group.proposedCategory);
+                          }}
+                        >
+                          ✗ Correct
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {hasPending && (
@@ -195,6 +352,41 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
         </div>
       )}
       
+      {/* Correction Modal */}
+      {correctionModal && (
+        <div className="modal-overlay" onClick={() => setCorrectionModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Provide Correct {correctionModal.type === 'payee' ? 'Payee' : 'Category'}</h3>
+            <p className="modal-hint">
+              Current suggestion: <strong>{correctionModal.currentValue}</strong>
+            </p>
+            <input
+              type="text"
+              className="correction-input"
+              placeholder={`Enter correct ${correctionModal.type}...`}
+              value={correctionInput}
+              onChange={(e) => setCorrectionInput(e.target.value)}
+              autoFocus
+            />
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setCorrectionModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-reject"
+                onClick={handleCorrectionSubmit}
+                disabled={rejectPayeeMutation.isPending || rejectCategoryMutation.isPending}
+              >
+                {correctionInput ? 'Submit Correction' : 'Reject Without Correction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="legend">
         <span className="legend-item">
           <span className="legend-color confidence-high"></span> High confidence (≥80%)
@@ -228,16 +420,34 @@ function groupByPayee(suggestions: Suggestion[]): PayeeGroup[] {
     const avgConfidence = items.reduce((sum, s) => sum + s.confidence, 0) / items.length;
     // Use first suggestion's category/rationale as representative
     const first = items[0];
+    
+    // Extract independent payee and category data
+    const payeeSuggestion = first.payeeSuggestion;
+    const categorySuggestion = first.categorySuggestion;
+    
+    // Determine if there's a meaningful payee suggestion (different from original)
+    const hasPayeeSuggestion = !!(
+      payeeSuggestion?.proposedPayeeName && 
+      payeeSuggestion.proposedPayeeName !== payeeName
+    );
+    
     result.push({
       payeeName,
+      suggestedPayeeName: payeeSuggestion?.proposedPayeeName || first.suggestedPayeeName || null,
       suggestions: items.sort((a, b) => 
         new Date(b.transactionDate || 0).getTime() - new Date(a.transactionDate || 0).getTime()
       ),
       pendingCount: pendingItems.length,
-      proposedCategory: first.proposedCategoryName || 'Unknown',
-      proposedCategoryId: first.proposedCategoryId,
+      proposedCategory: categorySuggestion?.proposedCategoryName || first.proposedCategoryName || 'Unknown',
+      proposedCategoryId: categorySuggestion?.proposedCategoryId || first.proposedCategoryId,
       avgConfidence,
-      rationale: first.rationale,
+      payeeConfidence: payeeSuggestion?.confidence ?? first.confidence,
+      categoryConfidence: categorySuggestion?.confidence ?? first.confidence,
+      payeeRationale: payeeSuggestion?.rationale || 'No payee change suggested',
+      categoryRationale: categorySuggestion?.rationale || first.rationale || 'No rationale provided',
+      hasPayeeSuggestion,
+      payeeStatus: payeeSuggestion?.status || 'skipped',
+      categoryStatus: categorySuggestion?.status || 'pending',
     });
   }
 

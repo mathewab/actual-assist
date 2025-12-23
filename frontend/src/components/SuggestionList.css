@@ -115,10 +115,45 @@
 }
 
 /* Payee */
+.payee-name-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .payee-name {
   font-weight: 600;
   color: #333;
   font-size: 1.1rem;
+}
+
+.suggested-payee-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+  animation: suggestGlow 2s ease-in-out infinite alternate;
+}
+
+.suggested-payee-badge::before {
+  content: '✨';
+  font-size: 0.9rem;
+}
+
+@keyframes suggestGlow {
+  from {
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+  }
+  to {
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+  }
 }
 
 /* Payee Cards Layout */
@@ -462,4 +497,200 @@
   .legend-hint {
     margin-left: 0;
   }
+}
+
+/* Suggestion Components - Independent Payee/Category Sections */
+.suggestion-components {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #f8f9fa;
+  border-top: 1px solid #eee;
+}
+
+.suggestion-component {
+  flex: 1;
+  min-width: 280px;
+  padding: 14px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.payee-component {
+  border-left: 3px solid #667eea;
+}
+
+.category-component {
+  border-left: 3px solid #1565c0;
+}
+
+.component-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.component-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.confidence-mini {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.component-value {
+  font-size: 1rem;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.component-value strong {
+  color: #1565c0;
+}
+
+.component-rationale {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.component-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+.btn-sm.btn-approve {
+  background: #4caf50;
+  color: white;
+}
+
+.btn-sm.btn-approve:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.btn-sm.btn-reject {
+  background: #ef5350;
+  color: white;
+}
+
+.btn-sm.btn-reject:hover:not(:disabled) {
+  background: #e53935;
+}
+
+/* Correction Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-content h3 {
+  margin: 0 0 12px;
+  color: #333;
+  font-size: 1.25rem;
+}
+
+.modal-hint {
+  margin: 0 0 16px;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.modal-hint strong {
+  color: #1565c0;
+}
+
+.correction-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.correction-input:focus {
+  outline: none;
+  border-color: #1565c0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.btn-secondary {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #d0d0d0;
+}
+
+.btn-reject {
+  background: #ef5350;
+  color: white;
+}
+
+.btn-reject:hover:not(:disabled) {
+  background: #e53935;
 }

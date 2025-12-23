@@ -3,25 +3,24 @@ import { OpenAIError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
 
-/** Options for chat completion */
-export interface ChatCompletionOptions {
-  systemPrompt?: string;
-  userPrompt: string;
-  temperature?: number;
-  jsonResponse?: boolean;
-}
-
-/** Options for responses API with web search */
-export interface WebSearchCompletionOptions {
-  prompt: string;
+/** Options for completion using Responses API */
+export interface CompletionOptions {
+  /** System instructions for the model */
+  instructions?: string;
+  /** User input/prompt */
+  input: string;
+  /** Enable web search tool for up-to-date information */
+  webSearch?: boolean;
 }
 
 /**
- * OpenAI API adapter - generic wrapper for OpenAI API calls
+ * OpenAI API adapter - generic wrapper for OpenAI Responses API
  * P5 (Separation of concerns): Domain layer never imports OpenAI directly
  * 
- * This adapter is intentionally generic and reusable by any service.
- * Prompt construction belongs in the calling service, not here.
+ * Uses the Responses API which supports:
+ * - System instructions separate from input
+ * - Optional web search tool for real-time information
+ * - Consistent interface for all completion types
  */
 export class OpenAIAdapter {
   private client: OpenAI;
@@ -35,68 +34,64 @@ export class OpenAIAdapter {
   }
 
   /**
-   * Simple chat completion (no web search)
-   * Use for tasks where the model has sufficient knowledge
+   * Generate completion using the Responses API
+   * @param options.instructions - System instructions for the model
+   * @param options.input - User input/prompt
+   * @param options.webSearch - Enable web search for up-to-date information
    */
-  async chatCompletion(options: ChatCompletionOptions): Promise<string> {
+  async completion(options: CompletionOptions): Promise<string> {
     try {
-      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-      
-      if (options.systemPrompt) {
-        messages.push({ role: 'system', content: options.systemPrompt });
-      }
-      messages.push({ role: 'user', content: options.userPrompt });
+      const tools: OpenAI.Responses.Tool[] = options.webSearch 
+        ? [{ type: 'web_search_preview' }] 
+        : [];
 
-      const response = await this.client.chat.completions.create({
+      logger.info('Calling OpenAI Responses API', {
         model: this.model,
-        messages,
-        temperature: options.temperature ?? 0.3,
-        response_format: options.jsonResponse ? { type: 'json_object' } : undefined,
+        webSearch: options.webSearch ?? false,
+        inputLength: options.input.length,
+        hasInstructions: !!options.instructions,
       });
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new OpenAIError('Empty response from OpenAI');
-      }
-
-      logger.debug('OpenAI chat completion', {
-        promptLength: options.userPrompt.length,
-        responseLength: content.length,
-      });
-
-      return content;
-    } catch (error) {
-      if (error instanceof OpenAIError) {
-        throw error;
-      }
-      logger.error('OpenAI chat completion failed', { error });
-      throw new OpenAIError('Chat completion failed', { error });
-    }
-  }
-
-  /**
-   * Completion with web search using Responses API
-   * Use for tasks requiring up-to-date information (e.g., merchant identification)
-   */
-  async webSearchCompletion(options: WebSearchCompletionOptions): Promise<string> {
-    try {
       const response = await this.client.responses.create({
         model: this.model,
-        tools: [{ type: 'web_search_preview' }],
-        input: options.prompt,
+        instructions: options.instructions,
+        input: options.input,
+        tools: tools.length > 0 ? tools : undefined,
       });
+
+      // Log response structure for debugging
+      logger.debug('OpenAI Responses API response', {
+        outputCount: response.output.length,
+        outputTypes: response.output.map(item => item.type),
+      });
+
+      // Check if web search was performed (when enabled)
+      if (options.webSearch) {
+        const webSearchItem = response.output.find(item => item.type === 'web_search_call');
+        if (webSearchItem) {
+          logger.info('Web search was performed', { 
+            status: (webSearchItem as any).status,
+          });
+        } else {
+          logger.warn('Web search was enabled but NOT performed');
+        }
+      }
 
       // Extract text content from response
       const textOutput = response.output.find(item => item.type === 'message');
       const content = textOutput?.content?.find(c => c.type === 'output_text')?.text;
       
       if (!content) {
+        logger.error('Empty response from OpenAI', {
+          outputs: JSON.stringify(response.output, null, 2),
+        });
         throw new OpenAIError('Empty response from OpenAI');
       }
 
-      logger.debug('OpenAI web search completion', {
-        promptLength: options.prompt.length,
+      logger.info('OpenAI completion successful', {
+        inputLength: options.input.length,
         responseLength: content.length,
+        webSearch: options.webSearch ?? false,
       });
 
       return content;
@@ -104,8 +99,11 @@ export class OpenAIAdapter {
       if (error instanceof OpenAIError) {
         throw error;
       }
-      logger.error('OpenAI web search completion failed', { error });
-      throw new OpenAIError('Web search completion failed', { error });
+      logger.error('OpenAI completion failed', { 
+        error,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw new OpenAIError('Completion failed', { error });
     }
   }
 

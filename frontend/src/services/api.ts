@@ -10,6 +10,49 @@ export interface Budget {
   name: string;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  groupName?: string;
+}
+
+export interface Payee {
+  id: string;
+  name: string;
+}
+
+/** Status for individual suggestion components */
+export type SuggestionComponentStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'skipped';
+
+/** Legacy combined status */
+export type SuggestionStatus = 'pending' | 'approved' | 'rejected' | 'applied';
+
+/** Payee suggestion component */
+export interface PayeeSuggestionComponent {
+  proposedPayeeId: string | null;
+  proposedPayeeName: string | null;
+  confidence: number;
+  rationale: string;
+  status: SuggestionComponentStatus;
+}
+
+/** Category suggestion component */
+export interface CategorySuggestionComponent {
+  proposedCategoryId: string | null;
+  proposedCategoryName: string | null;
+  confidence: number;
+  rationale: string;
+  status: SuggestionComponentStatus;
+}
+
+/** Correction data */
+export interface SuggestionCorrection {
+  correctedPayeeId: string | null;
+  correctedPayeeName: string | null;
+  correctedCategoryId: string | null;
+  correctedCategoryName: string | null;
+}
+
 export interface Suggestion {
   id: string;
   budgetId: string;
@@ -20,11 +63,20 @@ export interface Suggestion {
   transactionAmount: number | null;
   transactionDate: string | null;
   currentCategoryId: string | null;
+  currentPayeeId: string | null;
+  
+  // Independent suggestion components
+  payeeSuggestion: PayeeSuggestionComponent;
+  categorySuggestion: CategorySuggestionComponent;
+  correction: SuggestionCorrection;
+  
+  // Legacy fields for backward compatibility
   proposedCategoryId: string;
   proposedCategoryName: string;
+  suggestedPayeeName: string | null;
   confidence: number;
   rationale: string;
-  status: 'pending' | 'approved' | 'rejected' | 'applied';
+  status: SuggestionStatus;
   createdAt: string;
 }
 
@@ -162,6 +214,76 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to reject suggestion');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Approve only the payee suggestion
+   */
+  async approvePayeeSuggestion(suggestionId: string) {
+    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/approve-payee`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to approve payee suggestion');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Approve only the category suggestion
+   */
+  async approveCategorySuggestion(suggestionId: string) {
+    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/approve-category`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to approve category suggestion');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Reject payee suggestion with optional correction
+   */
+  async rejectPayeeSuggestion(
+    suggestionId: string, 
+    correction?: { payeeId?: string; payeeName?: string }
+  ) {
+    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reject-payee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(correction || {}),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to reject payee suggestion');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Reject category suggestion with optional correction
+   */
+  async rejectCategorySuggestion(
+    suggestionId: string,
+    correction?: { categoryId?: string; categoryName?: string }
+  ) {
+    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reject-category`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(correction || {}),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to reject category suggestion');
     }
 
     return response.json();

@@ -3,6 +3,7 @@
 -- Purpose: Track AI categorization suggestions and user actions
 
 -- Suggestions table: AI-generated categorization recommendations
+-- Supports independent payee and category suggestions with separate confidence/rationale
 CREATE TABLE IF NOT EXISTS suggestions (
   id TEXT PRIMARY KEY,              -- UUID v4
   budget_id TEXT NOT NULL,          -- Actual Budget ID (budgetId)
@@ -13,12 +14,34 @@ CREATE TABLE IF NOT EXISTS suggestions (
   transaction_amount REAL,          -- Transaction amount
   transaction_date TEXT,            -- Transaction date
   current_category_id TEXT,         -- Current category ID (may be NULL)
-  proposed_category_id TEXT NOT NULL, -- Proposed category ID
-  proposed_category_name TEXT NOT NULL,
-  suggested_payee_name TEXT,        -- LLM-suggested canonical payee name from fuzzy match
-  confidence REAL NOT NULL,         -- 0.0 to 1.0
-  rationale TEXT NOT NULL,          -- AI explanation
-  status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'rejected', 'applied')),
+  current_payee_id TEXT,            -- Current payee ID (if exists)
+  
+  -- Payee suggestion fields
+  proposed_payee_id TEXT,           -- Proposed canonical payee ID
+  proposed_payee_name TEXT,         -- Proposed canonical payee name
+  payee_confidence REAL DEFAULT 0,  -- Payee suggestion confidence 0.0 to 1.0
+  payee_rationale TEXT,             -- Payee suggestion reasoning
+  payee_status TEXT DEFAULT 'pending' CHECK(payee_status IN ('pending', 'approved', 'rejected', 'applied', 'skipped')),
+  
+  -- Category suggestion fields  
+  proposed_category_id TEXT,        -- Proposed category ID (nullable now)
+  proposed_category_name TEXT,      -- Proposed category name
+  category_confidence REAL DEFAULT 0, -- Category suggestion confidence 0.0 to 1.0
+  category_rationale TEXT,          -- Category suggestion reasoning
+  category_status TEXT DEFAULT 'pending' CHECK(category_status IN ('pending', 'approved', 'rejected', 'applied', 'skipped')),
+  
+  -- Legacy fields for backward compatibility (will be deprecated)
+  suggested_payee_name TEXT,        -- LLM-suggested canonical payee name (legacy)
+  confidence REAL NOT NULL DEFAULT 0, -- Combined confidence (legacy, computed)
+  rationale TEXT NOT NULL DEFAULT '', -- Combined rationale (legacy, computed)
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected', 'applied')),
+  
+  -- Correction fields (when user rejects with correction)
+  corrected_payee_id TEXT,          -- User-provided correct payee ID
+  corrected_payee_name TEXT,        -- User-provided correct payee name
+  corrected_category_id TEXT,       -- User-provided correct category ID
+  corrected_category_name TEXT,     -- User-provided correct category name
+  
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -71,3 +94,23 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id)
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_payee_cache_budget ON payee_category_cache(budget_id);
 CREATE INDEX IF NOT EXISTS idx_payee_cache_payee ON payee_category_cache(payee_name);
+
+-- Payee match cache: Store learned payee name normalizations (raw payee -> canonical payee)
+-- Separate from category cache to independently cache payee matching
+CREATE TABLE IF NOT EXISTS payee_match_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  budget_id TEXT NOT NULL,
+  raw_payee_name TEXT NOT NULL,           -- Normalized raw payee name from transaction
+  raw_payee_name_original TEXT NOT NULL,  -- Original raw payee name for display
+  canonical_payee_id TEXT,                -- Canonical payee ID in Actual Budget (if exists)
+  canonical_payee_name TEXT NOT NULL,     -- Canonical/clean payee name
+  confidence REAL NOT NULL,               -- Confidence in this mapping
+  source TEXT NOT NULL CHECK(source IN ('user_approved', 'high_confidence_ai', 'fuzzy_match')),
+  hit_count INTEGER DEFAULT 1,            -- Number of times this cache entry was used
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(budget_id, raw_payee_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payee_match_cache_budget ON payee_match_cache(budget_id);
+CREATE INDEX IF NOT EXISTS idx_payee_match_cache_payee ON payee_match_cache(raw_payee_name);

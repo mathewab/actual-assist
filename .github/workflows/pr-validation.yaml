@@ -43,9 +43,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
       
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       
       - name: Build
         run: npm run build
@@ -71,9 +73,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
       
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       
       - name: Run unit tests
         run: npm run test:unit
@@ -99,9 +103,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
       
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       
       - name: Run ESLint
         run: npm run lint
@@ -122,9 +128,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
       
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       
       - name: Build
         run: npm run build

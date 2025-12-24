@@ -25,6 +25,9 @@ COPY backend/src ./src
 # Build TypeScript
 RUN npm run build -w backend
 
+# Copy non-TypeScript assets (SQL files, etc.)
+COPY backend/src/infra/db/schema.sql ./dist/infra/db/
+
 # Production image
 FROM node:20-alpine
 
@@ -37,6 +40,7 @@ RUN npm ci -w backend --omit=dev
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
+COPY backend/package.json ./package.json
 
 # Create data directory
 RUN mkdir -p /app/data

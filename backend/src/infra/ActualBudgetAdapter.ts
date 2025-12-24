@@ -436,6 +436,10 @@ export class ActualBudgetAdapter {
     }
   }
 
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
   private ensureInitialized(): void {
     if (!this.initialized) {
       throw new ActualBudgetError('Actual Budget API not initialized');

@@ -1,0 +1,6 @@
+# Helm ignore patterns
+README.md
+.git
+.gitignore
+tests/
+.helmignore

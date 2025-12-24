@@ -1,0 +1,35 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+  https://{{ index .Values.ingress.hosts 0 "host" }}
+{{- else if contains "NodePort" .Values.frontend.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "actual-assist.fullname" . }}-frontend)
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.frontend.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "actual-assist.fullname" . }}-frontend
+{{- else if contains "ClusterIP" .Values.frontend.service.type }}
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "actual-assist.fullname" . }}-frontend 80:{{ .Values.frontend.service.port }}
+  Then access the application at http://localhost
+{{- end }}
+
+2. Check the backend service:
+  kubectl get --namespace {{ .Release.Namespace }} svc {{ include "actual-assist.fullname" . }}-backend
+
+3. Verify the deployments:
+  kubectl get deployments --namespace {{ .Release.Namespace }}
+
+4. View logs for backend:
+  kubectl logs -f --namespace {{ .Release.Namespace }} deployment/{{ include "actual-assist.fullname" . }}-backend
+
+5. View logs for frontend:
+  kubectl logs -f --namespace {{ .Release.Namespace }} deployment/{{ include "actual-assist.fullname" . }}-frontend
+
+6. Required secrets to configure before using:
+  - OPENAI_API_KEY (from OpenAI)
+  - ACTUAL_SERVER_URL (Actual Budget server endpoint)
+  - ACTUAL_PASSWORD (Actual Budget password)
+  - ACTUAL_BUDGET_ID (optional, for POC single-budget mode)
+
+  Update these in values.yaml secrets section or use helm --set flags:
+  helm upgrade {{ .Release.Name }} . --set secrets.openaiApiKey="sk-..." --set secrets.actualServerUrl="..." --set secrets.actualPassword="..."

@@ -66,6 +66,19 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Readiness endpoint
+app.get('/ready', async (_req: Request, res: Response) => {
+  try {
+    db.queryOne('SELECT 1 as ok');
+    if (!actualBudget.isInitialized()) {
+      return res.status(503).json({ status: 'not-ready' });
+    }
+    res.json({ status: 'ready' });
+  } catch {
+    res.status(503).json({ status: 'not-ready' });
+  }
+});
+
 // Mount API routes
 const apiRouter = createApiRouter({
   snapshotService,

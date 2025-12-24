@@ -131,9 +131,33 @@ frontend/
 │   └── integration/        # Playwright UI flows
 │       └── setup.spec.ts
 └── package.json
+
+helm/
+├── Chart.yaml              # Helm chart metadata (name, version, description)
+├── values.yaml             # Default configuration (secrets, storage, replicas)
+├── values-dev.yaml         # Development overrides
+├── values-prod.yaml        # Production overrides
+├── templates/
+│   ├── deployment.yaml     # Backend + frontend deployments
+│   ├── service.yaml        # Services for backend and frontend
+│   ├── configmap.yaml      # Non-secret config (env vars, file mounts)
+│   ├── secret.yaml         # Secret resource (OPENAI_API_KEY, ACTUAL_PASSWORD)
+│   ├── pvc.yaml            # PersistentVolumeClaim for budget data and SQLite
+│   ├── ingress.yaml        # Ingress for home-ops (optional, values-driven)
+│   ├── _helpers.tpl        # Template helpers (labels, selector)
+│   └── NOTES.txt           # Post-install instructions
+├── README.md               # Helm chart documentation (quick install, values reference)
+└── .helmignore             # Ignore patterns for Helm package
+
+.github/
+├── workflows/
+│   ├── pr-validation.yaml   # Lint, build, test on PR (backend + frontend)
+│   └── release.yaml         # Build and publish Docker images on release tag
+└── CODEOWNERS              # Code ownership for review automation (optional)
+
 ```
 
-**Structure Decision**: Web application (backend + frontend) selected per constitution requirement for UI. Domain logic isolated per P5; adapters wrap @actual-app/api and OpenAI SDK per P6. Tests mirror structure per constitution constraints.
+**Structure Decision**: Web application (backend + frontend) selected per constitution requirement for UI. Domain logic isolated per P5; adapters wrap @actual-app/api and OpenAI SDK per P6. Tests mirror structure per constitution constraints. Helm chart added for home-ops deployment with support for dev/prod overrides per FR-012. GitHub Actions added for CI/CD: PR validation (lint/build/test) and release automation (Docker publish).
 
 ## Additional Dependencies (December 2025)
 
@@ -141,6 +165,9 @@ frontend/
 |---------|---------|-------|
 | `fuzzball` | Fuzzy string matching for payee names | Backend infra |
 | `react-router-dom` | Client-side routing for multi-page navigation | Frontend |
+| Helm 3.x | Kubernetes package manager for deployment; not a code dependency | DevOps/deployment |
+| Kubernetes 1.24+ | Target platform for Helm chart deployment | DevOps/deployment |
+| GitHub Actions | Native CI/CD platform; no additional dependencies; configured via YAML workflows in .github/workflows/ | DevOps/deployment |
 
 ## Complexity Tracking
 
@@ -151,6 +178,8 @@ frontend/
 | SQLite dependency (P6) | Need persistent audit log, suggestion staging, and caches across server restarts | In-memory storage insufficient for multi-session debugging; exit strategy: PostgreSQL (swap repo implementation) or remove if audit not required |
 | React frontend (P9) | UI requirement from spec; CLI insufficient for diff preview and bulk approve/reject | Pure CLI cannot show side-by-side diffs or interactive toggles without excessive scrolling; exit: replace with simpler HTML+htmx if React overhead unjustified |
 | fuzzball dependency (P6) | Fuzzy matching essential for payee normalization; no built-in JS equivalent | Manual Levenshtein too slow; fuzzball is well-maintained with MIT license |
+| Helm chart (P6) | Deployment requirement (FR-012); Kubernetes-native packaging for home-ops installation | Alternative: distribute Docker Compose only; Helm enables declarative, reusable infrastructure; exit: remove Helm, keep docker-compose.yml as primary deployment method |
+| GitHub Actions (P10) | CI/CD automation for quality gates (lint/build/test on PR) and release pipeline (Docker publish); improves reviewability and reduces manual deployment errors | Alternative: manual CI (GitLab, Gitea, Jenkins); GitHub Actions is free for public repos and GitHub-native, reducing toolchain complexity; exit: remove and rely on manual CI or external services |
 
 ## POC Phase Breakdown
 
@@ -240,7 +269,41 @@ frontend/
 - **P7 (Error Handling)**: Budget download failures → BudgetDownloadError; AI timeouts → AISuggestTimeoutError; sync failures → SyncError with recoverable flag; sync failures during periodic task: retry silently with backoff, alert only on exhaustion (matches FR-011).
 - **P8 (Refactoring)**: POC allows quick iteration; post-POC refactor shared types between frontend/backend into unified package.
 - **P9 (Minimalism)**: No speculative features; defer P2 (payee merge), P3 (AI report), deployment artifacts, auth, multi-user, multi-budget UI until POC validated. Periodic sync via env var (simple) deferred to user-configurable schedule post-POC.
-- **P10 (Reviewability)**: Consistent naming (*Service, *Adapter, *Repository, *Scheduler); OpenAPI contracts with clear endpoint purposes; quickstart for onboarding; env var documentation in .env.example.
+- **P10 (Reviewability)**: Consistent naming (*Service, *Adapter, *Repository, *Scheduler); OpenAPI contracts with clear endpoint purposes; quickstart for onboarding; env var documentation in .env.example. GitHub Actions PR validation (lint/build/test) enforces code quality on every PR; release automation (Docker/Helm publish) ensures production artifacts are built consistently.
+
+## GitHub Actions CI/CD Pipelines (Post-Helm)
+
+**PR Validation Workflow** (.github/workflows/pr-validation.yaml):
+- Trigger: on pull_request
+- Backend matrix job (node 20):
+  - Lint: eslint + prettier (non-zero exit on issues)
+  - Build: tsc, npm run build (cache node_modules)
+  - Unit tests: vitest unit tests with coverage threshold
+  - Integration tests: vitest integration tests (timeout 10m)
+- Frontend matrix job (node 20):
+  - Lint: eslint + prettier (non-zero exit on issues)
+  - Build: vite build (verify dist/ artifact)
+  - E2E tests: playwright headless, screenshot/video on failure (timeout 15m)
+
+**Release Workflow** (.github/workflows/release.yaml):
+- Trigger: on push tag v* (or workflow_dispatch)
+- Build Docker images:
+  - Backend: actual-assist-backend:${GITHUB_REF#refs/tags/}
+  - Frontend: actual-assist-frontend:${GITHUB_REF#refs/tags/}
+  - Registry: Docker Hub (DOCKER_USERNAME, DOCKER_PASSWORD secrets) or ghcr.io
+- Helm chart validation & packaging:
+  - helm lint helm/
+  - helm package helm/ → actual-assist-${VERSION}.tgz
+  - Upload artifact for release
+- GitHub release creation:
+  - Extract tag and create release notes
+  - Attach Helm chart tarball
+  - Mark as pre-release for v0.x
+
+**Quality Gates Enforced**:
+- P3 (Testability): PR blocked if unit/integration tests fail
+- P10 (Reviewability): PR blocked if lint/prettier checks fail; automatic fixes available via workflow dispatch
+- Consistent code quality across all contributions via matrix jobs and caching
 
 ## Next Steps Post-POC
 

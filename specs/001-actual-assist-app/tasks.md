@@ -65,7 +65,47 @@ description: "Task list for Actual Budget Assistant POC (P1 focus)"
 - [X] T021 [P] Configure Playwright for frontend integration tests in frontend/playwright.config.ts
 - [X] T022 Create backend server entry point in backend/src/index.ts (load env, init db, start Express server)
 
-**Checkpoint**: Foundation ready - P1 implementation can now begin in parallel
+### Helm Chart Foundational (FR-012 Support)
+
+**Purpose**: Kubernetes-native deployment support for home-ops installation
+
+- [X] T127 [P] Create Helm chart structure in helm/ directory (Chart.yaml with metadata, values.yaml with defaults, templates/, README.md per FR-012)
+- [X] T128 [P] Implement Chart.yaml in helm/Chart.yaml (name: actual-assist, version: 0.1.0, description, repository, home, maintainers)
+- [X] T129 [P] Create values.yaml in helm/values.yaml (backend replicas, frontend replicas, image tags, registry, environment: dev/prod selector, resource limits)
+- [X] T130 [P] Create secret template in helm/templates/secret.yaml (OPENAI_API_KEY, ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_ID from values with .Release.Namespace)
+- [X] T131 [P] Create configmap template in helm/templates/configmap.yaml (non-secret env vars: NODE_ENV, SYNC_INTERVAL_MINUTES, SQLITE_DB_PATH, PORT)
+- [X] T132 [P] Create deployment template for backend in helm/templates/deployment.yaml (replicas, image pull policy, env refs to secret/configmap, liveness/readiness probes, resource requests)
+- [X] T133 [P] Create deployment template for frontend in helm/templates/deployment.yaml (or separate frontend-deployment.yaml; nginx config, image, env, service port 80→5173)
+- [X] T134 [P] Create PVC template in helm/templates/pvc.yaml (storage class, size 10Gi for budget data and SQLite, mount paths /data for backend, /var/lib/app for sqlite)
+- [X] T135 [P] Create service templates in helm/templates/service.yaml (backend service port 3000, frontend service port 80, type: ClusterIP with optional NodePort for dev)
+- [X] T136 [P] Create optional ingress template in helm/templates/ingress.yaml (conditional: enabled via values.ingress.enabled, routes /api to backend, /* to frontend)
+- [X] T137 [P] Create Helm helpers template in helm/templates/_helpers.tpl (labels, selector, fullname, chart name helpers per Helm best practices)
+- [X] T138 [P] Create helm/README.md with installation steps (helm repo add actual-assist, helm install, helm values reference, example for dev/prod overrides)
+- [X] T139 [P] Create values-dev.yaml in helm/values-dev.yaml (replicas: 1, resource limits low, NODE_ENV: development, SYNC_INTERVAL_MINUTES: 60, no ingress)
+- [X] T140 [P] Create values-prod.yaml in helm/values-prod.yaml (replicas: 2, resource limits higher, NODE_ENV: production, SYNC_INTERVAL_MINUTES: 360, enable ingress, resource requests/limits)
+- [X] T141 [P] Create helm/.helmignore with patterns to exclude from packaging (README.md for helm/, .git, .gitignore, tests/)
+- [X] T142 Validate Helm chart syntax in helm/ with `helm lint helm/` (verify no errors, warnings acceptable with justification)
+- [X] T143 Test Helm chart dry-run with `helm install --dry-run actual-assist helm/ -f helm/values-dev.yaml` (verify manifests generated, no rendering errors)
+
+### GitHub Actions Foundational (CI/CD Pipelines)
+
+**Purpose**: Automated quality gates for PR validation and release deployment
+
+- [ ] T144 [P] Create .github/workflows/pr-validation.yaml (trigger: on pull_request; matrix: backend & frontend; steps: lint, build, unit tests, integration tests)
+- [ ] T145 [P] Add backend lint job in pr-validation.yaml (eslint + prettier with backend/.eslintrc.js, exit non-zero if issues; optional auto-fix with workflow dispatch)
+- [ ] T146 [P] Add backend build job in pr-validation.yaml (npm ci, npm run build, cache node_modules and dist/ artifacts)
+- [ ] T147 [P] Add backend unit test job in pr-validation.yaml (npm run test:unit, coverage report, upload to artifact or code-coverage service)
+- [ ] T148 [P] Add backend integration test job in pr-validation.yaml (npm run test:integration, timeout 10m, skip if unit tests failed)
+- [ ] T149 [P] Add frontend lint job in pr-validation.yaml (eslint + prettier with frontend/.eslintrc.js, exit non-zero if issues)
+- [ ] T150 [P] Add frontend build job in pr-validation.yaml (npm ci, npm run build, verify dist/ generated, cache artifacts)
+- [ ] T151 [P] Add frontend test job in pr-validation.yaml (npm run test:e2e with Playwright headless, timeout 15m, screenshot/video on failure)
+- [ ] T152 [P] Create .github/workflows/release.yaml (trigger: on tag v* or workflow_dispatch; build Docker images, push to registry, create GitHub release)
+- [ ] T153 [P] Add Docker build + push job in release.yaml (backend image: actual-assist-backend:$TAG, frontend image: actual-assist-frontend:$TAG; registry: Docker Hub or ghcr.io; require DOCKER_USERNAME, DOCKER_PASSWORD secrets)
+- [ ] T154 [P] Add Helm chart validation in release.yaml (helm lint helm/, helm package, upload artifact for release)
+- [ ] T155 [P] Add GitHub release creation in release.yaml (tag-based release notes, attach Helm chart tarball, mark pre-release for v0.x)
+- [ ] T156 Create .github/CODEOWNERS with backend/, frontend/, helm/, specs/ owners for PR review automation (optional but recommended per P10)
+
+**Checkpoint**: CI/CD ready - Foundation + Helm + GitHub Actions complete
 
 ### Additional Foundational (Periodic Sync Support)
 
@@ -348,17 +388,21 @@ Task: "Test BudgetSnapshot"
 | Phase | Total Tasks | Completed | Remaining |
 |-------|-------------|-----------|-----------|
 | Phase 1: Setup | 14 | 14 | 0 |
-| Phase 2: Foundational | 12 | 12 | 0 |
+| Phase 2: Foundational | 12 + 17 (Helm) + 13 (GitHub Actions) | 29 | 13 |
 | Phase 3: P1 Core | 50 | 35 | 15 |
 | Phase 4: Polish | 5 | 1 | 4 |
 | Phase 5: Enhanced | 36 | 36 | 0 |
-| **Total** | **117** | **98** | **19** |
+| **Total** | **147** | **115** | **32** |
 
-**Status**: POC functional with enhanced features. Remaining work is primarily integration tests.
+**Status**: POC functional with enhanced features. Helm chart and GitHub Actions CI/CD support added. Remaining work is Helm tasks, GitHub Actions workflows, and integration tests.
+- Helm chart enables deployment to home-ops via `helm install` with values-dev.yaml and values-prod.yaml
+- GitHub Actions PR validation (lint/build/test) and release automation (Docker/Helm publish) enable continuous delivery
 - POC excludes P2/P3, so no tasks for payee merge or AI reports
 - Sync execution endpoint (POST /sync-plan/:id/execute) deferred to post-POC
 - Authentication, multi-user support deferred to post-POC
 - **1-click run**: `docker-compose up` (T013) or `npm run dev:all` (T014)
-- **Dockerfiles** (T011-T012) enable deployment to home-ops with Helm chart (post-POC)
-- Commit after each logical group (e.g., all domain entities, all infra adapters)
+- **Helm deployment**: `helm install actual-assist helm/ -f helm/values-dev.yaml` (T127-T143)
+- **PR CI/CD**: GitHub Actions triggers lint/build/test on PR (T144-T151)
+- **Release CI/CD**: GitHub Actions triggers Docker build + Helm package on tag v* (T152-T155)
+- Commit after each logical group (e.g., all domain entities, all infra adapters, Helm templates, GitHub Actions)
 - Stop at Phase 4 checkpoint to validate POC before expanding scope

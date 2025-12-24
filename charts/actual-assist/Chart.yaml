@@ -2,8 +2,8 @@ apiVersion: v2
 name: actual-assist
 description: AI-driven budget assistant for Actual Budget with review-before-apply suggestions
 type: application
-version: 0.1.0-alpha
-appVersion: "0.1.0-alpha"
+version: 0.1.0
+appVersion: "0.1.0"
 home: https://github.com/mathewab/actual-assist
 repository: https://github.com/mathewab/actual-assist
 sources:

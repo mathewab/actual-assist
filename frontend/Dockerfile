@@ -9,20 +9,22 @@ COPY frontend/package*.json ./frontend/
 RUN npm ci -w frontend
 
 # Copy source code and configs
-COPY frontend/tsconfig*.json frontend/vite.config.ts frontend/index.html ./
-COPY frontend/src ./src
+COPY frontend/tsconfig*.json ./frontend/
+COPY frontend/vite.config.ts ./frontend/
+COPY frontend/index.html ./frontend/
+COPY frontend/src ./frontend/src
 
 # Build Vite application
-RUN npm run build
+RUN npm run build -w frontend
 
 # Production image with nginx
 FROM nginx:alpine
 
 # Copy built assets to nginx html directory
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port
 EXPOSE 80

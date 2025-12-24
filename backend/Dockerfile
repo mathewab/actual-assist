@@ -13,7 +13,7 @@ COPY backend/tsconfig.json ./
 COPY backend/src ./src
 
 # Build TypeScript
-RUN npm run build
+RUN npm run build -w backend
 
 # Production image
 FROM node:20-alpine

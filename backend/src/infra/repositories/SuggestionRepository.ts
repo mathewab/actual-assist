@@ -1,13 +1,13 @@
 import type { DatabaseAdapter } from '../DatabaseAdapter.js';
-import type { 
-  Suggestion, 
-  SuggestionStatus, 
+import type {
+  Suggestion,
+  SuggestionStatus,
   SuggestionComponentStatus,
 } from '../../domain/entities/Suggestion.js';
-import { 
-  computeCombinedStatus, 
-  computeCombinedConfidence, 
-  computeCombinedRationale 
+import {
+  computeCombinedStatus,
+  computeCombinedConfidence,
+  computeCombinedRationale,
 } from '../../domain/entities/Suggestion.js';
 import { NotFoundError } from '../../domain/errors.js';
 import { logger } from '../logger.js';
@@ -95,7 +95,7 @@ export class SuggestionRepository {
   findByBudgetId(budgetId: string): Suggestion[] {
     const sql = 'SELECT * FROM suggestions WHERE budget_id = ? ORDER BY created_at DESC';
     const rows = this.db.query<any>(sql, [budgetId]);
-    return rows.map(row => this.mapRowToSuggestion(row));
+    return rows.map((row) => this.mapRowToSuggestion(row));
   }
 
   /**
@@ -104,7 +104,7 @@ export class SuggestionRepository {
   findByStatus(status: SuggestionStatus): Suggestion[] {
     const sql = 'SELECT * FROM suggestions WHERE status = ? ORDER BY created_at DESC';
     const rows = this.db.query<any>(sql, [status]);
-    return rows.map(row => this.mapRowToSuggestion(row));
+    return rows.map((row) => this.mapRowToSuggestion(row));
   }
 
   /**
@@ -118,7 +118,7 @@ export class SuggestionRepository {
       ORDER BY created_at DESC
     `;
     const rows = this.db.query<any>(sql, [budgetId]);
-    return rows.map(row => this.mapRowToSuggestion(row));
+    return rows.map((row) => this.mapRowToSuggestion(row));
   }
 
   /**
@@ -129,7 +129,7 @@ export class SuggestionRepository {
     // Map legacy status to component statuses
     let payeeStatus: SuggestionComponentStatus;
     let categoryStatus: SuggestionComponentStatus;
-    
+
     if (status === 'approved') {
       payeeStatus = 'approved';
       categoryStatus = 'approved';
@@ -150,11 +150,11 @@ export class SuggestionRepository {
       WHERE id = ?
     `;
     const changes = this.db.execute(sql, [
-      status, 
-      payeeStatus, 
-      categoryStatus, 
-      new Date().toISOString(), 
-      id
+      status,
+      payeeStatus,
+      categoryStatus,
+      new Date().toISOString(),
+      id,
     ]);
 
     if (changes === 0) {
@@ -168,7 +168,7 @@ export class SuggestionRepository {
    * Update payee suggestion status independently
    */
   updatePayeeStatus(
-    id: string, 
+    id: string,
     payeeStatus: SuggestionComponentStatus,
     correction?: { payeeId?: string | null; payeeName?: string | null }
   ): void {
@@ -177,7 +177,10 @@ export class SuggestionRepository {
       throw new NotFoundError('Suggestion', id);
     }
 
-    const newCombinedStatus = computeCombinedStatus(payeeStatus, suggestion.categorySuggestion.status);
+    const newCombinedStatus = computeCombinedStatus(
+      payeeStatus,
+      suggestion.categorySuggestion.status
+    );
     const now = new Date().toISOString();
 
     let sql = `
@@ -202,7 +205,7 @@ export class SuggestionRepository {
    * Update category suggestion status independently
    */
   updateCategoryStatus(
-    id: string, 
+    id: string,
     categoryStatus: SuggestionComponentStatus,
     correction?: { categoryId?: string | null; categoryName?: string | null }
   ): void {
@@ -211,7 +214,10 @@ export class SuggestionRepository {
       throw new NotFoundError('Suggestion', id);
     }
 
-    const newCombinedStatus = computeCombinedStatus(suggestion.payeeSuggestion.status, categoryStatus);
+    const newCombinedStatus = computeCombinedStatus(
+      suggestion.payeeSuggestion.status,
+      categoryStatus
+    );
     const now = new Date().toISOString();
 
     let sql = `
@@ -266,7 +272,7 @@ export class SuggestionRepository {
       WHERE budget_id = ? AND status = 'pending'
     `;
     const rows = this.db.query<{ transaction_id: string }>(sql, [budgetId]);
-    return new Set(rows.map(row => row.transaction_id));
+    return new Set(rows.map((row) => row.transaction_id));
   }
 
   /**
@@ -285,8 +291,8 @@ export class SuggestionRepository {
 
     // Find orphaned ones (transaction no longer exists)
     const orphanedIds = allPending
-      .filter(row => !validTransactionIds.has(row.transaction_id))
-      .map(row => row.id);
+      .filter((row) => !validTransactionIds.has(row.transaction_id))
+      .map((row) => row.id);
 
     if (orphanedIds.length === 0) {
       return 0;
@@ -303,8 +309,8 @@ export class SuggestionRepository {
       budgetId,
       deletedCount: deleteCount,
       orphanedTransactionIds: allPending
-        .filter(row => !validTransactionIds.has(row.transaction_id))
-        .map(row => row.transaction_id),
+        .filter((row) => !validTransactionIds.has(row.transaction_id))
+        .map((row) => row.transaction_id),
     });
 
     return deleteCount;
@@ -335,7 +341,7 @@ export class SuggestionRepository {
       transactionAccountName: row.transaction_account_name,
       currentCategoryId: row.current_category_id,
       currentPayeeId: row.current_payee_id || null,
-      
+
       payeeSuggestion: {
         proposedPayeeId: row.proposed_payee_id || null,
         proposedPayeeName: row.proposed_payee_name || row.suggested_payee_name || null,
@@ -343,7 +349,7 @@ export class SuggestionRepository {
         rationale: payeeRationale,
         status: payeeStatus,
       },
-      
+
       categorySuggestion: {
         proposedCategoryId: row.proposed_category_id,
         proposedCategoryName: row.proposed_category_name,
@@ -351,22 +357,27 @@ export class SuggestionRepository {
         rationale: categoryRationale,
         status: categoryStatus,
       },
-      
+
       correction: {
         correctedPayeeId: row.corrected_payee_id || null,
         correctedPayeeName: row.corrected_payee_name || null,
         correctedCategoryId: row.corrected_category_id || null,
         correctedCategoryName: row.corrected_category_name || null,
       },
-      
+
       // Legacy fields
       suggestedPayeeName: row.suggested_payee_name,
-      confidence: row.confidence ?? computeCombinedConfidence(payeeConfidence, categoryConfidence, payeeStatus, categoryStatus),
-      rationale: row.rationale || computeCombinedRationale(payeeRationale, categoryRationale, payeeStatus, categoryStatus),
-      status: (row.status || computeCombinedStatus(payeeStatus, categoryStatus)) as SuggestionStatus,
+      confidence:
+        row.confidence ??
+        computeCombinedConfidence(payeeConfidence, categoryConfidence, payeeStatus, categoryStatus),
+      rationale:
+        row.rationale ||
+        computeCombinedRationale(payeeRationale, categoryRationale, payeeStatus, categoryStatus),
+      status: (row.status ||
+        computeCombinedStatus(payeeStatus, categoryStatus)) as SuggestionStatus,
       proposedCategoryId: row.proposed_category_id || 'unknown',
       proposedCategoryName: row.proposed_category_name || 'Unknown',
-      
+
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

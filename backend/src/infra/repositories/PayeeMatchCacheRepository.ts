@@ -8,10 +8,10 @@ import { logger } from '../logger.js';
 export interface PayeeMatchCacheEntry {
   id: number;
   budgetId: string;
-  rawPayeeName: string;           // Normalized raw payee name
-  rawPayeeNameOriginal: string;   // Original for display
+  rawPayeeName: string; // Normalized raw payee name
+  rawPayeeNameOriginal: string; // Original for display
   canonicalPayeeId: string | null; // Canonical payee ID in Actual (if exists)
-  canonicalPayeeName: string;      // Canonical/clean payee name
+  canonicalPayeeName: string; // Canonical/clean payee name
   confidence: number;
   source: 'user_approved' | 'high_confidence_ai' | 'fuzzy_match';
   hitCount: number;
@@ -73,7 +73,7 @@ export class PayeeMatchCacheRepository {
    */
   findByPayee(budgetId: string, rawPayeeName: string): PayeeMatchCacheEntry | null {
     const normalized = PayeeMatchCacheRepository.normalizePayeeName(rawPayeeName);
-    
+
     const row = this.db.queryOne<PayeeMatchCacheRow>(
       `SELECT * FROM payee_match_cache WHERE budget_id = ? AND raw_payee_name = ?`,
       [budgetId, normalized]
@@ -86,9 +86,9 @@ export class PayeeMatchCacheRepository {
         [row.id]
       );
 
-      logger.debug('Payee match cache hit', { 
-        rawPayeeName, 
-        canonicalPayeeName: row.canonical_payee_name 
+      logger.debug('Payee match cache hit', {
+        rawPayeeName,
+        canonicalPayeeName: row.canonical_payee_name,
       });
       return this.mapRowToEntry(row);
     }
@@ -103,7 +103,7 @@ export class PayeeMatchCacheRepository {
     const result = new Map<string, PayeeMatchCacheEntry>();
     if (rawPayeeNames.length === 0) return result;
 
-    const normalized = rawPayeeNames.map(p => PayeeMatchCacheRepository.normalizePayeeName(p));
+    const normalized = rawPayeeNames.map((p) => PayeeMatchCacheRepository.normalizePayeeName(p));
     const placeholders = normalized.map(() => '?').join(',');
 
     const rows = this.db.query<PayeeMatchCacheRow>(
@@ -126,9 +126,9 @@ export class PayeeMatchCacheRepository {
       );
     }
 
-    logger.debug('Payee match cache batch lookup', { 
-      requested: rawPayeeNames.length, 
-      found: result.size 
+    logger.debug('Payee match cache batch lookup', {
+      requested: rawPayeeNames.length,
+      found: result.size,
     });
 
     return result;
@@ -147,7 +147,8 @@ export class PayeeMatchCacheRepository {
   }): void {
     const normalized = PayeeMatchCacheRepository.normalizePayeeName(entry.rawPayeeName);
 
-    this.db.execute(`
+    this.db.execute(
+      `
       INSERT INTO payee_match_cache 
         (budget_id, raw_payee_name, raw_payee_name_original, canonical_payee_id, canonical_payee_name, confidence, source)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -157,34 +158,38 @@ export class PayeeMatchCacheRepository {
         confidence = excluded.confidence,
         source = excluded.source,
         updated_at = datetime('now')
-    `, [
-      entry.budgetId,
-      normalized,
-      entry.rawPayeeName,
-      entry.canonicalPayeeId || null,
-      entry.canonicalPayeeName,
-      entry.confidence,
-      entry.source,
-    ]);
+    `,
+      [
+        entry.budgetId,
+        normalized,
+        entry.rawPayeeName,
+        entry.canonicalPayeeId || null,
+        entry.canonicalPayeeName,
+        entry.confidence,
+        entry.source,
+      ]
+    );
 
-    logger.debug('Payee match cache saved', { 
-      rawPayeeName: entry.rawPayeeName, 
+    logger.debug('Payee match cache saved', {
+      rawPayeeName: entry.rawPayeeName,
       canonicalPayeeName: entry.canonicalPayeeName,
-      source: entry.source 
+      source: entry.source,
     });
   }
 
   /**
    * Bulk save multiple entries
    */
-  saveBatch(entries: Array<{
-    budgetId: string;
-    rawPayeeName: string;
-    canonicalPayeeId?: string | null;
-    canonicalPayeeName: string;
-    confidence: number;
-    source: 'user_approved' | 'high_confidence_ai' | 'fuzzy_match';
-  }>): void {
+  saveBatch(
+    entries: Array<{
+      budgetId: string;
+      rawPayeeName: string;
+      canonicalPayeeId?: string | null;
+      canonicalPayeeName: string;
+      confidence: number;
+      source: 'user_approved' | 'high_confidence_ai' | 'fuzzy_match';
+    }>
+  ): void {
     for (const entry of entries) {
       this.save(entry);
     }
@@ -202,7 +207,7 @@ export class PayeeMatchCacheRepository {
       [budgetId]
     );
 
-    const entries = rows.map(row => this.mapRowToEntry(row));
+    const entries = rows.map((row) => this.mapRowToEntry(row));
     logger.debug('Retrieved all cached payee matches', { budgetId, count: entries.length });
     return entries;
   }
@@ -223,10 +228,7 @@ export class PayeeMatchCacheRepository {
    * Clear cache for a budget
    */
   clearBudgetCache(budgetId: string): void {
-    this.db.execute(
-      `DELETE FROM payee_match_cache WHERE budget_id = ?`,
-      [budgetId]
-    );
+    this.db.execute(`DELETE FROM payee_match_cache WHERE budget_id = ?`, [budgetId]);
 
     logger.info('Payee match cache cleared', { budgetId });
   }

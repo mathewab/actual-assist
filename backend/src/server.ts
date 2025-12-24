@@ -39,7 +39,13 @@ const payeeCache = new PayeeCacheRepository(db);
 
 // Initialize services
 const snapshotService = new SnapshotService(actualBudget, auditRepo, suggestionRepo);
-const suggestionService = new SuggestionService(actualBudget, openai, suggestionRepo, auditRepo, payeeCache);
+const suggestionService = new SuggestionService(
+  actualBudget,
+  openai,
+  suggestionRepo,
+  auditRepo,
+  payeeCache
+);
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
 
 // Initialize Actual Budget connection

@@ -53,7 +53,7 @@ export class SyncScheduler {
    */
   start(): void {
     const intervalMinutes = this.env.SYNC_INTERVAL_MINUTES;
-    
+
     // Validate interval
     if (intervalMinutes < 1) {
       logger.warn('SYNC_INTERVAL_MINUTES is less than 1, skipping scheduler');

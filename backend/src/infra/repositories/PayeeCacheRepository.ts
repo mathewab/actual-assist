@@ -7,7 +7,7 @@ import { logger } from '../logger.js';
 export interface PayeeCacheEntry {
   id: number;
   budgetId: string;
-  payeeName: string;         // Normalized (lowercase, trimmed)
+  payeeName: string; // Normalized (lowercase, trimmed)
   payeeNameOriginal: string; // Original for display
   categoryId: string;
   categoryName: string;
@@ -73,7 +73,7 @@ export class PayeeCacheRepository {
    */
   findByPayee(budgetId: string, payeeName: string): PayeeCacheEntry | null {
     const normalized = PayeeCacheRepository.normalizePayeeName(payeeName);
-    
+
     const row = this.db.queryOne<PayeeCacheRow>(
       `SELECT * FROM payee_category_cache WHERE budget_id = ? AND payee_name = ?`,
       [budgetId, normalized]
@@ -101,7 +101,7 @@ export class PayeeCacheRepository {
     const result = new Map<string, PayeeCacheEntry>();
     if (payeeNames.length === 0) return result;
 
-    const normalized = payeeNames.map(p => PayeeCacheRepository.normalizePayeeName(p));
+    const normalized = payeeNames.map((p) => PayeeCacheRepository.normalizePayeeName(p));
     const placeholders = normalized.map(() => '?').join(',');
 
     const rows = this.db.query<PayeeCacheRow>(
@@ -124,9 +124,9 @@ export class PayeeCacheRepository {
       );
     }
 
-    logger.debug('Payee cache batch lookup', { 
-      requested: payeeNames.length, 
-      found: result.size 
+    logger.debug('Payee cache batch lookup', {
+      requested: payeeNames.length,
+      found: result.size,
     });
 
     return result;
@@ -146,7 +146,8 @@ export class PayeeCacheRepository {
   }): void {
     const normalized = PayeeCacheRepository.normalizePayeeName(entry.payeeName);
 
-    this.db.execute(`
+    this.db.execute(
+      `
       INSERT INTO payee_category_cache 
         (budget_id, payee_name, payee_name_original, category_id, category_name, confidence, source)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -156,34 +157,38 @@ export class PayeeCacheRepository {
         confidence = excluded.confidence,
         source = excluded.source,
         updated_at = datetime('now')
-    `, [
-      entry.budgetId,
-      normalized,
-      entry.payeeName,
-      entry.categoryId,
-      entry.categoryName,
-      entry.confidence,
-      entry.source,
-    ]);
+    `,
+      [
+        entry.budgetId,
+        normalized,
+        entry.payeeName,
+        entry.categoryId,
+        entry.categoryName,
+        entry.confidence,
+        entry.source,
+      ]
+    );
 
-    logger.debug('Payee cache saved', { 
-      payeeName: entry.payeeName, 
+    logger.debug('Payee cache saved', {
+      payeeName: entry.payeeName,
       categoryName: entry.categoryName,
-      source: entry.source 
+      source: entry.source,
     });
   }
 
   /**
    * Bulk save multiple entries (for batch processing)
    */
-  saveBatch(entries: Array<{
-    budgetId: string;
-    payeeName: string;
-    categoryId: string;
-    categoryName: string;
-    confidence: number;
-    source: 'user_approved' | 'high_confidence_ai';
-  }>): void {
+  saveBatch(
+    entries: Array<{
+      budgetId: string;
+      payeeName: string;
+      categoryId: string;
+      categoryName: string;
+      confidence: number;
+      source: 'user_approved' | 'high_confidence_ai';
+    }>
+  ): void {
     for (const entry of entries) {
       this.save(entry);
     }
@@ -213,7 +218,7 @@ export class PayeeCacheRepository {
       [budgetId]
     );
 
-    const entries = rows.map(row => this.mapRowToEntry(row));
+    const entries = rows.map((row) => this.mapRowToEntry(row));
     logger.debug('Retrieved all cached payees', { budgetId, count: entries.length });
     return entries;
   }
@@ -222,10 +227,7 @@ export class PayeeCacheRepository {
    * Clear cache for a budget (useful for testing or reset)
    */
   clearBudgetCache(budgetId: string): void {
-    this.db.execute(
-      `DELETE FROM payee_category_cache WHERE budget_id = ?`,
-      [budgetId]
-    );
+    this.db.execute(`DELETE FROM payee_category_cache WHERE budget_id = ?`, [budgetId]);
 
     logger.info('Payee cache cleared', { budgetId });
   }

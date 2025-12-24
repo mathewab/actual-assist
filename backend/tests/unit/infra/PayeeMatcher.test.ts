@@ -43,10 +43,30 @@ describe('PayeeMatcher', () => {
 
   describe('findMatches', () => {
     const candidates: PayeeCandidate[] = [
-      { payeeName: 'amazon', payeeNameOriginal: 'Amazon', categoryId: 'cat1', categoryName: 'Shopping' },
-      { payeeName: 'amazon prime', payeeNameOriginal: 'Amazon Prime', categoryId: 'cat2', categoryName: 'Subscriptions' },
-      { payeeName: 'starbucks', payeeNameOriginal: 'Starbucks', categoryId: 'cat3', categoryName: 'Coffee' },
-      { payeeName: 'walmart', payeeNameOriginal: 'Walmart', categoryId: 'cat4', categoryName: 'Groceries' },
+      {
+        payeeName: 'amazon',
+        payeeNameOriginal: 'Amazon',
+        categoryId: 'cat1',
+        categoryName: 'Shopping',
+      },
+      {
+        payeeName: 'amazon prime',
+        payeeNameOriginal: 'Amazon Prime',
+        categoryId: 'cat2',
+        categoryName: 'Subscriptions',
+      },
+      {
+        payeeName: 'starbucks',
+        payeeNameOriginal: 'Starbucks',
+        categoryId: 'cat3',
+        categoryName: 'Coffee',
+      },
+      {
+        payeeName: 'walmart',
+        payeeNameOriginal: 'Walmart',
+        categoryId: 'cat4',
+        categoryName: 'Groceries',
+      },
     ];
 
     it('should find exact match with high score', () => {
@@ -78,8 +98,18 @@ describe('PayeeMatcher', () => {
 
   describe('findHighConfidenceMatch', () => {
     const candidates: PayeeCandidate[] = [
-      { payeeName: 'starbucks', payeeNameOriginal: 'Starbucks', categoryId: 'cat1', categoryName: 'Coffee' },
-      { payeeName: 'star market', payeeNameOriginal: 'Star Market', categoryId: 'cat2', categoryName: 'Groceries' },
+      {
+        payeeName: 'starbucks',
+        payeeNameOriginal: 'Starbucks',
+        categoryId: 'cat1',
+        categoryName: 'Coffee',
+      },
+      {
+        payeeName: 'star market',
+        payeeNameOriginal: 'Star Market',
+        categoryId: 'cat2',
+        categoryName: 'Groceries',
+      },
     ];
 
     it('should return match for high similarity', () => {
@@ -96,12 +126,42 @@ describe('PayeeMatcher', () => {
 
   describe('getCandidatesForDisambiguation', () => {
     const candidates: PayeeCandidate[] = [
-      { payeeName: 'amazon', payeeNameOriginal: 'Amazon', categoryId: 'cat1', categoryName: 'Shopping' },
-      { payeeName: 'amazon fresh', payeeNameOriginal: 'Amazon Fresh', categoryId: 'cat2', categoryName: 'Groceries' },
-      { payeeName: 'amazon prime', payeeNameOriginal: 'Amazon Prime', categoryId: 'cat3', categoryName: 'Subscriptions' },
-      { payeeName: 'amazons choice', payeeNameOriginal: 'Amazons Choice', categoryId: 'cat4', categoryName: 'Other' },
-      { payeeName: 'amaion store', payeeNameOriginal: 'Amaion Store', categoryId: 'cat5', categoryName: 'Shopping' },
-      { payeeName: 'target', payeeNameOriginal: 'Target', categoryId: 'cat6', categoryName: 'Shopping' },
+      {
+        payeeName: 'amazon',
+        payeeNameOriginal: 'Amazon',
+        categoryId: 'cat1',
+        categoryName: 'Shopping',
+      },
+      {
+        payeeName: 'amazon fresh',
+        payeeNameOriginal: 'Amazon Fresh',
+        categoryId: 'cat2',
+        categoryName: 'Groceries',
+      },
+      {
+        payeeName: 'amazon prime',
+        payeeNameOriginal: 'Amazon Prime',
+        categoryId: 'cat3',
+        categoryName: 'Subscriptions',
+      },
+      {
+        payeeName: 'amazons choice',
+        payeeNameOriginal: 'Amazons Choice',
+        categoryId: 'cat4',
+        categoryName: 'Other',
+      },
+      {
+        payeeName: 'amaion store',
+        payeeNameOriginal: 'Amaion Store',
+        categoryId: 'cat5',
+        categoryName: 'Shopping',
+      },
+      {
+        payeeName: 'target',
+        payeeNameOriginal: 'Target',
+        categoryId: 'cat6',
+        categoryName: 'Shopping',
+      },
     ];
 
     it('should return candidates below high confidence threshold', () => {
@@ -121,13 +181,18 @@ describe('PayeeMatcher', () => {
       // "Starbucks" has no close candidates in our list
       const results = matcher.getCandidatesForDisambiguation('Target', candidates);
       // If Target matches exactly, it would be high confidence
-      expect(results.every(r => r.score < FUZZY_THRESHOLDS.HIGH_CONFIDENCE)).toBe(true);
+      expect(results.every((r) => r.score < FUZZY_THRESHOLDS.HIGH_CONFIDENCE)).toBe(true);
     });
   });
 
   describe('alias dictionary bonus', () => {
     const candidates: PayeeCandidate[] = [
-      { payeeName: 'amazon', payeeNameOriginal: 'Amazon', categoryId: 'cat1', categoryName: 'Shopping' },
+      {
+        payeeName: 'amazon',
+        payeeNameOriginal: 'Amazon',
+        categoryId: 'cat1',
+        categoryName: 'Shopping',
+      },
     ];
 
     it('should boost score for alias match', () => {

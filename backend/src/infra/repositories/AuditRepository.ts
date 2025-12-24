@@ -22,7 +22,7 @@ export class AuditRepository {
   }): void {
     try {
       const entry = createAuditEntry(params);
-      
+
       const sql = `
         INSERT INTO audit_log (event_type, entity_type, entity_id, metadata, timestamp)
         VALUES (?, ?, ?, ?, ?)
@@ -58,7 +58,7 @@ export class AuditRepository {
     `;
 
     const rows = this.db.query<any>(sql, [limit]);
-    return rows.map(row => this.mapRowToAuditEntry(row));
+    return rows.map((row) => this.mapRowToAuditEntry(row));
   }
 
   /**
@@ -72,7 +72,7 @@ export class AuditRepository {
     `;
 
     const rows = this.db.query<any>(sql, [entityType, entityId]);
-    return rows.map(row => this.mapRowToAuditEntry(row));
+    return rows.map((row) => this.mapRowToAuditEntry(row));
   }
 
   /**
@@ -86,7 +86,7 @@ export class AuditRepository {
     `;
 
     const rows = this.db.query<any>(sql, [eventType]);
-    return rows.map(row => this.mapRowToAuditEntry(row));
+    return rows.map((row) => this.mapRowToAuditEntry(row));
   }
 
   /**

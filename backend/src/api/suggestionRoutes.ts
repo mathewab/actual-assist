@@ -18,7 +18,7 @@ function mapSuggestionToResponse(s: any) {
     transactionDate: s.transactionDate,
     currentCategoryId: s.currentCategoryId,
     currentPayeeId: s.currentPayeeId,
-    
+
     // Payee suggestion
     payeeSuggestion: {
       proposedPayeeId: s.payeeSuggestion?.proposedPayeeId ?? null,
@@ -27,7 +27,7 @@ function mapSuggestionToResponse(s: any) {
       rationale: s.payeeSuggestion?.rationale ?? '',
       status: s.payeeSuggestion?.status ?? 'skipped',
     },
-    
+
     // Category suggestion
     categorySuggestion: {
       proposedCategoryId: s.categorySuggestion?.proposedCategoryId ?? s.proposedCategoryId,
@@ -36,7 +36,7 @@ function mapSuggestionToResponse(s: any) {
       rationale: s.categorySuggestion?.rationale ?? s.rationale,
       status: s.categorySuggestion?.status ?? 'pending',
     },
-    
+
     // Corrections (if any)
     correction: s.correction ?? {
       correctedPayeeId: null,
@@ -44,7 +44,7 @@ function mapSuggestionToResponse(s: any) {
       correctedCategoryId: null,
       correctedCategoryName: null,
     },
-    
+
     // Legacy fields for backward compatibility
     proposedCategoryId: s.proposedCategoryId,
     proposedCategoryName: s.proposedCategoryName,
@@ -180,11 +180,12 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
     try {
       const { id } = req.params;
       const { payeeId, payeeName } = req.body;
-      
-      const correction = (payeeId || payeeName) 
-        ? { payeeId: payeeId as string | undefined, payeeName: payeeName as string | undefined }
-        : undefined;
-      
+
+      const correction =
+        payeeId || payeeName
+          ? { payeeId: payeeId as string | undefined, payeeName: payeeName as string | undefined }
+          : undefined;
+
       suggestionService.rejectPayeeSuggestion(id, correction);
       res.json({ success: true, type: 'payee', withCorrection: !!correction });
     } catch (error) {
@@ -199,11 +200,15 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
     try {
       const { id } = req.params;
       const { categoryId, categoryName } = req.body;
-      
-      const correction = (categoryId || categoryName)
-        ? { categoryId: categoryId as string | undefined, categoryName: categoryName as string | undefined }
-        : undefined;
-      
+
+      const correction =
+        categoryId || categoryName
+          ? {
+              categoryId: categoryId as string | undefined,
+              categoryName: categoryName as string | undefined,
+            }
+          : undefined;
+
       suggestionService.rejectCategorySuggestion(id, correction);
       res.json({ success: true, type: 'category', withCorrection: !!correction });
     } catch (error) {

@@ -42,7 +42,7 @@ export class ActualBudgetAdapter {
 
       // Use sync ID if provided, otherwise use budget ID
       const budgetIdentifier = this.env.ACTUAL_SYNC_ID || this.env.ACTUAL_BUDGET_ID;
-      
+
       await api.downloadBudget(budgetIdentifier, {
         password: this.env.ACTUAL_ENCRYPTION_KEY,
       });
@@ -52,9 +52,9 @@ export class ActualBudgetAdapter {
         budgetId: budgetIdentifier,
       });
     } catch (error) {
-      logger.error('Actual Budget initialization failed', { 
+      logger.error('Actual Budget initialization failed', {
         error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw new ActualBudgetError('Failed to initialize Actual Budget API', { error });
     }
@@ -151,10 +151,7 @@ export class ActualBudgetAdapter {
    * Update transaction category
    * P7 (Explicit error handling): Wraps API call with error context
    */
-  async updateTransactionCategory(
-    transactionId: string,
-    categoryId: string | null
-  ): Promise<void> {
+  async updateTransactionCategory(transactionId: string, categoryId: string | null): Promise<void> {
     this.ensureInitialized();
 
     try {
@@ -178,10 +175,7 @@ export class ActualBudgetAdapter {
   /**
    * Update transaction payee
    */
-  async updateTransactionPayee(
-    transactionId: string,
-    payeeId: string | null
-  ): Promise<void> {
+  async updateTransactionPayee(transactionId: string, payeeId: string | null): Promise<void> {
     this.ensureInitialized();
 
     try {
@@ -213,7 +207,7 @@ export class ActualBudgetAdapter {
 
     try {
       const updatePayload: Record<string, unknown> = {};
-      
+
       if (updates.categoryId !== undefined) {
         updatePayload.category = updates.categoryId || undefined;
       }
@@ -262,7 +256,7 @@ export class ActualBudgetAdapter {
   async findPayeeByName(name: string): Promise<{ id: string; name: string } | null> {
     const payees = await this.getPayees();
     const normalizedName = name.toLowerCase().trim();
-    return payees.find(p => p.name.toLowerCase().trim() === normalizedName) || null;
+    return payees.find((p) => p.name.toLowerCase().trim() === normalizedName) || null;
   }
 
   /**
@@ -361,13 +355,16 @@ export class ActualBudgetAdapter {
       ]);
 
       // Track payee -> category mappings with counts
-      const payeeCategoryMap = new Map<string, {
-        payeeId: string;
-        payeeName: string;
-        categoryId: string;
-        categoryName: string;
-        transactionCount: number;
-      }>();
+      const payeeCategoryMap = new Map<
+        string,
+        {
+          payeeId: string;
+          payeeName: string;
+          categoryId: string;
+          categoryName: string;
+          transactionCount: number;
+        }
+      >();
 
       for (const account of accounts) {
         if (account.closed || account.offbudget) continue;

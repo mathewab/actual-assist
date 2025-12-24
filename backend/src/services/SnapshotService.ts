@@ -38,7 +38,7 @@ export class SnapshotService {
     // Create immutable snapshot
     const snapshot = createBudgetSnapshot({
       budgetId,
-      filepath: '',  // Filepath is populated when downloaded
+      filepath: '', // Filepath is populated when downloaded
       transactionCount: transactions.length,
       categoryCount: categories.length,
     });

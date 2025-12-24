@@ -57,9 +57,7 @@ export function createErrorHandler(env: Env) {
 
       res.status(500).json({
         error: 'INTERNAL_SERVER_ERROR',
-        message: env.NODE_ENV === 'development' 
-          ? err.message 
-          : 'An unexpected error occurred',
+        message: env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred',
       });
     }
   };
@@ -107,8 +105,8 @@ function redactSecrets(obj: unknown): unknown {
  * 404 Not Found handler
  */
 export function notFoundHandler(_req: Request, res: Response): void {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'NOT_FOUND',
-    message: 'The requested resource was not found' 
+    message: 'The requested resource was not found',
   });
 }

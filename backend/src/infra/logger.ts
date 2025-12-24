@@ -83,10 +83,7 @@ export function createLogger(env: Env): winston.Logger {
     transports.push(
       new winston.transports.File({
         filename: env.LOG_FILE,
-        format: winston.format.combine(
-          winston.format.timestamp(),
-          winston.format.json()
-        ),
+        format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
       })
     );
   }

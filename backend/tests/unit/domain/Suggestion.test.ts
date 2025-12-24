@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  createSuggestion,
-  updateSuggestionStatus,
-} from '../../src/domain/entities/Suggestion.js';
+import { createSuggestion, updateSuggestionStatus } from '../../src/domain/entities/Suggestion.js';
 
 describe('Suggestion', () => {
   it('should create a suggestion with pending status', () => {

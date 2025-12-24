@@ -32,10 +32,10 @@ export class DatabaseAdapter {
       const schemaPath = join(__dirname, 'db', 'schema.sql');
       const schema = readFileSync(schemaPath, 'utf-8');
       this.db.exec(schema);
-      
+
       // Run migrations for schema changes
       this.runMigrations();
-      
+
       logger.info('Database schema initialized');
     } catch (error) {
       throw new DatabaseError('Failed to initialize database schema', { error });
@@ -49,8 +49,8 @@ export class DatabaseAdapter {
   private runMigrations(): void {
     // Migration: Add suggested_payee_name column to suggestions table
     const columns = this.db.pragma('table_info(suggestions)') as Array<{ name: string }>;
-    const hasColumn = columns.some(col => col.name === 'suggested_payee_name');
-    
+    const hasColumn = columns.some((col) => col.name === 'suggested_payee_name');
+
     if (!hasColumn) {
       this.db.exec('ALTER TABLE suggestions ADD COLUMN suggested_payee_name TEXT');
       logger.info('Migration: Added suggested_payee_name column to suggestions table');

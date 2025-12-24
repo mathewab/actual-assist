@@ -57,20 +57,20 @@ export interface Suggestion {
   transactionPayee: string | null;
   transactionAmount: number | null;
   transactionDate: string | null;
-  
+
   // Current state
   currentCategoryId: string | null;
   currentPayeeId: string | null;
-  
+
   // Independent payee suggestion
   payeeSuggestion: PayeeSuggestion;
-  
+
   // Independent category suggestion
   categorySuggestion: CategorySuggestion;
-  
+
   // User corrections (when rejecting with correction)
   correction: SuggestionCorrection;
-  
+
   // Legacy fields for backward compatibility
   /** @deprecated Use payeeSuggestion.proposedPayeeName */
   suggestedPayeeName: string | null;
@@ -84,7 +84,7 @@ export interface Suggestion {
   proposedCategoryId: string;
   /** @deprecated Use categorySuggestion.proposedCategoryName */
   proposedCategoryName: string;
-  
+
   createdAt: string; // ISO 8601 timestamp
   updatedAt: string; // ISO 8601 timestamp
 }
@@ -162,38 +162,38 @@ export function createSuggestion(params: {
   transactionDate?: string | null;
   currentCategoryId: string | null;
   currentPayeeId?: string | null;
-  
+
   // Payee suggestion (optional - can be skipped if no payee change needed)
   proposedPayeeId?: string | null;
   proposedPayeeName?: string | null;
   payeeConfidence?: number;
   payeeRationale?: string;
   payeeStatus?: SuggestionComponentStatus;
-  
+
   // Category suggestion
   proposedCategoryId: string | null;
   proposedCategoryName: string | null;
   categoryConfidence?: number;
   categoryRationale?: string;
   categoryStatus?: SuggestionComponentStatus;
-  
+
   // Legacy compatibility
   suggestedPayeeName?: string | null;
   confidence?: number;
   rationale?: string;
 }): Suggestion {
   const now = new Date().toISOString();
-  
+
   // Determine payee suggestion values
   const payeeConfidence = params.payeeConfidence ?? 0;
   const payeeRationale = params.payeeRationale || '';
   const payeeStatus = params.payeeStatus || (params.proposedPayeeName ? 'pending' : 'skipped');
-  
+
   // Determine category suggestion values
   const categoryConfidence = params.categoryConfidence ?? params.confidence ?? 0;
   const categoryRationale = params.categoryRationale || params.rationale || '';
   const categoryStatus = params.categoryStatus || 'pending';
-  
+
   // Build the suggestion
   const suggestion: Suggestion = {
     id: crypto.randomUUID(),
@@ -206,7 +206,7 @@ export function createSuggestion(params: {
     transactionDate: params.transactionDate || null,
     currentCategoryId: params.currentCategoryId,
     currentPayeeId: params.currentPayeeId || null,
-    
+
     payeeSuggestion: {
       proposedPayeeId: params.proposedPayeeId || null,
       proposedPayeeName: params.proposedPayeeName || params.suggestedPayeeName || null,
@@ -214,7 +214,7 @@ export function createSuggestion(params: {
       rationale: payeeRationale,
       status: payeeStatus,
     },
-    
+
     categorySuggestion: {
       proposedCategoryId: params.proposedCategoryId,
       proposedCategoryName: params.proposedCategoryName,
@@ -222,26 +222,36 @@ export function createSuggestion(params: {
       rationale: categoryRationale,
       status: categoryStatus,
     },
-    
+
     correction: {
       correctedPayeeId: null,
       correctedPayeeName: null,
       correctedCategoryId: null,
       correctedCategoryName: null,
     },
-    
+
     // Legacy fields
     suggestedPayeeName: params.proposedPayeeName || params.suggestedPayeeName || null,
-    confidence: computeCombinedConfidence(payeeConfidence, categoryConfidence, payeeStatus, categoryStatus),
-    rationale: computeCombinedRationale(payeeRationale, categoryRationale, payeeStatus, categoryStatus),
+    confidence: computeCombinedConfidence(
+      payeeConfidence,
+      categoryConfidence,
+      payeeStatus,
+      categoryStatus
+    ),
+    rationale: computeCombinedRationale(
+      payeeRationale,
+      categoryRationale,
+      payeeStatus,
+      categoryStatus
+    ),
     status: computeCombinedStatus(payeeStatus, categoryStatus),
     proposedCategoryId: params.proposedCategoryId || 'unknown',
     proposedCategoryName: params.proposedCategoryName || 'Unknown',
-    
+
     createdAt: now,
     updatedAt: now,
   };
-  
+
   return suggestion;
 }
 
@@ -264,7 +274,7 @@ export function updatePayeeSuggestionStatus(
     ...suggestion.payeeSuggestion,
     status: newStatus,
   };
-  
+
   const updatedCorrection = {
     ...suggestion.correction,
     ...(correction && {
@@ -272,20 +282,20 @@ export function updatePayeeSuggestionStatus(
       correctedPayeeName: correction.payeeName ?? null,
     }),
   };
-  
+
   const newSuggestion = {
     ...suggestion,
     payeeSuggestion: updatedPayee,
     correction: updatedCorrection,
     updatedAt: new Date().toISOString(),
   };
-  
+
   // Update legacy fields
   newSuggestion.status = computeCombinedStatus(
     newSuggestion.payeeSuggestion.status,
     newSuggestion.categorySuggestion.status
   );
-  
+
   return newSuggestion;
 }
 
@@ -301,7 +311,7 @@ export function updateCategorySuggestionStatus(
     ...suggestion.categorySuggestion,
     status: newStatus,
   };
-  
+
   const updatedCorrection = {
     ...suggestion.correction,
     ...(correction && {
@@ -309,20 +319,20 @@ export function updateCategorySuggestionStatus(
       correctedCategoryName: correction.categoryName ?? null,
     }),
   };
-  
+
   const newSuggestion = {
     ...suggestion,
     categorySuggestion: updatedCategory,
     correction: updatedCorrection,
     updatedAt: new Date().toISOString(),
   };
-  
+
   // Update legacy fields
   newSuggestion.status = computeCombinedStatus(
     newSuggestion.payeeSuggestion.status,
     newSuggestion.categorySuggestion.status
   );
-  
+
   return newSuggestion;
 }
 
@@ -337,7 +347,7 @@ export function transitionSuggestionStatus(
   // Map legacy status to component statuses
   let payeeStatus: SuggestionComponentStatus = suggestion.payeeSuggestion.status;
   let categoryStatus: SuggestionComponentStatus = suggestion.categorySuggestion.status;
-  
+
   if (newStatus === 'approved') {
     if (payeeStatus === 'pending') payeeStatus = 'approved';
     if (categoryStatus === 'pending') categoryStatus = 'approved';
@@ -348,7 +358,7 @@ export function transitionSuggestionStatus(
     payeeStatus = 'applied';
     categoryStatus = 'applied';
   }
-  
+
   return {
     ...suggestion,
     payeeSuggestion: { ...suggestion.payeeSuggestion, status: payeeStatus },
@@ -373,7 +383,10 @@ export function hasPendingComponents(suggestion: Suggestion): boolean {
  */
 export function getPendingSuggestionTypes(suggestion: Suggestion): SuggestionType[] {
   const types: SuggestionType[] = [];
-  if (suggestion.payeeSuggestion.status === 'pending' && suggestion.payeeSuggestion.proposedPayeeName) {
+  if (
+    suggestion.payeeSuggestion.status === 'pending' &&
+    suggestion.payeeSuggestion.proposedPayeeName
+  ) {
     types.push('payee');
   }
   if (suggestion.categorySuggestion.status === 'pending') {
@@ -381,4 +394,3 @@ export function getPendingSuggestionTypes(suggestion: Suggestion): SuggestionTyp
   }
   return types;
 }
-

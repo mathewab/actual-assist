@@ -36,13 +36,13 @@ export class SyncService {
     }
 
     // Build changes from approved suggestions with human-readable data
-    const changes = approvedSuggestions.map(suggestion => {
+    const changes = approvedSuggestions.map((suggestion) => {
       const hasPayeeChange = !!(
         suggestion.payeeSuggestion?.status === 'approved' &&
         suggestion.payeeSuggestion?.proposedPayeeName &&
         suggestion.payeeSuggestion.proposedPayeeName !== suggestion.transactionPayee
       );
-      
+
       return createChange({
         transactionId: suggestion.transactionId,
         proposedCategoryId: suggestion.proposedCategoryId,
@@ -52,7 +52,10 @@ export class SyncService {
         transactionDate: suggestion.transactionDate,
         transactionAmount: suggestion.transactionAmount,
         transactionAccountName: suggestion.transactionAccountName,
-        proposedCategoryName: suggestion.categorySuggestion?.proposedCategoryName || suggestion.proposedCategoryName || null,
+        proposedCategoryName:
+          suggestion.categorySuggestion?.proposedCategoryName ||
+          suggestion.proposedCategoryName ||
+          null,
         currentCategoryName: null, // We don't have this easily available
         proposedPayeeName: suggestion.payeeSuggestion?.proposedPayeeName || null,
         hasPayeeChange,
@@ -156,7 +159,7 @@ export class SyncService {
       (suggestion) => suggestion.status === 'approved'
     );
 
-    return approvedSuggestions.map(suggestion => {
+    return approvedSuggestions.map((suggestion) => {
       const hasPayeeChange = !!(
         suggestion.payeeSuggestion?.status === 'approved' &&
         suggestion.payeeSuggestion?.proposedPayeeName &&
@@ -172,7 +175,10 @@ export class SyncService {
         transactionDate: suggestion.transactionDate,
         transactionAmount: suggestion.transactionAmount,
         transactionAccountName: suggestion.transactionAccountName,
-        proposedCategoryName: suggestion.categorySuggestion?.proposedCategoryName || suggestion.proposedCategoryName || null,
+        proposedCategoryName:
+          suggestion.categorySuggestion?.proposedCategoryName ||
+          suggestion.proposedCategoryName ||
+          null,
         currentCategoryName: null,
         proposedPayeeName: suggestion.payeeSuggestion?.proposedPayeeName || null,
         hasPayeeChange,
@@ -185,7 +191,7 @@ export class SyncService {
    * Pauses scheduler during apply to prevent conflicts
    */
   async applySpecificSuggestions(
-    budgetId: string, 
+    budgetId: string,
     suggestionIds: string[]
   ): Promise<{ success: boolean; applied: number }> {
     logger.info('Applying specific suggestions', { budgetId, count: suggestionIds.length });
@@ -198,7 +204,7 @@ export class SyncService {
 
     const allSuggestions = this.suggestionRepo.findByBudgetId(budgetId);
     const suggestionsToApply = allSuggestions.filter(
-      s => suggestionIds.includes(s.id) && s.status === 'approved'
+      (s) => suggestionIds.includes(s.id) && s.status === 'approved'
     );
 
     if (suggestionsToApply.length === 0) {
@@ -217,8 +223,7 @@ export class SyncService {
           suggestion.payeeSuggestion.proposedPayeeName !== suggestion.transactionPayee
         );
         const hasCategoryChange = !!(
-          suggestion.categorySuggestion?.status === 'approved' ||
-          suggestion.proposedCategoryId
+          suggestion.categorySuggestion?.status === 'approved' || suggestion.proposedCategoryId
         );
 
         // Apply category change
@@ -234,10 +239,7 @@ export class SyncService {
           const payeeId = await this.actualBudget.findOrCreatePayee(
             suggestion.payeeSuggestion.proposedPayeeName
           );
-          await this.actualBudget.updateTransactionPayee(
-            suggestion.transactionId,
-            payeeId
-          );
+          await this.actualBudget.updateTransactionPayee(suggestion.transactionId, payeeId);
           logger.debug('Applied payee change', {
             transactionId: suggestion.transactionId,
             newPayeeName: suggestion.payeeSuggestion.proposedPayeeName,

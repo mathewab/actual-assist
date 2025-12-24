@@ -5,16 +5,9 @@ import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { PayeeCacheRepository } from '../infra/repositories/PayeeCacheRepository.js';
 import type { PayeeMatchCacheRepository } from '../infra/repositories/PayeeMatchCacheRepository.js';
 import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
-import { 
-  createSuggestion, 
-  type Suggestion,
-} from '../domain/entities/Suggestion.js';
+import { createSuggestion, type Suggestion } from '../domain/entities/Suggestion.js';
 import { logger } from '../infra/logger.js';
-import {
-  payeeMatcher,
-  type FuzzyMatchResult,
-  type PayeeCandidate,
-} from '../infra/PayeeMatcher.js';
+import { payeeMatcher, type FuzzyMatchResult, type PayeeCandidate } from '../infra/PayeeMatcher.js';
 
 /** Threshold for caching high-confidence AI suggestions */
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;
@@ -49,7 +42,7 @@ interface CombinedSuggestionResult {
  * SuggestionService - generates AI suggestions for payees and categories
  * P1 (Single Responsibility): Focused on suggestion generation
  * P3 (Testability): Dependencies injected for easy mocking
- * 
+ *
  * Architecture:
  * - Payee and Category suggestions are independent with separate confidence/rationale
  * - Payee matches are cached in payee_match_cache
@@ -74,7 +67,7 @@ export class SuggestionService {
   private getRetryableTransactionIds(suggestions: Suggestion[]): string[] {
     const retryable = suggestions.filter((s) => {
       if (s.status !== 'pending') return false;
-      
+
       // Only retry if rationale is empty string (indicates LLM error)
       return s.rationale === '';
     });
@@ -86,7 +79,7 @@ export class SuggestionService {
    * Generate suggestions for uncategorized transactions
    * Optimized: Groups by payee and uses cache
    * P4 (Explicitness): Returns array of Suggestion entities
-   * 
+   *
    * Deduplication: Skips transactions that already have pending suggestions
    * Cleanup: Removes suggestions for deleted transactions
    */
@@ -110,7 +103,7 @@ export class SuggestionService {
     ]);
 
     // Cleanup orphaned suggestions (transactions that no longer exist in budget)
-    const validTransactionIds = new Set(transactions.map(t => t.id));
+    const validTransactionIds = new Set(transactions.map((t) => t.id));
     const cleanedUp = this.suggestionRepo.cleanupOrphanedSuggestions(budgetId, validTransactionIds);
     if (cleanedUp > 0) {
       logger.info('Cleaned up orphaned suggestions for deleted transactions', { count: cleanedUp });
@@ -120,7 +113,7 @@ export class SuggestionService {
     // (excluding retryable ones which will be regenerated)
     const existingPendingTxIds = this.suggestionRepo.getExistingPendingTransactionIds(budgetId);
     const skipTxIds = new Set(
-      [...existingPendingTxIds].filter(id => !retryableTxIds.includes(id))
+      [...existingPendingTxIds].filter((id) => !retryableTxIds.includes(id))
     );
 
     logger.info('Deduplication check', {
@@ -136,7 +129,9 @@ export class SuggestionService {
 
     const transferSkipped = transactions.filter((txn) => txn.isTransfer).length;
     if (transferSkipped > 0) {
-      logger.info('Skipped transfer transactions from suggestion generation', { count: transferSkipped });
+      logger.info('Skipped transfer transactions from suggestion generation', {
+        count: transferSkipped,
+      });
     }
 
     if (uncategorized.length === 0) {
@@ -153,13 +148,16 @@ export class SuggestionService {
     logger.info(`Grouped into ${uniquePayees.length} unique payees`);
 
     // Check cache for known payee→category mappings (combined lookup)
-    const { cached: cachedCategories, uncached } = await this.checkPayeeCategoryCache(budgetId, uniquePayees);
+    const { cached: cachedCategories, uncached } = await this.checkPayeeCategoryCache(
+      budgetId,
+      uniquePayees
+    );
 
     logger.info(`Cache lookup: ${cachedCategories.size} category hits, ${uncached.length} misses`);
 
     // Generate suggestions from cache hits (no LLM call needed)
     const suggestions: Suggestion[] = [];
-    
+
     for (const [payeeName, cacheEntry] of cachedCategories) {
       const txns = byPayee.get(payeeName) || [];
       for (const txn of txns) {
@@ -173,10 +171,10 @@ export class SuggestionService {
           transactionDate: txn.date,
           currentCategoryId: txn.categoryId,
           currentPayeeId: null,
-          
+
           // Payee - skip for cached (already known)
           payeeStatus: 'skipped',
-          
+
           // Category from cache
           proposedCategoryId: cacheEntry.categoryId,
           proposedCategoryName: cacheEntry.categoryName,
@@ -228,7 +226,7 @@ export class SuggestionService {
    */
   private groupByPayee(transactions: Transaction[]): Map<string, Transaction[]> {
     const groups = new Map<string, Transaction[]>();
-    
+
     for (const txn of transactions) {
       const payee = txn.payeeName || 'Unknown';
       const existing = groups.get(payee) || [];
@@ -246,10 +244,16 @@ export class SuggestionService {
     budgetId: string,
     payeeNames: string[]
   ): Promise<{
-    cached: Map<string, { categoryId: string; categoryName: string; confidence: number; source: string }>;
+    cached: Map<
+      string,
+      { categoryId: string; categoryName: string; confidence: number; source: string }
+    >;
     uncached: string[];
   }> {
-    const cached = new Map<string, { categoryId: string; categoryName: string; confidence: number; source: string }>();
+    const cached = new Map<
+      string,
+      { categoryId: string; categoryName: string; confidence: number; source: string }
+    >();
     const uncached: string[] = [];
 
     if (!this.payeeCache) {
@@ -257,11 +261,15 @@ export class SuggestionService {
     }
 
     const cacheEntries = this.payeeCache.findByPayees(budgetId, payeeNames);
-    
+
     for (const payeeName of payeeNames) {
-      const normalized = payeeName.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '');
+      const normalized = payeeName
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/[^\w\s]/g, '');
       const entry = cacheEntries.get(normalized);
-      
+
       if (entry) {
         cached.set(payeeName, {
           categoryId: entry.categoryId,
@@ -318,13 +326,14 @@ Respond with a single JSON object (no markdown, no explanation):
     matchedPayeeCategories: Array<{ payeeName: string; categoryName: string; categoryId: string }>
   ): string {
     const categoryList = categories
-      .filter(cat => !cat.hidden && !cat.isIncome)
-      .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
+      .filter((cat) => !cat.hidden && !cat.isIncome)
+      .map((cat) => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
-    const contextSection = matchedPayeeCategories.length > 0
-      ? `\nSimilar payees in this budget:\n${matchedPayeeCategories.map(p => `- "${p.payeeName}" → ${p.categoryName}`).join('\n')}\n`
-      : '';
+    const contextSection =
+      matchedPayeeCategories.length > 0
+        ? `\nSimilar payees in this budget:\n${matchedPayeeCategories.map((p) => `- "${p.payeeName}" → ${p.categoryName}`).join('\n')}\n`
+        : '';
 
     return `Payee: ${canonicalPayeeName || payeeName}
 ${canonicalPayeeName && canonicalPayeeName !== payeeName ? `(Original: ${payeeName})` : ''}
@@ -390,9 +399,9 @@ ${categoryList}`;
         matchedPayeeCategories
       );
 
-      logger.debug('Calling OpenAI for category suggestion with web search', { 
-        payeeName, 
-        canonicalPayeeName, 
+      logger.debug('Calling OpenAI for category suggestion with web search', {
+        payeeName,
+        canonicalPayeeName,
         matchedPayeesCount: matchedPayeeCategories.length,
       });
 
@@ -510,8 +519,8 @@ Respond with JSON only (no markdown):
     categories: Category[]
   ): Promise<CombinedSuggestionResult> {
     const categoryList = categories
-      .filter(cat => !cat.hidden && !cat.isIncome)
-      .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
+      .filter((cat) => !cat.hidden && !cat.isIncome)
+      .map((cat) => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
     const input = `Transaction payee: "${rawPayee}"
@@ -642,8 +651,8 @@ ${categoryList}`;
       .join('\n');
 
     const categoryList = categories
-      .filter(cat => !cat.hidden && !cat.isIncome)
-      .map(cat => `${cat.id}|${cat.name}|${cat.groupName}`)
+      .filter((cat) => !cat.hidden && !cat.isIncome)
+      .map((cat) => `${cat.id}|${cat.name}|${cat.groupName}`)
       .join('\n');
 
     const instructions = `You are a personal finance assistant helping match payees from transaction data.
@@ -725,7 +734,7 @@ ${categoryList}`;
             categoryId: (result.categoryId as string) || null,
             categoryName: (result.categoryName as string) || null,
             confidence: (result.categoryConfidence as number) ?? 0.5,
-            rationale: result.categoryReasoning as string || 'No matching payee',
+            rationale: (result.categoryReasoning as string) || 'No matching payee',
             source: 'fuzzy_match',
           },
         };
@@ -771,8 +780,11 @@ ${categoryList}`;
     if (this.payeeMatchCache) {
       const cachedPayee = this.payeeMatchCache.findByPayee(budgetId, rawPayeeName);
       if (cachedPayee) {
-        logger.debug('Payee match cache hit', { rawPayeeName, canonicalPayeeName: cachedPayee.canonicalPayeeName });
-        
+        logger.debug('Payee match cache hit', {
+          rawPayeeName,
+          canonicalPayeeName: cachedPayee.canonicalPayeeName,
+        });
+
         // Use cached payee, but still need to get category
         const categoryResult = await this.getCategorySuggestionForPayee(
           rawPayeeName,
@@ -781,7 +793,7 @@ ${categoryList}`;
           budgetId,
           fuzzyMatchCandidates
         );
-        
+
         return {
           payee: {
             payeeName: rawPayeeName,
@@ -797,8 +809,11 @@ ${categoryList}`;
     }
 
     // Step 2: Try high-confidence fuzzy match
-    const highConfidenceMatch = payeeMatcher.findHighConfidenceMatch(rawPayeeName, fuzzyMatchCandidates);
-    
+    const highConfidenceMatch = payeeMatcher.findHighConfidenceMatch(
+      rawPayeeName,
+      fuzzyMatchCandidates
+    );
+
     if (highConfidenceMatch) {
       logger.info('Found high-confidence fuzzy match', {
         rawPayeeName,
@@ -848,7 +863,7 @@ ${categoryList}`;
 
     // First identify the payee
     const payeeResult = await this.identifyPayee(rawPayeeName);
-    
+
     // Then suggest category with web search
     const categoryResult = await this.suggestCategory(
       rawPayeeName,
@@ -889,21 +904,17 @@ ${categoryList}`;
     }
 
     // Find similar payees to provide context
-    const similarPayees = payeeMatcher.findMatches(canonicalPayeeName, fuzzyMatchCandidates, 60)
+    const similarPayees = payeeMatcher
+      .findMatches(canonicalPayeeName, fuzzyMatchCandidates, 60)
       .slice(0, 3)
-      .map(m => ({
+      .map((m) => ({
         payeeName: m.payeeName,
         categoryName: m.categoryName,
         categoryId: m.categoryId,
       }));
 
     // Similar payees provide context hints in the prompt
-    return this.suggestCategory(
-      rawPayeeName,
-      canonicalPayeeName,
-      categories,
-      similarPayees
-    );
+    return this.suggestCategory(rawPayeeName, canonicalPayeeName, categories, similarPayees);
   }
 
   /**
@@ -934,7 +945,9 @@ ${categoryList}`;
       source: 'user_approved' | 'high_confidence_ai';
     }> = [];
 
-    logger.info('Processing payees with independent payee/category suggestions', { payeeCount: payeeNames.length });
+    logger.info('Processing payees with independent payee/category suggestions', {
+      payeeCount: payeeNames.length,
+    });
 
     // Build fuzzy match candidates pool
     const fuzzyMatchCandidates = await this.buildFuzzyMatchCandidates(budgetId);
@@ -1044,7 +1057,9 @@ ${categoryList}`;
 
     if (this.payeeCache && categoryMappingsToCache.length > 0) {
       this.payeeCache.saveBatch(categoryMappingsToCache);
-      logger.info('Cached high-confidence category mappings', { count: categoryMappingsToCache.length });
+      logger.info('Cached high-confidence category mappings', {
+        count: categoryMappingsToCache.length,
+      });
     }
 
     logger.info('Finished processing all payees', {
@@ -1083,7 +1098,7 @@ ${categoryList}`;
     if (!suggestion) {
       throw new Error(`Suggestion not found: ${suggestionId}`);
     }
-    
+
     this.suggestionRepo.updateStatus(suggestionId, 'approved');
 
     // Cache both payee and category mappings
@@ -1162,7 +1177,7 @@ ${categoryList}`;
    * Reject payee suggestion with optional correction
    */
   rejectPayeeSuggestion(
-    suggestionId: string, 
+    suggestionId: string,
     correction?: { payeeId?: string; payeeName?: string }
   ): void {
     const suggestion = this.suggestionRepo.findById(suggestionId);
@@ -1254,7 +1269,7 @@ ${categoryList}`;
     // Reset both payee and category status back to pending (or skipped if no suggestion)
     const newPayeeStatus = suggestion.payeeSuggestion?.proposedPayeeName ? 'pending' : 'skipped';
     const newCategoryStatus = 'pending';
-    
+
     this.suggestionRepo.updatePayeeStatus(suggestionId, newPayeeStatus as any);
     this.suggestionRepo.updateCategoryStatus(suggestionId, newCategoryStatus);
     this.suggestionRepo.updateStatus(suggestionId, 'pending');
@@ -1289,10 +1304,10 @@ ${categoryList}`;
 
     // Force regeneration using AI (bypass cache by calling AI directly)
     const payeeName = existing.transactionPayee || 'Unknown';
-    
+
     // First identify the payee
     const payeeResult = await this.identifyPayee(payeeName);
-    
+
     // Then suggest category with web search
     const categoryResult = await this.suggestCategory(
       payeeName,
@@ -1371,7 +1386,7 @@ ${categoryList}`;
     // Find all pending suggestions with the same payee
     const allSuggestions = this.suggestionRepo.findByBudgetId(existing.budgetId);
     const payeeGroup = allSuggestions.filter(
-      s => s.transactionPayee === payeeName && s.status === 'pending'
+      (s) => s.transactionPayee === payeeName && s.status === 'pending'
     );
 
     if (payeeGroup.length === 0) {
@@ -1457,8 +1472,8 @@ ${categoryList}`;
    */
   private cacheApprovedPayeeMatch(suggestion: Suggestion): void {
     if (
-      this.payeeMatchCache && 
-      suggestion.transactionPayee && 
+      this.payeeMatchCache &&
+      suggestion.transactionPayee &&
       suggestion.payeeSuggestion.proposedPayeeName
     ) {
       this.payeeMatchCache.save({
@@ -1481,7 +1496,7 @@ ${categoryList}`;
    */
   private cacheApprovedCategoryMapping(suggestion: Suggestion): void {
     if (
-      this.payeeCache && 
+      this.payeeCache &&
       suggestion.categorySuggestion.proposedCategoryId &&
       suggestion.categorySuggestion.proposedCategoryId !== 'unknown'
     ) {
@@ -1507,14 +1522,11 @@ ${categoryList}`;
    * Sync with Actual Budget and generate suggestions for changed transactions only
    * T068: Diff-based generation - only processes new/changed uncategorized transactions
    * P9 (Minimalism): Process only what changed, not entire budget
-   * 
+   *
    * Optimized: Uses batch LLM calls and payee caching
    * Cleanup: Removes suggestions for deleted transactions
    */
-  async syncAndGenerateSuggestions(
-    budgetId: string,
-    fullSnapshot = false
-  ): Promise<Suggestion[]> {
+  async syncAndGenerateSuggestions(budgetId: string, fullSnapshot = false): Promise<Suggestion[]> {
     logger.info('Syncing and generating suggestions', { budgetId, fullSnapshot });
 
     // Sync latest data from Actual Budget server
@@ -1533,7 +1545,7 @@ ${categoryList}`;
     ]);
 
     // Cleanup orphaned suggestions (transactions that no longer exist in budget)
-    const validTransactionIds = new Set(transactions.map(t => t.id));
+    const validTransactionIds = new Set(transactions.map((t) => t.id));
     const cleanedUp = this.suggestionRepo.cleanupOrphanedSuggestions(budgetId, validTransactionIds);
     if (cleanedUp > 0) {
       logger.info('Cleaned up orphaned suggestions for deleted transactions', { count: cleanedUp });
@@ -1555,9 +1567,7 @@ ${categoryList}`;
       (s) => !retryableTxIds.includes(s.transactionId)
     );
 
-    const existingTransactionIds = new Set(
-      successfulSuggestions.map((s) => s.transactionId)
-    );
+    const existingTransactionIds = new Set(successfulSuggestions.map((s) => s.transactionId));
 
     // Filter to only new uncategorized transactions without suggestions
     const uncategorized = transactions.filter(
@@ -1566,7 +1576,9 @@ ${categoryList}`;
 
     const transferSkipped = transactions.filter((txn) => txn.isTransfer).length;
     if (transferSkipped > 0) {
-      logger.info('Skipped transfer transactions during diff-based generation', { count: transferSkipped });
+      logger.info('Skipped transfer transactions during diff-based generation', {
+        count: transferSkipped,
+      });
     }
 
     if (uncategorized.length === 0) {
@@ -1581,13 +1593,16 @@ ${categoryList}`;
     const uniquePayees = Array.from(byPayee.keys());
 
     // Check cache for known payees
-    const { cached: cachedCategories, uncached } = await this.checkPayeeCategoryCache(budgetId, uniquePayees);
+    const { cached: cachedCategories, uncached } = await this.checkPayeeCategoryCache(
+      budgetId,
+      uniquePayees
+    );
 
     logger.info(`Diff sync: ${cachedCategories.size} cached, ${uncached.length} need LLM`);
 
     // Create suggestions from cache
     const suggestions: Suggestion[] = [];
-    
+
     for (const [payeeName, cacheEntry] of cachedCategories) {
       const txns = byPayee.get(payeeName) || [];
       for (const txn of txns) {
@@ -1601,10 +1616,10 @@ ${categoryList}`;
           transactionDate: txn.date,
           currentCategoryId: txn.categoryId,
           currentPayeeId: null,
-          
+
           // Payee - skip for cached
           payeeStatus: 'skipped',
-          
+
           // Category from cache
           proposedCategoryId: cacheEntry.categoryId,
           proposedCategoryName: cacheEntry.categoryName,

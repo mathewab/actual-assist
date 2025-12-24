@@ -44,9 +44,15 @@ export interface BudgetSnapshot {
 /**
  * Validates BudgetSnapshot data according to data-model.md rules
  */
-export function validateBudgetSnapshot(snapshot: Partial<BudgetSnapshot>): snapshot is BudgetSnapshot {
+export function validateBudgetSnapshot(
+  snapshot: Partial<BudgetSnapshot>
+): snapshot is BudgetSnapshot {
   // budgetId must be non-empty string
-  if (!snapshot.budgetId || typeof snapshot.budgetId !== 'string' || snapshot.budgetId.trim() === '') {
+  if (
+    !snapshot.budgetId ||
+    typeof snapshot.budgetId !== 'string' ||
+    snapshot.budgetId.trim() === ''
+  ) {
     throw new Error('BudgetSnapshot: budgetId must be a non-empty string');
   }
 
@@ -59,7 +65,7 @@ export function validateBudgetSnapshot(snapshot: Partial<BudgetSnapshot>): snaps
   if (!snapshot.downloadedAt || typeof snapshot.downloadedAt !== 'string') {
     throw new Error('BudgetSnapshot: downloadedAt must be valid ISO 8601 timestamp');
   }
-  
+
   const downloadedTime = new Date(snapshot.downloadedAt).getTime();
   const now = Date.now();
   if (downloadedTime > now) {

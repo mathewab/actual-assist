@@ -83,14 +83,10 @@ export function createChange(input: ChangeInput): Change {
  * Factory function to create a SyncPlan from approved suggestions
  * P2 (Zero Duplication): Single place to convert suggestions to plan
  */
-export function createSyncPlan(
-  id: string,
-  budgetId: string,
-  changes: Change[]
-): SyncPlan {
-  const categoryChanges = changes.filter(c => c.proposedCategoryId).length;
-  const payeeChanges = changes.filter(c => c.hasPayeeChange).length;
-  
+export function createSyncPlan(id: string, budgetId: string, changes: Change[]): SyncPlan {
+  const categoryChanges = changes.filter((c) => c.proposedCategoryId).length;
+  const payeeChanges = changes.filter((c) => c.hasPayeeChange).length;
+
   return {
     id,
     budgetId,

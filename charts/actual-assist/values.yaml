@@ -8,7 +8,7 @@ backend:
   # Frontend is stateless and can scale to any number of replicas.
   replicaCount: 1
   image:
-    repository: actual-assist-backend
+    repository: ghcr.io/mathewab/actual-assist-backend
     pullPolicy: IfNotPresent
     tag: ""  # Defaults to Chart.appVersion
   

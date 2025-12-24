@@ -51,6 +51,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=ref,event=tag
             type=ref,event=branch
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest,enable={{is_default_branch}}
       
       - name: Build and push backend image
@@ -99,6 +100,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=ref,event=tag
             type=ref,event=branch
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest,enable={{is_default_branch}}
       
       - name: Build and push frontend image

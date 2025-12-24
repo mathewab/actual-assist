@@ -132,22 +132,21 @@ frontend/
 │       └── setup.spec.ts
 └── package.json
 
-helm/
-├── Chart.yaml              # Helm chart metadata (name, version, description)
-├── values.yaml             # Default configuration (secrets, storage, replicas)
-├── values-dev.yaml         # Development overrides
-├── values-prod.yaml        # Production overrides
-├── templates/
-│   ├── deployment.yaml     # Backend + frontend deployments
-│   ├── service.yaml        # Services for backend and frontend
-│   ├── configmap.yaml      # Non-secret config (env vars, file mounts)
-│   ├── secret.yaml         # Secret resource (OPENAI_API_KEY, ACTUAL_PASSWORD)
-│   ├── pvc.yaml            # PersistentVolumeClaim for budget data and SQLite
-│   ├── ingress.yaml        # Ingress for home-ops (optional, values-driven)
-│   ├── _helpers.tpl        # Template helpers (labels, selector)
-│   └── NOTES.txt           # Post-install instructions
-├── README.md               # Helm chart documentation (quick install, values reference)
-└── .helmignore             # Ignore patterns for Helm package
+charts/
+└── actual-assist/          # Helm chart (chart-releaser compatible location)
+    ├── Chart.yaml          # Helm chart metadata (name, version, description)
+    ├── values.yaml         # Default configuration (prod defaults, secrets, storage, replicas)
+    ├── templates/
+    │   ├── deployment.yaml # Backend + frontend deployments
+    │   ├── service.yaml    # Services for backend and frontend
+    │   ├── configmap.yaml  # Non-secret config (env vars, file mounts)
+    │   ├── secret.yaml     # Secret resource (OPENAI_API_KEY, ACTUAL_PASSWORD)
+    │   ├── pvc.yaml        # PersistentVolumeClaim for budget data and SQLite
+    │   ├── ingress.yaml    # Ingress for home-ops (optional, values-driven)
+    │   ├── _helpers.tpl    # Template helpers (labels, selector)
+    │   └── NOTES.txt       # Post-install instructions
+    ├── README.md           # Helm chart documentation (quick install, values reference)
+    └── .helmignore         # Ignore patterns for Helm package
 
 .github/
 ├── workflows/
@@ -292,8 +291,8 @@ helm/
   - Frontend: actual-assist-frontend:${GITHUB_REF#refs/tags/}
   - Registry: Docker Hub (DOCKER_USERNAME, DOCKER_PASSWORD secrets) or ghcr.io
 - Helm chart validation & packaging:
-  - helm lint helm/
-  - helm package helm/ → actual-assist-${VERSION}.tgz
+  - helm lint charts/actual-assist/
+  - helm package charts/actual-assist/ → actual-assist-${VERSION}.tgz
   - Upload artifact for release
 - GitHub release creation:
   - Extract tag and create release notes

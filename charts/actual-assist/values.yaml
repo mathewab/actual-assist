@@ -74,8 +74,8 @@ frontend:
 
 # Storage configuration
 storage:
-  className: fast-ssd
-  size: 20Gi
+  className: standard
+  size: 1Gi
   mountPath: /data
 
 # Docker registry credentials (optional)

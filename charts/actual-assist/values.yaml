@@ -40,9 +40,9 @@ backend:
 
 # Frontend configuration
 frontend:
-  replicaCount: 2
+  replicaCount: 1
   image:
-    repository: actual-assist-frontend
+    repository: ghcr.io/mathewab/actual-assist-frontend
     pullPolicy: IfNotPresent
     tag: ""  # Defaults to Chart.appVersion
   
@@ -92,19 +92,7 @@ affinity: {}
 
 # Ingress configuration
 ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-  hosts:
-    - host: actual-assist.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: actual-assist-tls
-      hosts:
-        - actual-assist.example.com
+  enabled: false
 
 # Secret management - provide values in actual deployment
 secrets:

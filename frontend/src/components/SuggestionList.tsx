@@ -244,7 +244,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
       {payeeGroups.length === 0 ? (
         <div className="empty-state">
           <p>No suggestions available</p>
-          <p className="hint">Click "Sync & Generate" to fetch new suggestions</p>
+          <p className="hint">Click &quot;Sync &amp; Generate&quot; to fetch new suggestions</p>
         </div>
       ) : (
         <div className="payee-list">

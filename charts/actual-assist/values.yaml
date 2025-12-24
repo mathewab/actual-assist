@@ -49,7 +49,7 @@ frontend:
   service:
     type: ClusterIP
     port: 80
-    targetPort: 5173
+    targetPort: 80
   
   resources:
     requests:
@@ -61,14 +61,14 @@ frontend:
   livenessProbe:
     httpGet:
       path: /
-      port: 5173
+      port: 80
     initialDelaySeconds: 30
     periodSeconds: 10
   
   readinessProbe:
     httpGet:
       path: /
-      port: 5173
+      port: 80
     initialDelaySeconds: 5
     periodSeconds: 5
 

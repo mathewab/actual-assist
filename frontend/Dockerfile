@@ -3,14 +3,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files (from root for npm workspaces)
+# Copy package files from root (npm workspaces)
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
-RUN npm ci
+RUN npm ci -w frontend
 
 # Copy source code and configs
-COPY tsconfig*.json vite.config.ts index.html ./
-COPY src ./src
+COPY frontend/tsconfig*.json frontend/vite.config.ts frontend/index.html ./
+COPY frontend/src ./src
 
 # Build Vite application
 RUN npm run build

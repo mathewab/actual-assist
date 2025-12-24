@@ -3,14 +3,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files (from root for npm workspaces)
+# Copy package files from root (npm workspaces)
 COPY package*.json ./
 COPY backend/package*.json ./backend/
-RUN npm ci
+RUN npm ci -w backend
 
 # Copy source code
-COPY tsconfig.json ./
-COPY src ./src
+COPY backend/tsconfig.json ./
+COPY backend/src ./src
 
 # Build TypeScript
 RUN npm run build
@@ -23,7 +23,7 @@ WORKDIR /app
 # Copy package files and install production deps only
 COPY package*.json ./
 COPY backend/package*.json ./backend/
-RUN npm ci --only=production
+RUN npm ci -w backend --omit=dev
 
 # Copy built application
 COPY --from=builder /app/dist ./dist

@@ -1,0 +1,200 @@
+# Actual Budget Assistant
+
+AI-powered categorization assistant for [Actual Budget](https://actualbudget.com/).
+
+## Features
+
+- **AI Category Suggestions**: Automatically suggest categories for uncategorized transactions using GPT-4o-mini
+- **Review & Approve**: Review AI suggestions before applying them to your budget
+- **Sync Plan**: See exactly what changes will be made before syncing
+- **Audit Log**: Track all AI suggestions and user actions
+
+## Architecture
+
+**Constitution-Driven Development**: This project follows strict engineering principles documented in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+
+**Tech Stack**:
+- **Backend**: Node.js 20, TypeScript 5, Express.js, @actual-app/api
+- **Frontend**: React 18, Vite, TanStack Query
+- **AI**: OpenAI GPT-4o-mini
+- **Storage**: SQLite (audit log)
+- **Deployment**: Docker, docker-compose
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js >= 20.0.0
+- npm >= 10.0.0
+- Docker & docker-compose (for containerized deployment)
+- Actual Budget server URL and credentials
+- OpenAI API key
+
+### Development Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd actual-assist
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   cd backend && npm install
+   cd ../frontend && npm install
+   cd ..
+   ```
+
+3. **Configure environment variables**:
+   ```bash
+   # Backend
+   cp backend/.env.example backend/.env
+   # Edit backend/.env with your credentials
+
+   # Frontend
+   cp frontend/.env.example frontend/.env
+   # Edit frontend/.env if needed
+   ```
+
+4. **Run in development mode**:
+   ```bash
+   npm run dev:all
+   ```
+
+   This starts:
+   - Backend API server on `http://localhost:3001`
+   - Frontend dev server on `http://localhost:3000`
+
+### Docker Deployment
+
+1. **Configure environment**:
+   ```bash
+   cp backend/.env.example backend/.env
+   # Edit backend/.env with your credentials
+   ```
+
+2. **Build and start containers**:
+   ```bash
+   npm run docker:up
+   ```
+
+3. **Access the application**:
+   - Frontend: `http://localhost:3000`
+   - Backend API: `http://localhost:3001`
+
+4. **View logs**:
+   ```bash
+   npm run docker:logs
+   ```
+
+5. **Stop containers**:
+   ```bash
+   npm run docker:down
+   ```
+
+## Usage Workflow
+
+1. **Create Snapshot**: Capture current budget state
+2. **Generate Suggestions**: AI analyzes uncategorized transactions
+3. **Review Suggestions**: Approve/reject each suggestion in the UI
+4. **Create Sync Plan**: See what changes will be applied
+5. **Execute Sync**: Apply approved suggestions to Actual Budget
+
+See [`specs/001-actual-assist-app/quickstart.md`](specs/001-actual-assist-app/quickstart.md) for detailed usage guide.
+
+## Project Structure
+
+```
+actual-assist/
+├── backend/
+│   ├── src/
+│   │   ├── domain/       # Business entities and errors
+│   │   ├── services/     # Business logic
+│   │   ├── infra/        # External adapters (DB, APIs)
+│   │   ├── api/          # HTTP routes
+│   │   └── server.ts     # Entry point
+│   └── tests/            # Unit & integration tests
+├── frontend/
+│   ├── src/
+│   │   ├── components/   # React components
+│   │   ├── services/     # API client
+│   │   └── App.tsx       # Main app
+│   └── tests/            # E2E tests (Playwright)
+└── specs/                # Feature specifications and planning
+```
+
+## Development Commands
+
+```bash
+# Run all tests
+npm run test:all
+
+# Run backend tests only
+npm run test:backend
+
+# Run frontend E2E tests
+npm run test:frontend
+
+# Build for production
+npm run build:all
+
+# Lint and format
+cd backend && npm run lint
+cd frontend && npm run lint
+```
+
+## Configuration
+
+### Backend Environment Variables
+
+Required variables (see `backend/.env.example`):
+- `ACTUAL_SERVER_URL`: Your Actual Budget server URL
+- `ACTUAL_PASSWORD`: Actual Budget password
+- `ACTUAL_BUDGET_ID`: Budget file ID (UUID)
+- `OPENAI_API_KEY`: OpenAI API key (starts with `sk-`)
+
+Optional:
+- `ACTUAL_SYNC_ID`: Sync ID for cloud-synced budgets
+- `ACTUAL_ENCRYPTION_KEY`: Budget encryption key
+- `NODE_ENV`: `development` | `production` | `test`
+- `LOG_LEVEL`: `error` | `warn` | `info` | `debug`
+
+### Frontend Environment Variables
+
+Optional (see `frontend/.env.example`):
+- `VITE_API_URL`: Backend API URL (defaults to `/api`)
+
+## API Documentation
+
+OpenAPI 3.0 specification: [`specs/001-actual-assist-app/contracts/api.yaml`](specs/001-actual-assist-app/contracts/api.yaml)
+
+Key endpoints:
+- `POST /api/snapshots` - Create budget snapshot
+- `GET /api/suggestions/pending` - Get pending suggestions
+- `POST /api/suggestions/:id/approve` - Approve suggestion
+- `POST /api/sync/execute` - Execute sync plan
+
+## License
+
+MIT
+
+## Contributing
+
+This project follows strict engineering principles. Before contributing:
+1. Read the constitution: [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
+2. Review the feature spec: [`specs/001-actual-assist-app/spec.md`](specs/001-actual-assist-app/spec.md)
+3. Ensure all tests pass: `npm run test:all`
+4. Follow the established architecture (Domain/Service/Infra separation)
+
+## Troubleshooting
+
+**Database errors**: Delete `data/audit.db` and restart to reinitialize schema.
+
+**Connection errors to Actual Budget**: Verify `ACTUAL_SERVER_URL` is reachable and credentials are correct.
+
+**OpenAI errors**: Check API key is valid and has available quota.
+
+**Docker networking issues**: Ensure ports 3000 and 3001 are not in use.
+
+For more help, see the [quickstart guide](specs/001-actual-assist-app/quickstart.md) or open an issue.

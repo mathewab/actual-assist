@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env*
+
+# Logs
+logs/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Data directories
+data/
+*.db
+
+# Documentation
+*.md
+!README.md
+
+# Docker files
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test files
+tests/
+*.test.*
+*.spec.*
+coverage/

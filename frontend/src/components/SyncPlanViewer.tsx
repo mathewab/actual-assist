@@ -12,10 +12,10 @@ function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
   } catch {
     return dateStr;
@@ -67,10 +67,11 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
 
   const handleExecutePlan = () => {
     // Reset excluded suggestions back to pending before executing
-    const excludedSuggestionIds = syncPlan?.changes
-      .filter(c => excludedIds.has(c.id) && c.suggestionId)
-      .map(c => c.suggestionId as string) || [];
-    
+    const excludedSuggestionIds =
+      syncPlan?.changes
+        .filter((c) => excludedIds.has(c.id) && c.suggestionId)
+        .map((c) => c.suggestionId as string) || [];
+
     if (excludedSuggestionIds.length > 0) {
       resetSuggestionsMutation.mutate(excludedSuggestionIds);
     }
@@ -81,7 +82,7 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
   };
 
   const toggleExclude = (changeId: string) => {
-    setExcludedIds(prev => {
+    setExcludedIds((prev) => {
       const next = new Set(prev);
       if (next.has(changeId)) {
         next.delete(changeId);
@@ -99,14 +100,14 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
       setExcludedIds(new Set());
     } else {
       // Some included, exclude all
-      setExcludedIds(new Set(syncPlan.changes.map(c => c.id)));
+      setExcludedIds(new Set(syncPlan.changes.map((c) => c.id)));
     }
   };
 
   // Compute included changes
   const includedChanges = useMemo(() => {
     if (!syncPlan) return [];
-    return syncPlan.changes.filter(c => !excludedIds.has(c.id));
+    return syncPlan.changes.filter((c) => !excludedIds.has(c.id));
   }, [syncPlan, excludedIds]);
 
   return (
@@ -128,9 +129,7 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
       )}
 
       {createPlanMutation.error && (
-        <div className="error">
-          Error: {createPlanMutation.error.message}
-        </div>
+        <div className="error">Error: {createPlanMutation.error.message}</div>
       )}
 
       {syncPlan && (
@@ -149,11 +148,15 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
                 </div>
               )}
               <div className="stat">
-                <span className="stat-value">{includedChanges.filter(c => c.proposedCategoryId).length}</span>
+                <span className="stat-value">
+                  {includedChanges.filter((c) => c.proposedCategoryId).length}
+                </span>
                 <span className="stat-label">Category Updates</span>
               </div>
               <div className="stat">
-                <span className="stat-value">{includedChanges.filter(c => c.hasPayeeChange).length}</span>
+                <span className="stat-value">
+                  {includedChanges.filter((c) => c.hasPayeeChange).length}
+                </span>
                 <span className="stat-label">Payee Updates</span>
               </div>
             </div>
@@ -210,10 +213,14 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
                       <td className="amount-cell">{formatAmount(change.transactionAmount)}</td>
                       <td>{change.transactionAccountName || '—'}</td>
                       <td>
-                        <span className="from-value">{change.currentCategoryName || 'Uncategorized'}</span>
+                        <span className="from-value">
+                          {change.currentCategoryName || 'Uncategorized'}
+                        </span>
                         <span className="inline-change">
                           <span className="arrow">→</span>
-                          <span className="to-value category-chip">{change.proposedCategoryName || change.proposedCategoryId}</span>
+                          <span className="to-value category-chip">
+                            {change.proposedCategoryName || change.proposedCategoryId}
+                          </span>
                         </span>
                       </td>
                     </tr>
@@ -228,12 +235,11 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
             onClick={handleExecutePlan}
             disabled={executePlanMutation.isPending || includedChanges.length === 0}
           >
-            {executePlanMutation.isPending 
-              ? 'Executing...' 
+            {executePlanMutation.isPending
+              ? 'Executing...'
               : includedChanges.length === 0
                 ? 'No Changes Selected'
-                : `Execute ${includedChanges.length} Change${includedChanges.length !== 1 ? 's' : ''}`
-            }
+                : `Execute ${includedChanges.length} Change${includedChanges.length !== 1 ? 's' : ''}`}
           </button>
 
           {executePlanMutation.isPending && (
@@ -241,9 +247,7 @@ export function SyncPlanViewer({ budgetId }: SyncPlanViewerProps) {
           )}
 
           {executePlanMutation.error && (
-            <div className="error">
-              Execution failed: {executePlanMutation.error.message}
-            </div>
+            <div className="error">Execution failed: {executePlanMutation.error.message}</div>
           )}
         </div>
       )}

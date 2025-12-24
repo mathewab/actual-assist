@@ -12,10 +12,10 @@ function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
   } catch {
     return dateStr;
@@ -57,11 +57,11 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
 
   // Compute selected changes (all checked ones)
   const selectedChanges = useMemo(() => {
-    return changes.filter(c => !excludedIds.has(c.suggestionId));
+    return changes.filter((c) => !excludedIds.has(c.suggestionId));
   }, [changes, excludedIds]);
 
   const toggleExclude = (suggestionId: string) => {
-    setExcludedIds(prev => {
+    setExcludedIds((prev) => {
       const next = new Set(prev);
       if (next.has(suggestionId)) {
         next.delete(suggestionId);
@@ -75,7 +75,7 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
   const toggleAll = () => {
     if (excludedIds.size === 0) {
       // All selected, deselect all
-      setExcludedIds(new Set(changes.map(c => c.suggestionId)));
+      setExcludedIds(new Set(changes.map((c) => c.suggestionId)));
     } else {
       // Some excluded, select all
       setExcludedIds(new Set());
@@ -83,9 +83,9 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
   };
 
   const handleApply = () => {
-    const idsToApply = selectedChanges.map(c => c.suggestionId);
+    const idsToApply = selectedChanges.map((c) => c.suggestionId);
     if (idsToApply.length === 0) return;
-    
+
     if (confirm(`Apply ${idsToApply.length} change(s) to Actual Budget?`)) {
       applyMutation.mutate(idsToApply);
     }
@@ -130,9 +130,7 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
               <strong>{selectedChanges.length}</strong> of {changes.length} selected
             </span>
             {excludedIds.size > 0 && (
-              <span className="summary-excluded">
-                ({excludedIds.size} excluded)
-              </span>
+              <span className="summary-excluded">({excludedIds.size} excluded)</span>
             )}
           </div>
 
@@ -146,7 +144,8 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
                       checked={excludedIds.size === 0}
                       ref={(el) => {
                         if (el) {
-                          el.indeterminate = excludedIds.size > 0 && excludedIds.size < changes.length;
+                          el.indeterminate =
+                            excludedIds.size > 0 && excludedIds.size < changes.length;
                         }
                       }}
                       onChange={toggleAll}
@@ -164,8 +163,8 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
                 {changes.map((change: ApprovedChange) => {
                   const isExcluded = excludedIds.has(change.suggestionId);
                   return (
-                    <tr 
-                      key={change.suggestionId} 
+                    <tr
+                      key={change.suggestionId}
                       className={isExcluded ? 'excluded' : ''}
                       onClick={() => toggleExclude(change.suggestionId)}
                     >
@@ -189,10 +188,14 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
                       <td className="amount-cell">{formatAmount(change.transactionAmount)}</td>
                       <td>{change.transactionAccountName || '—'}</td>
                       <td>
-                        <span className="from-value">{change.currentCategoryName || 'Uncategorized'}</span>
+                        <span className="from-value">
+                          {change.currentCategoryName || 'Uncategorized'}
+                        </span>
                         <span className="inline-change">
                           <span className="arrow">→</span>
-                          <span className="to-value category-chip">{change.proposedCategoryName || change.proposedCategoryId}</span>
+                          <span className="to-value category-chip">
+                            {change.proposedCategoryName || change.proposedCategoryId}
+                          </span>
                         </span>
                       </td>
                     </tr>
@@ -208,12 +211,11 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
               onClick={handleApply}
               disabled={applyMutation.isPending || selectedChanges.length === 0}
             >
-              {applyMutation.isPending 
-                ? 'Applying...' 
+              {applyMutation.isPending
+                ? 'Applying...'
                 : selectedChanges.length === 0
                   ? 'No Changes Selected'
-                  : `Apply ${selectedChanges.length} Change${selectedChanges.length !== 1 ? 's' : ''}`
-              }
+                  : `Apply ${selectedChanges.length} Change${selectedChanges.length !== 1 ? 's' : ''}`}
             </button>
           </div>
 
@@ -228,9 +230,7 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
           )}
 
           {applyMutation.error && (
-            <div className="error">
-              Failed to apply changes: {applyMutation.error.message}
-            </div>
+            <div className="error">Failed to apply changes: {applyMutation.error.message}</div>
           )}
         </>
       )}

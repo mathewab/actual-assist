@@ -13,10 +13,10 @@ interface ProgressBarProps {
  * A progress bar component for showing loading states
  * during sync and OpenAI operations
  */
-export function ProgressBar({ 
-  message = 'Processing...', 
+export function ProgressBar({
+  message = 'Processing...',
   indeterminate = true,
-  value = 0 
+  value = 0,
 }: ProgressBarProps) {
   return (
     <div className="progress-bar-container">
@@ -25,9 +25,9 @@ export function ProgressBar({
         {indeterminate ? (
           <div className="progress-bar-fill progress-bar-indeterminate" />
         ) : (
-          <div 
-            className="progress-bar-fill" 
-            style={{ width: `${Math.min(100, Math.max(0, value))}%` }} 
+          <div
+            className="progress-bar-fill"
+            style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
           />
         )}
       </div>

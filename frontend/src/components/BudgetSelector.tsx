@@ -23,7 +23,7 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
         setError(null);
         const response = await api.listBudgets();
         setBudgets(response.budgets);
-        
+
         // Auto-select first budget if none selected
         if (!selectedBudget && response.budgets.length > 0) {
           onBudgetSelect(response.budgets[0]);
@@ -40,7 +40,7 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const budgetId = event.target.value;
-    const budget = budgets.find(b => b.id === budgetId);
+    const budget = budgets.find((b) => b.id === budgetId);
     if (budget) {
       onBudgetSelect(budget);
     }
@@ -65,11 +65,7 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
   }
 
   if (budgets.length === 0) {
-    return (
-      <div className="budget-selector budget-selector--empty">
-        No budgets available
-      </div>
-    );
+    return <div className="budget-selector budget-selector--empty">No budgets available</div>;
   }
 
   return (
@@ -86,7 +82,7 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
         <option value="" disabled>
           Select a budget...
         </option>
-        {budgets.map(budget => (
+        {budgets.map((budget) => (
           <option key={budget.id} value={budget.id}>
             {budget.name}
           </option>

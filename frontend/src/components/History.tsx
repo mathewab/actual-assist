@@ -58,13 +58,17 @@ export function History({ budgetId }: HistoryProps) {
                   <td className="payee-cell">
                     <span className="original-payee">{suggestion.transactionPayee || '—'}</span>
                   </td>
-                  <td className={`amount ${(suggestion.transactionAmount || 0) < 0 ? 'expense' : 'income'}`}>
+                  <td
+                    className={`amount ${(suggestion.transactionAmount || 0) < 0 ? 'expense' : 'income'}`}
+                  >
                     {formatAmount(suggestion.transactionAmount)}
                   </td>
                   <td>{suggestion.transactionAccountName || '—'}</td>
                   <td>
                     <span className="category-chip applied">
-                      {suggestion.categorySuggestion?.proposedCategoryName || suggestion.proposedCategoryName || '—'}
+                      {suggestion.categorySuggestion?.proposedCategoryName ||
+                        suggestion.proposedCategoryName ||
+                        '—'}
                     </span>
                   </td>
                   <td>
@@ -90,10 +94,10 @@ function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
   } catch {
     return dateStr;

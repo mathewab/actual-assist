@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Suggestion, type SuggestionComponentStatus, type Category } from '../services/api';
+import {
+  api,
+  type Suggestion,
+  type SuggestionComponentStatus,
+  type Category,
+} from '../services/api';
 import { ProgressBar } from './ProgressBar';
 import './SuggestionList.css';
 
@@ -56,12 +61,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const categories = categoriesData?.categories || [];
 
   // Group categories by group name for better UX
-  const groupedCategories = categories.reduce((acc, cat) => {
-    const group = cat.groupName || 'Uncategorized';
-    if (!acc[group]) acc[group] = [];
-    acc[group].push(cat);
-    return acc;
-  }, {} as Record<string, Category[]>);
+  const groupedCategories = categories.reduce(
+    (acc, cat) => {
+      const group = cat.groupName || 'Uncategorized';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(cat);
+      return acc;
+    },
+    {} as Record<string, Category[]>
+  );
 
   const syncAndGenerateMutation = useMutation({
     mutationFn: () => api.syncAndGenerateSuggestions(budgetId, false),
@@ -78,7 +86,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const rejectPayeeMutation = useMutation({
-    mutationFn: ({ id, correction }: { id: string; correction?: { payeeName?: string } }) => 
+    mutationFn: ({ id, correction }: { id: string; correction?: { payeeName?: string } }) =>
       api.rejectPayeeSuggestion(id, correction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
@@ -88,8 +96,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const rejectCategoryMutation = useMutation({
-    mutationFn: ({ id, correction }: { id: string; correction?: { categoryId?: string; categoryName?: string } }) =>
-      api.rejectCategorySuggestion(id, correction),
+    mutationFn: ({
+      id,
+      correction,
+    }: {
+      id: string;
+      correction?: { categoryId?: string; categoryName?: string };
+    }) => api.rejectCategorySuggestion(id, correction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
       setCorrectionModal(null);
@@ -126,7 +139,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const toggleExpanded = (payeeName: string) => {
-    setExpandedPayees(prev => {
+    setExpandedPayees((prev) => {
       const next = new Set(prev);
       if (next.has(payeeName)) {
         next.delete(payeeName);
@@ -137,7 +150,11 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     });
   };
 
-  const openCorrectionModal = (type: 'payee' | 'category', suggestionId: string, currentValue: string) => {
+  const openCorrectionModal = (
+    type: 'payee' | 'category',
+    suggestionId: string,
+    currentValue: string
+  ) => {
     setCorrectionModal({ isOpen: true, type, suggestionId, currentValue });
     setCorrectionInput('');
     setSelectedCategoryId('');
@@ -145,7 +162,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
   const handleCorrectionSubmit = () => {
     if (!correctionModal) return;
-    
+
     if (correctionModal.type === 'payee') {
       rejectPayeeMutation.mutate({
         id: correctionModal.suggestionId,
@@ -153,13 +170,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
       });
     } else {
       // For category, use the selected category from dropdown
-      const selectedCategory = categories.find(c => c.id === selectedCategoryId);
+      const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
       rejectCategoryMutation.mutate({
         id: correctionModal.suggestionId,
-        correction: selectedCategoryId ? { 
-          categoryId: selectedCategoryId,
-          categoryName: selectedCategory?.name 
-        } : undefined,
+        correction: selectedCategoryId
+          ? {
+              categoryId: selectedCategoryId,
+              categoryName: selectedCategory?.name,
+            }
+          : undefined,
       });
     }
   };
@@ -173,17 +192,17 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   }
 
   // Filter out applied suggestions - they appear in History page
-  const suggestions = (data?.suggestions || []).filter(
-    (s) => s.status !== 'applied'
-  );
-  
+  const suggestions = (data?.suggestions || []).filter((s) => s.status !== 'applied');
+
   // Group suggestions by payee
   const payeeGroups = groupByPayee(suggestions);
 
   return (
     <div className="suggestion-list">
       <div className="suggestion-list-header">
-        <h2>Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)</h2>
+        <h2>
+          Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)
+        </h2>
         <div className="header-buttons">
           <button
             className="btn btn-sync"
@@ -201,9 +220,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           </button>
         </div>
       </div>
-      
+
       {(syncAndGenerateMutation.isPending || fullResyncMutation.isPending) && (
-        <ProgressBar message={fullResyncMutation.isPending ? "Full resync: downloading and regenerating all suggestions..." : "Syncing transactions and generating AI suggestions..."} />
+        <ProgressBar
+          message={
+            fullResyncMutation.isPending
+              ? 'Full resync: downloading and regenerating all suggestions...'
+              : 'Syncing transactions and generating AI suggestions...'
+          }
+        />
       )}
 
       {retrySuggestionMutation.isPending && (
@@ -226,35 +251,48 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           {payeeGroups.map((group) => {
             const isExpanded = expandedPayees.has(group.payeeName);
             const pendingIds = group.suggestions
-              .filter(s => s.status === 'pending')
-              .map(s => s.id);
+              .filter((s) => s.status === 'pending')
+              .map((s) => s.id);
             const approvedIds = group.suggestions
-              .filter(s => s.status === 'approved')
-              .map(s => s.id);
+              .filter((s) => s.status === 'approved')
+              .map((s) => s.id);
             const hasPending = pendingIds.length > 0;
             const hasApproved = approvedIds.length > 0;
             const firstSuggestion = group.suggestions[0];
 
             return (
-              <div 
-                key={group.payeeName} 
+              <div
+                key={group.payeeName}
                 className={`payee-row ${isExpanded ? 'expanded' : ''} ${hasApproved && !hasPending ? 'all-approved' : ''}`}
               >
                 {/* Main row - always visible */}
                 <div className="payee-row-main" onClick={() => toggleExpanded(group.payeeName)}>
                   <span className="expand-toggle">{isExpanded ? '▼' : '▶'}</span>
-                  
+
                   <div className="payee-details">
                     <span className="payee-name">{group.payeeName}</span>
-                    <span className="payee-count">{group.suggestions.length} txn{group.suggestions.length !== 1 ? 's' : ''}</span>
+                    <span className="payee-count">
+                      {group.suggestions.length} txn{group.suggestions.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
 
                   <div className="payee-chips">
-                    {group.hasPayeeSuggestion && (group.payeeStatus === 'pending' || group.payeeStatus === 'approved') && (
-                      <span className={`chip payee-chip ${group.payeeStatus === 'approved' ? 'approved' : ''}`}>→ {group.suggestedPayeeName}</span>
-                    )}
-                    <span className={`chip category-chip ${group.categoryStatus === 'approved' ? 'approved' : ''}`}>{group.proposedCategory}</span>
-                    <span className={`chip confidence-chip confidence-${getConfidenceLevel(group.avgConfidence)}`}>
+                    {group.hasPayeeSuggestion &&
+                      (group.payeeStatus === 'pending' || group.payeeStatus === 'approved') && (
+                        <span
+                          className={`chip payee-chip ${group.payeeStatus === 'approved' ? 'approved' : ''}`}
+                        >
+                          → {group.suggestedPayeeName}
+                        </span>
+                      )}
+                    <span
+                      className={`chip category-chip ${group.categoryStatus === 'approved' ? 'approved' : ''}`}
+                    >
+                      {group.proposedCategory}
+                    </span>
+                    <span
+                      className={`chip confidence-chip confidence-${getConfidenceLevel(group.avgConfidence)}`}
+                    >
                       {Math.round(group.avgConfidence * 100)}%
                     </span>
                   </div>
@@ -272,18 +310,20 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                     >
                       ✓ Approve
                     </button>
-                  ) : hasApproved && (
-                    <button
-                      className="undo-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        bulkResetMutation.mutate(approvedIds);
-                      }}
-                      disabled={bulkResetMutation.isPending}
-                      title="Undo approval"
-                    >
-                      ↩ Undo
-                    </button>
+                  ) : (
+                    hasApproved && (
+                      <button
+                        className="undo-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          bulkResetMutation.mutate(approvedIds);
+                        }}
+                        disabled={bulkResetMutation.isPending}
+                        title="Undo approval"
+                      >
+                        ↩ Undo
+                      </button>
+                    )
                   )}
                 </div>
 
@@ -298,7 +338,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                           <div className="detail-header">
                             <span className="detail-label">Category</span>
                             <span className="detail-value">{group.proposedCategory}</span>
-                            <span className={`detail-confidence confidence-${getConfidenceLevel(group.categoryConfidence)}`}>
+                            <span
+                              className={`detail-confidence confidence-${getConfidenceLevel(group.categoryConfidence)}`}
+                            >
                               {Math.round(group.categoryConfidence * 100)}%
                             </span>
                           </div>
@@ -306,7 +348,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                           <div className="detail-actions">
                             <button
                               className="detail-btn correct"
-                              onClick={() => openCorrectionModal('category', firstSuggestion.id, group.proposedCategory)}
+                              onClick={() =>
+                                openCorrectionModal(
+                                  'category',
+                                  firstSuggestion.id,
+                                  group.proposedCategory
+                                )
+                              }
                             >
                               ✎ Correct
                             </button>
@@ -333,8 +381,12 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                         <div className="suggestion-detail">
                           <div className="detail-header">
                             <span className="detail-label">Payee</span>
-                            <span className="detail-value">{group.payeeName} → {group.suggestedPayeeName}</span>
-                            <span className={`detail-confidence confidence-${getConfidenceLevel(group.payeeConfidence)}`}>
+                            <span className="detail-value">
+                              {group.payeeName} → {group.suggestedPayeeName}
+                            </span>
+                            <span
+                              className={`detail-confidence confidence-${getConfidenceLevel(group.payeeConfidence)}`}
+                            >
                               {Math.round(group.payeeConfidence * 100)}%
                             </span>
                           </div>
@@ -342,7 +394,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                           <div className="detail-actions">
                             <button
                               className="detail-btn correct"
-                              onClick={() => openCorrectionModal('payee', firstSuggestion.id, group.suggestedPayeeName || '')}
+                              onClick={() =>
+                                openCorrectionModal(
+                                  'payee',
+                                  firstSuggestion.id,
+                                  group.suggestedPayeeName || ''
+                                )
+                              }
                             >
                               ✎ Correct
                             </button>
@@ -367,7 +425,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                             <tr key={suggestion.id} className={`status-${suggestion.status}`}>
                               <td>{formatDate(suggestion.transactionDate)}</td>
                               <td>{suggestion.transactionAccountName || '—'}</td>
-                              <td className="amount">{formatAmount(suggestion.transactionAmount)}</td>
+                              <td className="amount">
+                                {formatAmount(suggestion.transactionAmount)}
+                              </td>
                               <td>
                                 <span className={`status-tag status-${suggestion.status}`}>
                                   {suggestion.status}
@@ -385,7 +445,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           })}
         </div>
       )}
-      
+
       {/* Correction Modal */}
       {correctionModal && (
         <div className="modal-overlay" onClick={() => setCorrectionModal(null)}>
@@ -394,7 +454,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
             <p className="modal-hint">
               Current suggestion: <strong>{correctionModal.currentValue}</strong>
             </p>
-            
+
             {correctionModal.type === 'payee' ? (
               <input
                 type="text"
@@ -423,12 +483,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                 ))}
               </select>
             )}
-            
+
             <div className="modal-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setCorrectionModal(null)}
-              >
+              <button className="btn btn-secondary" onClick={() => setCorrectionModal(null)}>
                 Cancel
               </button>
               <button
@@ -436,15 +493,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                 onClick={handleCorrectionSubmit}
                 disabled={rejectPayeeMutation.isPending || rejectCategoryMutation.isPending}
               >
-                {(correctionModal.type === 'payee' ? correctionInput : selectedCategoryId) 
-                  ? 'Submit Correction' 
+                {(correctionModal.type === 'payee' ? correctionInput : selectedCategoryId)
+                  ? 'Submit Correction'
                   : 'Reject Without Correction'}
               </button>
             </div>
           </div>
         </div>
       )}
-      
+
       <div className="legend">
         <span className="legend-item">
           <span className="legend-color confidence-high"></span> ≥80%
@@ -464,7 +521,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 /** Group suggestions by payee, sorted by pending transaction count (desc) */
 function groupByPayee(suggestions: Suggestion[]): PayeeGroup[] {
   const groups = new Map<string, Suggestion[]>();
-  
+
   for (const s of suggestions) {
     const payee = s.transactionPayee || 'Unknown';
     const existing = groups.get(payee) || [];
@@ -474,35 +531,37 @@ function groupByPayee(suggestions: Suggestion[]): PayeeGroup[] {
 
   const result: PayeeGroup[] = [];
   for (const [payeeName, items] of groups) {
-    const pendingItems = items.filter(s => s.status === 'pending');
+    const pendingItems = items.filter((s) => s.status === 'pending');
     const avgConfidence = items.reduce((sum, s) => sum + s.confidence, 0) / items.length;
     // Use first suggestion's category/rationale as representative
     const first = items[0];
-    
+
     // Extract independent payee and category data
     const payeeSuggestion = first.payeeSuggestion;
     const categorySuggestion = first.categorySuggestion;
-    
+
     // Determine if there's a meaningful payee suggestion (different from original)
     const hasPayeeSuggestion = !!(
-      payeeSuggestion?.proposedPayeeName && 
-      payeeSuggestion.proposedPayeeName !== payeeName
+      payeeSuggestion?.proposedPayeeName && payeeSuggestion.proposedPayeeName !== payeeName
     );
-    
+
     result.push({
       payeeName,
       suggestedPayeeName: payeeSuggestion?.proposedPayeeName || first.suggestedPayeeName || null,
-      suggestions: items.sort((a, b) => 
-        new Date(b.transactionDate || 0).getTime() - new Date(a.transactionDate || 0).getTime()
+      suggestions: items.sort(
+        (a, b) =>
+          new Date(b.transactionDate || 0).getTime() - new Date(a.transactionDate || 0).getTime()
       ),
       pendingCount: pendingItems.length,
-      proposedCategory: categorySuggestion?.proposedCategoryName || first.proposedCategoryName || 'Unknown',
+      proposedCategory:
+        categorySuggestion?.proposedCategoryName || first.proposedCategoryName || 'Unknown',
       proposedCategoryId: categorySuggestion?.proposedCategoryId || first.proposedCategoryId,
       avgConfidence,
       payeeConfidence: payeeSuggestion?.confidence ?? first.confidence,
       categoryConfidence: categorySuggestion?.confidence ?? first.confidence,
       payeeRationale: payeeSuggestion?.rationale || 'No payee change suggested',
-      categoryRationale: categorySuggestion?.rationale || first.rationale || 'No rationale provided',
+      categoryRationale:
+        categorySuggestion?.rationale || first.rationale || 'No rationale provided',
       hasPayeeSuggestion,
       payeeStatus: payeeSuggestion?.status || 'skipped',
       categoryStatus: categorySuggestion?.status || 'pending',
@@ -526,10 +585,10 @@ function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
   } catch {
     return dateStr;

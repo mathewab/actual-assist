@@ -82,13 +82,15 @@ function formatTimestamp(timestamp: string): string {
 }
 
 function formatEventType(eventType: string): string {
-  return eventType
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return eventType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function getEventTypeClass(eventType: string): string {
-  if (eventType.includes('approved') || eventType.includes('executed') || eventType.includes('applied')) {
+  if (
+    eventType.includes('approved') ||
+    eventType.includes('executed') ||
+    eventType.includes('applied')
+  ) {
     return 'success';
   }
   if (eventType.includes('rejected') || eventType.includes('failed')) {
@@ -108,17 +110,18 @@ function truncateId(id: string): string {
 function formatMetadata(metadata: Record<string, unknown>): string {
   const entries = Object.entries(metadata);
   if (entries.length === 0) return '—';
-  
+
   // Show first few key entries
   const display = entries.slice(0, 3).map(([key, value]) => {
     const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    const truncatedValue = displayValue.length > 30 ? displayValue.slice(0, 30) + '...' : displayValue;
+    const truncatedValue =
+      displayValue.length > 30 ? displayValue.slice(0, 30) + '...' : displayValue;
     return `${key}: ${truncatedValue}`;
   });
-  
+
   if (entries.length > 3) {
     display.push(`+${entries.length - 3} more`);
   }
-  
+
   return display.join(', ');
 }

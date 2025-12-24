@@ -13,16 +13,29 @@ export function Header({ budgetName }: HeaderProps) {
         {budgetName && <span className="budget-badge">{budgetName}</span>}
       </div>
       <nav className="header-nav">
-        <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+        >
           Suggestions
         </NavLink>
-        <NavLink to="/apply" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+        <NavLink
+          to="/apply"
+          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+        >
           Apply Changes
         </NavLink>
-        <NavLink to="/history" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+        <NavLink
+          to="/history"
+          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+        >
           History
         </NavLink>
-        <NavLink to="/audit" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+        <NavLink
+          to="/audit"
+          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+        >
           Audit Log
         </NavLink>
       </nav>

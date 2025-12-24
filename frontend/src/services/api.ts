@@ -64,12 +64,12 @@ export interface Suggestion {
   transactionDate: string | null;
   currentCategoryId: string | null;
   currentPayeeId: string | null;
-  
+
   // Independent suggestion components
   payeeSuggestion: PayeeSuggestionComponent;
   categorySuggestion: CategorySuggestionComponent;
   correction: SuggestionCorrection;
-  
+
   // Legacy fields for backward compatibility
   proposedCategoryId: string;
   proposedCategoryName: string;
@@ -184,7 +184,10 @@ export const api = {
   /**
    * Generate AI suggestions
    */
-  async generateSuggestions(budgetId: string, maxSuggestions?: number): Promise<{ suggestions: Suggestion[]; total: number }> {
+  async generateSuggestions(
+    budgetId: string,
+    maxSuggestions?: number
+  ): Promise<{ suggestions: Suggestion[]; total: number }> {
     const response = await fetch(`${API_BASE}/suggestions/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -202,7 +205,10 @@ export const api = {
    * Sync and generate suggestions (diff-based)
    * T082: POST /suggestions/sync-and-generate
    */
-  async syncAndGenerateSuggestions(budgetId: string, fullSnapshot = false): Promise<{ suggestions: Suggestion[]; total: number; mode: string }> {
+  async syncAndGenerateSuggestions(
+    budgetId: string,
+    fullSnapshot = false
+  ): Promise<{ suggestions: Suggestion[]; total: number; mode: string }> {
     const response = await fetch(`${API_BASE}/suggestions/sync-and-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -306,7 +312,7 @@ export const api = {
    * Reject payee suggestion with optional correction
    */
   async rejectPayeeSuggestion(
-    suggestionId: string, 
+    suggestionId: string,
     correction?: { payeeId?: string; payeeName?: string }
   ) {
     const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reject-payee`, {
@@ -424,7 +430,10 @@ export const api = {
   /**
    * Apply specific suggestions
    */
-  async applySuggestions(budgetId: string, suggestionIds: string[]): Promise<{ success: boolean; applied: number }> {
+  async applySuggestions(
+    budgetId: string,
+    suggestionIds: string[]
+  ): Promise<{ success: boolean; applied: number }> {
     const response = await fetch(`${API_BASE}/sync/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -442,7 +451,9 @@ export const api = {
    * Retry LLM suggestion for better result
    * Retries all suggestions in the same payee group
    */
-  async retrySuggestion(suggestionId: string): Promise<{ success: boolean; suggestions: Suggestion[]; count: number }> {
+  async retrySuggestion(
+    suggestionId: string
+  ): Promise<{ success: boolean; suggestions: Suggestion[]; count: number }> {
     const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/retry`, {
       method: 'POST',
     });

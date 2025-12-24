@@ -26,10 +26,7 @@ export function App() {
         <Header budgetName={selectedBudget?.name} />
 
         <div className="app-content">
-          <BudgetSelector 
-            selectedBudget={selectedBudget}
-            onBudgetSelect={handleBudgetSelect}
-          />
+          <BudgetSelector selectedBudget={selectedBudget} onBudgetSelect={handleBudgetSelect} />
 
           {selectedBudget ? (
             <main className="app-main">

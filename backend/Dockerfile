@@ -1,6 +1,16 @@
 # Multi-stage build for backend
 FROM node:20-alpine AS builder
 
+# Metadata labels
+LABEL org.opencontainers.image.title="Actual Assist Backend" \
+      org.opencontainers.image.description="AI-powered budgeting assistant for Actual Budget" \
+      org.opencontainers.image.authors="mathewab" \
+      org.opencontainers.image.vendor="mathewab" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/mathewab/actual-assist" \
+      org.opencontainers.image.documentation="https://github.com/mathewab/actual-assist/blob/main/README.md" \
+      maintainer="mathewab"
+
 WORKDIR /app
 
 # Copy package files from root (npm workspaces)

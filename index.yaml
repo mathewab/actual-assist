@@ -1,3 +1,26 @@
 apiVersion: v1
-entries: {}
-generated: 2025-12-24T06:27:56Z
+entries:
+  actual-assist:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2025-12-24T06:34:37.602839813Z"
+    description: AI-driven budget assistant for Actual Budget with review-before-apply
+      suggestions
+    digest: b82186938217b9c98ae05b6c6981a7a46776b5873163e597a0ce171d92a7db1d
+    home: https://github.com/mathewab/actual-assist
+    keywords:
+    - actual-budget
+    - ai
+    - budget-assistant
+    - categorization
+    maintainers:
+    - email: mathewab@users.noreply.github.com
+      name: Actual Assist Contributors
+    name: actual-assist
+    sources:
+    - https://github.com/mathewab/actual-assist
+    type: application
+    urls:
+    - https://github.com/mathewab/actual-assist/releases/download/actual-assist-0.1.0/actual-assist-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-12-24T06:34:37.602846265Z"

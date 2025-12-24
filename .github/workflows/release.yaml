@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g., v0.1.0)'
-        required: true
-        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -100,7 +94,6 @@ jobs:
             type=sha,prefix={{branch}}-
             type=ref,event=tag
             type=ref,event=branch
-            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
             type=raw,value=latest,enable={{is_default_branch}}
       
       - name: Build and push frontend image
@@ -131,18 +124,6 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
       
-      - name: Update Chart.yaml version for workflow_dispatch
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
-        run: |
-          VERSION=${{ github.event.inputs.version }}
-          # Remove 'v' prefix if present for Chart.yaml
-          VERSION_NO_V=${VERSION#v}
-          sed -i "s/^version: .*/version: $VERSION_NO_V/" charts/actual-assist/Chart.yaml
-          sed -i "s/^appVersion: .*/appVersion: \"$VERSION_NO_V\"/" charts/actual-assist/Chart.yaml
-          git add charts/actual-assist/Chart.yaml
-          git commit -m "chore(helm): update chart version to $VERSION_NO_V" || true
-          git push
-      
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
@@ -163,6 +144,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [build-and-push-backend, build-and-push-frontend, release-helm-chart]
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
@@ -171,11 +153,7 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       
       - name: Create Release
         uses: softprops/action-gh-release@v1

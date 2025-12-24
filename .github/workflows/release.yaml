@@ -51,7 +51,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=ref,event=tag
             type=ref,event=branch
-            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
             type=raw,value=latest,enable={{is_default_branch}}
       
       - name: Build and push backend image
@@ -100,7 +100,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=ref,event=tag
             type=ref,event=branch
-            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' }}
             type=raw,value=latest,enable={{is_default_branch}}
       
       - name: Build and push frontend image
@@ -130,6 +130,18 @@ jobs:
         run: |
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
+      
+      - name: Update Chart.yaml version for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          # Remove 'v' prefix if present for Chart.yaml
+          VERSION_NO_V=${VERSION#v}
+          sed -i "s/^version: .*/version: $VERSION_NO_V/" charts/actual-assist/Chart.yaml
+          sed -i "s/^appVersion: .*/appVersion: \"$VERSION_NO_V\"/" charts/actual-assist/Chart.yaml
+          git add charts/actual-assist/Chart.yaml
+          git commit -m "chore(helm): update chart version to $VERSION_NO_V" || true
+          git push
       
       - name: Setup Helm
         uses: azure/setup-helm@v4

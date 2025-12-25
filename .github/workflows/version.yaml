@@ -43,7 +43,7 @@ jobs:
 
       - name: Update Helm chart version
         run: |
-          python3 - <<'PY'
+          python3 - "${{ steps.validate.outputs.version_no_v }}" <<'PY'
           import pathlib
           import re
           import sys
@@ -60,7 +60,7 @@ jobs:
           text = replace_line(r"^version:\s*.*$", f"version: {version}", text)
           text = replace_line(r"^appVersion:\s*.*$", f'appVersion: "{version}"', text)
           path.write_text(text)
-          PY "${{ steps.validate.outputs.version_no_v }}"
+          PY
 
       - name: Verify version references
         run: |

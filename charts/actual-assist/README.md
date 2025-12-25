@@ -5,7 +5,7 @@
 ### Prerequisites
 - Kubernetes 1.24+
 - Helm 3.x
-- Docker images for backend and frontend pushed to registry
+- Docker image for the app pushed to registry
 
 ### Installation
 
@@ -29,9 +29,7 @@ helm install actual-assist ./helm -f helm/values-prod.yaml \
 ### Configuration
 
 **Core values:**
-- `backend.replicaCount`: Number of backend replicas
-- `frontend.replicaCount`: Number of frontend replicas
-- `environment`: Environment selector (dev/prod)
+- `app.replicaCount`: Number of app replicas
 - `ingress.enabled`: Enable ingress (recommended for prod)
 - `secrets.openaiApiKey`: OpenAI API key (required)
 - `secrets.actualServerUrl`: Actual Budget server URL (required)
@@ -43,8 +41,7 @@ helm install actual-assist ./helm -f helm/values-prod.yaml \
 - `storage.className`: Storage class (optional)
 
 **Resource limits:**
-- `backend.resources`: CPU/memory requests and limits
-- `frontend.resources`: CPU/memory requests and limits
+- `app.resources`: CPU/memory requests and limits
 
 ### Upgrade
 
@@ -60,13 +57,11 @@ helm uninstall actual-assist
 
 ## Architecture
 
-- **Backend**: Express.js API server with TypeScript, running on port 3000
+- **App**: Express.js API + React UI in one container on port 3000
   - Handles budget sync, AI suggestions, sync plans
+  - Serves UI assets from the same base URL
   - Persistent SQLite database on shared storage
   - Liveness and readiness probes configured
-- **Frontend**: React + Vite UI, running on port 5173 (served via nginx on port 80)
-  - Budget selector, suggestion review, sync plan visualization
-  - API client configured to point to backend service
 - **Storage**: PersistentVolumeClaim for budget data and SQLite database
 - **Ingress**: Optional ingress for external access (dev: disabled, prod: enabled)
 

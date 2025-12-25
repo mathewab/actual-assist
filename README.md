@@ -14,8 +14,7 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 **Constitution-Driven Development**: This project follows strict engineering principles documented in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 
 **Tech Stack**:
-- **Backend**: Node.js 20, TypeScript 5, Express.js, @actual-app/api
-- **Frontend**: React 18, Vite, TanStack Query
+- **App**: Node.js 20, TypeScript 5, Express.js, React 18, Vite, TanStack Query
 - **AI**: OpenAI GPT-4o-mini
 - **Storage**: SQLite (audit log)
 - **Deployment**: Docker, docker-compose
@@ -41,37 +40,27 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 2. **Install dependencies**:
    ```bash
    npm install
-   cd backend && npm install
-   cd ../frontend && npm install
-   cd ..
    ```
 
 3. **Configure environment variables**:
    ```bash
-   # Backend
-   cp backend/.env.example backend/.env
-   # Edit backend/.env with your credentials
-
-   # Frontend
-   cp frontend/.env.example frontend/.env
-   # Edit frontend/.env if needed
+   cp .env.example .env
+   # Edit .env with your credentials
    ```
 
 4. **Run in development mode**:
    ```bash
-   npm run dev:all
+   npm run dev
    ```
 
-   This starts:
-   - Backend API server on `http://localhost:3001`
-   - Frontend dev server on `http://localhost:3000`
+   This starts the single app at `http://localhost:3000` (UI + API).
 
 ### Docker Deployment
 
 1. **Configure environment**:
    ```bash
-   cp backend/.env.example backend/.env
-   # Edit backend/.env with your credentials
+   cp .env.example .env
+   # Edit .env with your credentials
    ```
 
 2. **Build and start containers**:
@@ -80,8 +69,7 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
    ```
 
 3. **Access the application**:
-   - Frontend: `http://localhost:3000`
-   - Backend API: `http://localhost:3001`
+   - UI + API: `http://localhost:3000`
 
 4. **View logs**:
    ```bash
@@ -107,20 +95,17 @@ See [`specs/001-actual-assist-app/quickstart.md`](specs/001-actual-assist-app/qu
 
 ```
 actual-assist/
-├── backend/
-│   ├── src/
-│   │   ├── domain/       # Business entities and errors
-│   │   ├── services/     # Business logic
-│   │   ├── infra/        # External adapters (DB, APIs)
-│   │   ├── api/          # HTTP routes
-│   │   └── server.ts     # Entry point
-│   └── tests/            # Unit & integration tests
-├── frontend/
-│   ├── src/
-│   │   ├── components/   # React components
-│   │   ├── services/     # API client
-│   │   └── App.tsx       # Main app
-│   └── tests/            # E2E tests (Playwright)
+├── src/
+│   ├── api/              # HTTP routes
+│   ├── domain/           # Business entities and errors
+│   ├── services/         # Business logic
+│   ├── infra/            # External adapters (DB, APIs)
+│   ├── ui/               # React UI (components, pages, services)
+│   └── server.ts         # Single app entry point
+├── tests/
+│   ├── unit/             # Unit tests
+│   ├── integration/      # Integration tests
+│   └── e2e/              # Playwright E2E tests
 └── specs/                # Feature specifications and planning
 ```
 
@@ -130,25 +115,25 @@ actual-assist/
 # Run all tests
 npm run test:all
 
-# Run backend tests only
-npm run test:backend
+# Run unit tests only
+npm run test
 
-# Run frontend E2E tests
-npm run test:frontend
+# Run E2E tests
+npm run test:e2e
 
 # Build for production
-npm run build:all
+npm run build
 
 # Lint and format
-cd backend && npm run lint
-cd frontend && npm run lint
+npm run lint
+npm run format
 ```
 
 ## Configuration
 
-### Backend Environment Variables
+### Environment Variables
 
-Required variables (see `backend/.env.example`):
+Required variables (see `.env.example`):
 - `ACTUAL_SERVER_URL`: Your Actual Budget server URL
 - `ACTUAL_PASSWORD`: Actual Budget password
 - `ACTUAL_BUDGET_ID`: Budget file ID (UUID)
@@ -159,11 +144,7 @@ Optional:
 - `ACTUAL_ENCRYPTION_KEY`: Budget encryption key
 - `NODE_ENV`: `development` | `production` | `test`
 - `LOG_LEVEL`: `error` | `warn` | `info` | `debug`
-
-### Frontend Environment Variables
-
-Optional (see `frontend/.env.example`):
-- `VITE_API_URL`: Backend API URL (defaults to `/api`)
+- `VITE_API_BASE_URL`: API base URL (defaults to `/api`)
 
 ## API Documentation
 
@@ -195,6 +176,6 @@ This project follows strict engineering principles. Before contributing:
 
 **OpenAI errors**: Check API key is valid and has available quota.
 
-**Docker networking issues**: Ensure ports 3000 and 3001 are not in use.
+**Docker networking issues**: Ensure port 3000 is not in use.
 
 For more help, see the [quickstart guide](specs/001-actual-assist-app/quickstart.md) or open an issue.

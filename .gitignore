@@ -39,8 +39,14 @@ data/
 # Test coverage
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
 
 # Temporary files
 *.tmp
 tmp/
 temp/
+
+
+# Codex files
+.codex/

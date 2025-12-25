@@ -49,22 +49,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Selector labels for backend
-*/}}
-{{- define "actual-assist.backend.selectorLabels" -}}
-{{ include "actual-assist.selectorLabels" . }}
-component: backend
-{{- end }}
-
-{{/*
-Selector labels for frontend
-*/}}
-{{- define "actual-assist.frontend.selectorLabels" -}}
-{{ include "actual-assist.selectorLabels" . }}
-component: frontend
-{{- end }}
-
-{{/*
 Secret name helper: use existingSecretName if provided, else default to chart fullname
 */}}
 {{- define "actual-assist.secretName" -}}

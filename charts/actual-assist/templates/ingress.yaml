@@ -27,9 +27,9 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "actual-assist.fullname" $ }}-frontend
+                name: {{ include "actual-assist.fullname" $ }}
                 port:
-                  number: {{ $.Values.frontend.service.port }}
+                  number: {{ $.Values.app.service.port }}
           {{- end }}
     {{- end }}
 {{- end }}

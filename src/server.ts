@@ -6,7 +6,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { validateEnv } from './infra/env.js';
 import { createLogger, setLogger } from './infra/logger.js';
-import { createRateLimiter } from './infra/rateLimiter.js';
+import rateLimit from 'express-rate-limit';
 import { DatabaseAdapter } from './infra/DatabaseAdapter.js';
 import { ActualBudgetAdapter } from './infra/ActualBudgetAdapter.js';
 import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
@@ -64,13 +64,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use(
-  '/api',
-  createRateLimiter({
-    windowMs: env.RATE_LIMIT_WINDOW_MS,
-    max: env.RATE_LIMIT_MAX_REQUESTS,
-  })
-);
+const apiLimiter = rateLimit({
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  max: env.RATE_LIMIT_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(apiLimiter);
 
 // Request logging middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {

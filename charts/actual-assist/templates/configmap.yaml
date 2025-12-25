@@ -9,3 +9,4 @@ data:
   SYNC_INTERVAL_MINUTES: {{ .Values.env.syncIntervalMinutes | quote }}
   SQLITE_DB_PATH: {{ .Values.env.sqliteDbPath | quote }}
   PORT: {{ .Values.env.port | quote }}
+  DATA_DIR: {{ .Values.env.dataDir | quote }}

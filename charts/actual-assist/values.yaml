@@ -111,3 +111,4 @@ env:
   syncIntervalMinutes: 360  # 6 hours default
   sqliteDbPath: /data/actual-assist.db
   port: 3000
+  dataDir: /data

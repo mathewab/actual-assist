@@ -34,6 +34,10 @@ const envSchema = z.object({
     .transform(Number)
     .refine((n) => n >= 1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
     .default('360'),
+
+  // Rate limiting (API)
+  RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).default('60000'),
+  RATE_LIMIT_MAX_REQUESTS: z.string().regex(/^\d+$/).transform(Number).default('120'),
 });
 
 export type Env = z.infer<typeof envSchema>;

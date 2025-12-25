@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { createSuggestion, transitionSuggestionStatus } from '../../../src/domain/entities/Suggestion.ts';
+import {
+  createSuggestion,
+  transitionSuggestionStatus,
+} from '../../../src/domain/entities/Suggestion.ts';
 
 describe('Suggestion', () => {
   it('should create a suggestion with pending status', () => {

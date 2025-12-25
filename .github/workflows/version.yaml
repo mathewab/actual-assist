@@ -1,0 +1,95 @@
+name: Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (vX.Y.Z with optional pre-release/build)"
+        required: true
+
+jobs:
+  bump-version:
+    name: Bump Version, Commit, Tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate version input
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "Invalid version. Expected vX.Y.Z with optional -pre/+build."
+            exit 1
+          fi
+          VERSION_NO_V="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_no_v=$VERSION_NO_V" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag does not already exist
+        run: |
+          git fetch --tags
+          if git rev-parse "refs/tags/${{ steps.validate.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.validate.outputs.version }} already exists."
+            exit 1
+          fi
+
+      - name: Update npm version
+        run: npm version --no-git-tag-version "${{ steps.validate.outputs.version_no_v }}"
+
+      - name: Update Helm chart version
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          version = sys.argv[1]
+          path = pathlib.Path("charts/actual-assist/Chart.yaml")
+          text = path.read_text()
+
+          def replace_line(pattern, replacement, content):
+              if not re.search(pattern, content, flags=re.M):
+                  raise SystemExit(f"Pattern not found: {pattern}")
+              return re.sub(pattern, replacement, content, flags=re.M)
+
+          text = replace_line(r"^version:\s*.*$", f"version: {version}", text)
+          text = replace_line(r"^appVersion:\s*.*$", f'appVersion: "{version}"', text)
+          path.write_text(text)
+          PY "${{ steps.validate.outputs.version_no_v }}"
+
+      - name: Verify version references
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const chart = fs.readFileSync("charts/actual-assist/Chart.yaml", "utf8");
+          const version = pkg.version;
+          const chartVersion = (chart.match(/^version:\s*(.+)$/m) || [])[1];
+          const appVersion = (chart.match(/^appVersion:\s*\"?(.+?)\"?$/m) || [])[1];
+          if (!chartVersion || !appVersion) {
+            console.error("Failed to read chart version/appVersion.");
+            process.exit(1);
+          }
+          if (chartVersion.trim() !== version || appVersion.trim() !== version) {
+            console.error(`Version mismatch: package.json=${version}, chart=${chartVersion}, appVersion=${appVersion}`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Commit and tag
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git add package.json package-lock.json charts/actual-assist/Chart.yaml
+          git commit -m "chore(release): ${{ steps.validate.outputs.version }}"
+          git tag "${{ steps.validate.outputs.version }}"
+
+      - name: Push commit and tag
+        run: |
+          git push origin HEAD
+          git push origin "${{ steps.validate.outputs.version }}"

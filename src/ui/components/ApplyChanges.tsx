@@ -53,7 +53,7 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
     },
   });
 
-  const changes = data?.changes || [];
+  const changes = useMemo<ApprovedChange[]>(() => data?.changes ?? [], [data]);
 
   // Compute selected changes (all checked ones)
   const selectedChanges = useMemo(() => {

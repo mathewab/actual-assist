@@ -3,6 +3,15 @@ import type { AuditEntry, AuditEventType } from '../../domain/entities/AuditEntr
 import { createAuditEntry } from '../../domain/entities/AuditEntry.js';
 import { logger } from '../logger.js';
 
+type AuditRow = {
+  id: number;
+  event_type: AuditEventType;
+  entity_type: string;
+  entity_id: string;
+  metadata: string | null;
+  timestamp: string;
+};
+
 /**
  * Repository for AuditEntry persistence
  * P5 (Separation of concerns): Audit operations isolated from business logic
@@ -57,7 +66,7 @@ export class AuditRepository {
       LIMIT ?
     `;
 
-    const rows = this.db.query<any>(sql, [limit]);
+    const rows = this.db.query<AuditRow>(sql, [limit]);
     return rows.map((row) => this.mapRowToAuditEntry(row));
   }
 
@@ -71,7 +80,7 @@ export class AuditRepository {
       ORDER BY timestamp DESC
     `;
 
-    const rows = this.db.query<any>(sql, [entityType, entityId]);
+    const rows = this.db.query<AuditRow>(sql, [entityType, entityId]);
     return rows.map((row) => this.mapRowToAuditEntry(row));
   }
 
@@ -85,20 +94,20 @@ export class AuditRepository {
       ORDER BY timestamp DESC
     `;
 
-    const rows = this.db.query<any>(sql, [eventType]);
+    const rows = this.db.query<AuditRow>(sql, [eventType]);
     return rows.map((row) => this.mapRowToAuditEntry(row));
   }
 
   /**
    * Map database row to AuditEntry entity
    */
-  private mapRowToAuditEntry(row: any): AuditEntry {
+  private mapRowToAuditEntry(row: AuditRow): AuditEntry {
     return {
       id: row.id,
       eventType: row.event_type as AuditEventType,
       entityType: row.entity_type,
       entityId: row.entity_id,
-      metadata: row.metadata ? JSON.parse(row.metadata) : null,
+      metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
       timestamp: new Date(row.timestamp),
     };
   }

@@ -67,10 +67,20 @@ export class OpenAIAdapter {
 
       // Check if web search was performed (when enabled)
       if (options.webSearch) {
-        const webSearchItem = response.output.find((item) => item.type === 'web_search_call');
+        type WebSearchCallOutput = Extract<
+          OpenAI.Responses.ResponseOutputItem,
+          { type: 'web_search_call' }
+        >;
+        const webSearchItem = response.output.find(
+          (item): item is WebSearchCallOutput => item.type === 'web_search_call'
+        );
         if (webSearchItem) {
+          const status =
+            typeof (webSearchItem as { status?: string }).status === 'string'
+              ? (webSearchItem as { status?: string }).status
+              : 'unknown';
           logger.info('Web search was performed', {
-            status: (webSearchItem as any).status,
+            status,
           });
         } else {
           logger.warn('Web search was enabled but NOT performed');

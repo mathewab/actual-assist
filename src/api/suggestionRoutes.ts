@@ -2,11 +2,12 @@ import { Router } from 'express';
 import type { SuggestionService } from '../services/SuggestionService.js';
 import type { Request, Response, NextFunction } from 'express';
 import { ValidationError } from '../domain/errors.js';
+import type { Suggestion } from '../domain/entities/Suggestion.js';
 
 /**
  * Map suggestion to API response format
  */
-function mapSuggestionToResponse(s: any) {
+function mapSuggestionToResponse(s: Suggestion) {
   return {
     id: s.id,
     budgetId: s.budgetId,

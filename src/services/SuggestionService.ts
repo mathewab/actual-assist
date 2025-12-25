@@ -5,7 +5,11 @@ import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { PayeeCacheRepository } from '../infra/repositories/PayeeCacheRepository.js';
 import type { PayeeMatchCacheRepository } from '../infra/repositories/PayeeMatchCacheRepository.js';
 import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
-import { createSuggestion, type Suggestion } from '../domain/entities/Suggestion.js';
+import {
+  createSuggestion,
+  type Suggestion,
+  type SuggestionComponentStatus,
+} from '../domain/entities/Suggestion.js';
 import { logger } from '../infra/logger.js';
 import { payeeMatcher, type FuzzyMatchResult, type PayeeCandidate } from '../infra/PayeeMatcher.js';
 
@@ -1378,10 +1382,12 @@ ${categoryList}`;
     }
 
     // Reset both payee and category status back to pending (or skipped if no suggestion)
-    const newPayeeStatus = suggestion.payeeSuggestion?.proposedPayeeName ? 'pending' : 'skipped';
-    const newCategoryStatus = 'pending';
+    const newPayeeStatus: SuggestionComponentStatus = suggestion.payeeSuggestion?.proposedPayeeName
+      ? 'pending'
+      : 'skipped';
+    const newCategoryStatus: SuggestionComponentStatus = 'pending';
 
-    this.suggestionRepo.updatePayeeStatus(suggestionId, newPayeeStatus as any);
+    this.suggestionRepo.updatePayeeStatus(suggestionId, newPayeeStatus);
     this.suggestionRepo.updateCategoryStatus(suggestionId, newCategoryStatus);
     this.suggestionRepo.updateStatus(suggestionId, 'pending');
 
@@ -1455,9 +1461,9 @@ ${categoryList}`;
     });
 
     // Keep the same ID for the updated suggestion
-    (updated as any).id = existing.id;
+    const updatedWithId: Suggestion = { ...updated, id: existing.id };
 
-    this.suggestionRepo.save(updated);
+    this.suggestionRepo.save(updatedWithId);
 
     this.auditRepo.log({
       eventType: 'suggestion_retried',
@@ -1465,17 +1471,17 @@ ${categoryList}`;
       entityId: suggestionId,
       metadata: {
         oldConfidence: existing.confidence,
-        newConfidence: updated.confidence,
+        newConfidence: updatedWithId.confidence,
       },
     });
 
     logger.info('Suggestion retried successfully', {
       suggestionId,
       oldConfidence: existing.confidence,
-      newConfidence: updated.confidence,
+      newConfidence: updatedWithId.confidence,
     });
 
-    return updated;
+    return updatedWithId;
   }
 
   /**
@@ -1553,9 +1559,9 @@ ${categoryList}`;
       });
 
       // Keep the same ID
-      (updated as any).id = suggestion.id;
-      this.suggestionRepo.save(updated);
-      updatedSuggestions.push(updated);
+      const updatedWithId: Suggestion = { ...updated, id: suggestion.id };
+      this.suggestionRepo.save(updatedWithId);
+      updatedSuggestions.push(updatedWithId);
     }
 
     this.auditRepo.log({

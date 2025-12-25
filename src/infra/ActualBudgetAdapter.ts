@@ -4,6 +4,52 @@ import { logger } from './logger.js';
 import type { Env } from './env.js';
 import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
 
+type ActualAccount = {
+  id: string;
+  name?: string | null;
+  closed?: boolean;
+  offbudget?: boolean;
+};
+
+type ActualPayee = {
+  id: string;
+  name?: string | null;
+};
+
+type ActualCategory = {
+  id: string;
+  name?: string | null;
+  hidden?: boolean;
+  group_id?: string | null;
+};
+
+type ActualCategoryGroup = {
+  id: string;
+  name?: string | null;
+  is_income?: boolean;
+};
+
+type ActualTransaction = {
+  id: string;
+  date: string;
+  payee?: string | null;
+  category?: string | null;
+  notes?: string | null;
+  amount: number;
+  cleared?: boolean;
+  transfer_id?: string | null;
+};
+
+function isVisibleNamedCategory(
+  cat: ActualCategory
+): cat is ActualCategory & { name: string } {
+  return !cat.hidden && Boolean(cat.id) && typeof cat.name === 'string';
+}
+
+function isNamedPayee(payee: ActualPayee): payee is ActualPayee & { name: string } {
+  return typeof payee.name === 'string';
+}
+
 /**
  * Payee with a known category from historical transactions
  * Used for fuzzy matching to suggest categories
@@ -69,9 +115,9 @@ export class ActualBudgetAdapter {
 
     try {
       const [accounts, payees, categories] = await Promise.all([
-        api.getAccounts(),
-        api.getPayees(),
-        api.getCategories(),
+        api.getAccounts() as Promise<ActualAccount[]>,
+        api.getPayees() as Promise<ActualPayee[]>,
+        api.getCategories() as Promise<ActualCategory[]>,
       ]);
 
       const allTransactions: Transaction[] = [];
@@ -81,15 +127,15 @@ export class ActualBudgetAdapter {
           continue; // Skip closed and off-budget accounts
         }
 
-        const accountTransactions = await api.getTransactions(
+        const accountTransactions = (await api.getTransactions(
           account.id,
           '1970-01-01',
           new Date().toISOString().split('T')[0]
-        );
+        )) as ActualTransaction[];
 
         for (const txn of accountTransactions) {
-          const payee = txn.payee ? payees.find((p: any) => p.id === txn.payee) : null;
-          const category = txn.category ? categories.find((c: any) => c.id === txn.category) : null;
+          const payee = txn.payee ? payees.find((p) => p.id === txn.payee) : null;
+          const category = txn.category ? categories.find((c) => c.id === txn.category) : null;
 
           allTransactions.push({
             id: txn.id,
@@ -103,7 +149,7 @@ export class ActualBudgetAdapter {
             categoryName: category?.name || null,
             amount: txn.amount,
             cleared: txn.cleared || false,
-            isTransfer: Boolean((txn as any).transfer_id),
+            isTransfer: Boolean(txn.transfer_id),
           });
         }
       }
@@ -123,13 +169,13 @@ export class ActualBudgetAdapter {
     this.ensureInitialized();
 
     try {
-      const rawCategories = await api.getCategories();
-      const categoryGroups = await api.getCategoryGroups();
+      const rawCategories = (await api.getCategories()) as ActualCategory[];
+      const categoryGroups = (await api.getCategoryGroups()) as ActualCategoryGroup[];
 
       const categories: Category[] = rawCategories
-        .filter((cat: any) => !cat.hidden && cat.id && cat.name) // Filter out groups
-        .map((cat: any) => {
-          const group = categoryGroups.find((g: any) => g.id === cat.group_id);
+        .filter(isVisibleNamedCategory) // Filter out groups
+        .map((cat) => {
+          const group = categoryGroups.find((g) => g.id === cat.group_id);
           return {
             id: cat.id,
             name: cat.name,
@@ -241,10 +287,10 @@ export class ActualBudgetAdapter {
     this.ensureInitialized();
 
     try {
-      const payees = await api.getPayees();
+      const payees = (await api.getPayees()) as ActualPayee[];
       return payees
-        .filter((p: any) => p.id && p.name)
-        .map((p: any) => ({ id: p.id, name: p.name }));
+        .filter((p): p is ActualPayee & { name: string } => typeof p.id === 'string' && isNamedPayee(p))
+        .map((p) => ({ id: p.id, name: p.name }));
     } catch (error) {
       throw new ActualBudgetError('Failed to fetch payees', { error });
     }
@@ -349,9 +395,9 @@ export class ActualBudgetAdapter {
 
     try {
       const [accounts, payees, categories] = await Promise.all([
-        api.getAccounts(),
-        api.getPayees(),
-        api.getCategories(),
+        api.getAccounts() as Promise<ActualAccount[]>,
+        api.getPayees() as Promise<ActualPayee[]>,
+        api.getCategories() as Promise<ActualCategory[]>,
       ]);
 
       // Track payee -> category mappings with counts
@@ -369,18 +415,18 @@ export class ActualBudgetAdapter {
       for (const account of accounts) {
         if (account.closed || account.offbudget) continue;
 
-        const accountTransactions = await api.getTransactions(
+        const accountTransactions = (await api.getTransactions(
           account.id,
           '1970-01-01',
           new Date().toISOString().split('T')[0]
-        );
+        )) as ActualTransaction[];
 
         for (const txn of accountTransactions) {
           // Skip transfers and uncategorized
-          if ((txn as any).transfer_id || !txn.category || !txn.payee) continue;
+          if (txn.transfer_id || !txn.category || !txn.payee) continue;
 
-          const payee = payees.find((p: any) => p.id === txn.payee);
-          const category = categories.find((c: any) => c.id === txn.category);
+          const payee = payees.find((p) => p.id === txn.payee);
+          const category = categories.find((c) => c.id === txn.category);
           if (!payee?.name || !category?.name) continue;
 
           const key = `${payee.id}|${txn.category}`;

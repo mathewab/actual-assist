@@ -12,6 +12,39 @@ import {
 import { NotFoundError } from '../../domain/errors.js';
 import { logger } from '../logger.js';
 
+type SuggestionRow = {
+  id: string;
+  budget_id: string;
+  transaction_id: string;
+  transaction_payee: string | null;
+  transaction_amount: number | null;
+  transaction_date: string | null;
+  transaction_account_id: string | null;
+  transaction_account_name: string | null;
+  current_category_id: string | null;
+  current_payee_id: string | null;
+  payee_status: SuggestionComponentStatus | null;
+  category_status: SuggestionComponentStatus | null;
+  payee_confidence: number | null;
+  category_confidence: number | null;
+  confidence: number | null;
+  payee_rationale: string | null;
+  category_rationale: string | null;
+  rationale: string | null;
+  proposed_payee_id: string | null;
+  proposed_payee_name: string | null;
+  suggested_payee_name: string | null;
+  proposed_category_id: string | null;
+  proposed_category_name: string | null;
+  corrected_payee_id: string | null;
+  corrected_payee_name: string | null;
+  corrected_category_id: string | null;
+  corrected_category_name: string | null;
+  status: SuggestionStatus | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Repository for Suggestion persistence
  * P5 (Separation of concerns): Service layer uses this, domain never imports infra
@@ -80,7 +113,7 @@ export class SuggestionRepository {
    */
   findById(id: string): Suggestion | null {
     const sql = 'SELECT * FROM suggestions WHERE id = ?';
-    const row = this.db.queryOne<any>(sql, [id]);
+    const row = this.db.queryOne<SuggestionRow>(sql, [id]);
 
     if (!row) {
       return null;
@@ -94,7 +127,7 @@ export class SuggestionRepository {
    */
   findByBudgetId(budgetId: string): Suggestion[] {
     const sql = 'SELECT * FROM suggestions WHERE budget_id = ? ORDER BY created_at DESC';
-    const rows = this.db.query<any>(sql, [budgetId]);
+    const rows = this.db.query<SuggestionRow>(sql, [budgetId]);
     return rows.map((row) => this.mapRowToSuggestion(row));
   }
 
@@ -103,7 +136,7 @@ export class SuggestionRepository {
    */
   findByStatus(status: SuggestionStatus): Suggestion[] {
     const sql = 'SELECT * FROM suggestions WHERE status = ? ORDER BY created_at DESC';
-    const rows = this.db.query<any>(sql, [status]);
+    const rows = this.db.query<SuggestionRow>(sql, [status]);
     return rows.map((row) => this.mapRowToSuggestion(row));
   }
 
@@ -117,7 +150,7 @@ export class SuggestionRepository {
         AND (payee_status = 'pending' OR category_status = 'pending')
       ORDER BY created_at DESC
     `;
-    const rows = this.db.query<any>(sql, [budgetId]);
+    const rows = this.db.query<SuggestionRow>(sql, [budgetId]);
     return rows.map((row) => this.mapRowToSuggestion(row));
   }
 
@@ -187,7 +220,7 @@ export class SuggestionRepository {
       UPDATE suggestions 
       SET payee_status = ?, status = ?, updated_at = ?
     `;
-    const params: any[] = [payeeStatus, newCombinedStatus, now];
+    const params: unknown[] = [payeeStatus, newCombinedStatus, now];
 
     if (correction) {
       sql += `, corrected_payee_id = ?, corrected_payee_name = ?`;
@@ -224,7 +257,7 @@ export class SuggestionRepository {
       UPDATE suggestions 
       SET category_status = ?, status = ?, updated_at = ?
     `;
-    const params: any[] = [categoryStatus, newCombinedStatus, now];
+    const params: unknown[] = [categoryStatus, newCombinedStatus, now];
 
     if (correction) {
       sql += `, corrected_category_id = ?, corrected_category_name = ?`;
@@ -269,7 +302,7 @@ export class SuggestionRepository {
           status = ?,
           updated_at = ?
     `;
-    const sqlParams: any[] = [
+    const sqlParams: unknown[] = [
       params.categoryId,
       params.categoryName,
       params.categoryStatus,
@@ -325,7 +358,7 @@ export class SuggestionRepository {
           status = ?,
           updated_at = ?
     `;
-    const sqlParams: any[] = [
+    const sqlParams: unknown[] = [
       params.payeeId,
       params.payeeName,
       params.payeeName,
@@ -369,7 +402,7 @@ export class SuggestionRepository {
       ORDER BY created_at DESC 
       LIMIT 1
     `;
-    const row = this.db.queryOne<any>(sql, [budgetId, transactionId]);
+    const row = this.db.queryOne<SuggestionRow>(sql, [budgetId, transactionId]);
     return row ? this.mapRowToSuggestion(row) : null;
   }
 
@@ -433,7 +466,7 @@ export class SuggestionRepository {
    * Handles both new schema and legacy schema for backward compatibility
    * P2 (Zero duplication): Single mapping function
    */
-  private mapRowToSuggestion(row: any): Suggestion {
+  private mapRowToSuggestion(row: SuggestionRow): Suggestion {
     // Handle new schema with separate payee/category fields
     const payeeStatus = (row.payee_status || 'skipped') as SuggestionComponentStatus;
     const categoryStatus = (row.category_status || 'pending') as SuggestionComponentStatus;

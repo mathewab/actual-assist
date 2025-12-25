@@ -217,6 +217,56 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
   });
 
   /**
+   * POST /api/suggestions/bulk-correct-category - Correct category suggestions and approve them
+   */
+  router.post('/bulk-correct-category', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionIds, categoryId, categoryName } = req.body;
+
+      if (!Array.isArray(suggestionIds) || suggestionIds.length === 0) {
+        throw new ValidationError('suggestionIds array is required');
+      }
+      if (!categoryId || typeof categoryId !== 'string') {
+        throw new ValidationError('categoryId is required');
+      }
+
+      const result = suggestionService.correctCategorySuggestions(suggestionIds, {
+        categoryId,
+        categoryName: categoryName as string | undefined,
+      });
+
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/suggestions/bulk-correct-payee - Correct payee suggestions and approve them
+   */
+  router.post('/bulk-correct-payee', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionIds, payeeId, payeeName } = req.body;
+
+      if (!Array.isArray(suggestionIds) || suggestionIds.length === 0) {
+        throw new ValidationError('suggestionIds array is required');
+      }
+      if (!payeeName || typeof payeeName !== 'string') {
+        throw new ValidationError('payeeName is required');
+      }
+
+      const result = suggestionService.correctPayeeSuggestions(suggestionIds, {
+        payeeId: payeeId as string | undefined,
+        payeeName,
+      });
+
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * POST /api/suggestions/sync-and-generate - Sync and generate suggestions (diff-based)
    * T074: Calls diff-based generation
    */

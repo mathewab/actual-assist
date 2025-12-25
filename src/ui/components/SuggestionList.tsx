@@ -35,7 +35,7 @@ interface PayeeGroup {
 interface CorrectionModalState {
   isOpen: boolean;
   type: 'payee' | 'category';
-  suggestionId: string;
+  suggestionIds: string[];
   currentValue: string;
 }
 
@@ -85,9 +85,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     },
   });
 
-  const rejectPayeeMutation = useMutation({
-    mutationFn: ({ id, correction }: { id: string; correction?: { payeeName?: string } }) =>
-      api.rejectPayeeSuggestion(id, correction),
+  const correctPayeeMutation = useMutation({
+    mutationFn: ({ ids, correction }: { ids: string[]; correction: { payeeName: string } }) =>
+      api.bulkCorrectPayeeSuggestions(ids, correction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
       setCorrectionModal(null);
@@ -95,14 +95,14 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     },
   });
 
-  const rejectCategoryMutation = useMutation({
+  const correctCategoryMutation = useMutation({
     mutationFn: ({
-      id,
+      ids,
       correction,
     }: {
-      id: string;
-      correction?: { categoryId?: string; categoryName?: string };
-    }) => api.rejectCategorySuggestion(id, correction),
+      ids: string[];
+      correction: { categoryId: string; categoryName?: string };
+    }) => api.bulkCorrectCategorySuggestions(ids, correction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
       setCorrectionModal(null);
@@ -131,6 +131,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     },
   });
 
+  const resetSuggestionMutation = useMutation({
+    mutationFn: (id: string) => api.resetSuggestion(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+    },
+  });
+
   const retrySuggestionMutation = useMutation({
     mutationFn: (id: string) => api.retrySuggestion(id),
     onSuccess: () => {
@@ -152,10 +159,10 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
   const openCorrectionModal = (
     type: 'payee' | 'category',
-    suggestionId: string,
+    suggestionIds: string[],
     currentValue: string
   ) => {
-    setCorrectionModal({ isOpen: true, type, suggestionId, currentValue });
+    setCorrectionModal({ isOpen: true, type, suggestionIds, currentValue });
     setCorrectionInput('');
     setSelectedCategoryId('');
   };
@@ -164,21 +171,21 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     if (!correctionModal) return;
 
     if (correctionModal.type === 'payee') {
-      rejectPayeeMutation.mutate({
-        id: correctionModal.suggestionId,
-        correction: correctionInput ? { payeeName: correctionInput } : undefined,
+      if (!correctionInput.trim()) return;
+      correctPayeeMutation.mutate({
+        ids: correctionModal.suggestionIds,
+        correction: { payeeName: correctionInput.trim() },
       });
     } else {
       // For category, use the selected category from dropdown
+      if (!selectedCategoryId) return;
       const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
-      rejectCategoryMutation.mutate({
-        id: correctionModal.suggestionId,
-        correction: selectedCategoryId
-          ? {
-              categoryId: selectedCategoryId,
-              categoryName: selectedCategory?.name,
-            }
-          : undefined,
+      correctCategoryMutation.mutate({
+        ids: correctionModal.suggestionIds,
+        correction: {
+          categoryId: selectedCategoryId,
+          categoryName: selectedCategory?.name,
+        },
       });
     }
   };
@@ -253,11 +260,21 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
             const pendingIds = group.suggestions
               .filter((s) => s.status === 'pending')
               .map((s) => s.id);
+            const pendingCategoryIds = group.suggestions
+              .filter((s) => s.categorySuggestion.status === 'pending')
+              .map((s) => s.id);
+            const pendingPayeeIds = group.suggestions
+              .filter((s) => s.payeeSuggestion.status === 'pending')
+              .map((s) => s.id);
+            const processedIds = group.suggestions
+              .filter((s) => s.status === 'approved' || s.status === 'rejected')
+              .map((s) => s.id);
             const approvedIds = group.suggestions
               .filter((s) => s.status === 'approved')
               .map((s) => s.id);
             const hasPending = pendingIds.length > 0;
             const hasApproved = approvedIds.length > 0;
+            const hasProcessed = processedIds.length > 0;
             const firstSuggestion = group.suggestions[0];
 
             return (
@@ -298,33 +315,34 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                   </div>
 
                   {/* Action buttons */}
-                  {hasPending ? (
-                    <button
-                      className="approve-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        bulkApproveMutation.mutate(pendingIds);
-                      }}
-                      disabled={bulkApproveMutation.isPending}
-                      title="Approve all suggestions"
-                    >
-                      ✓ Approve
-                    </button>
-                  ) : (
-                    hasApproved && (
+                  <div className="payee-row-actions">
+                    {hasPending && (
+                      <button
+                        className="approve-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          bulkApproveMutation.mutate(pendingIds);
+                        }}
+                        disabled={bulkApproveMutation.isPending}
+                        title="Approve all suggestions"
+                      >
+                        ✓ Approve
+                      </button>
+                    )}
+                    {hasProcessed && (
                       <button
                         className="undo-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          bulkResetMutation.mutate(approvedIds);
+                          bulkResetMutation.mutate(processedIds);
                         }}
                         disabled={bulkResetMutation.isPending}
-                        title="Undo approval"
+                        title="Undo approved/rejected suggestions"
                       >
                         ↩ Undo
                       </button>
-                    )
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* Expanded section - reasoning + actions + transactions */}
@@ -351,7 +369,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                               onClick={() =>
                                 openCorrectionModal(
                                   'category',
-                                  firstSuggestion.id,
+                                  pendingCategoryIds,
                                   group.proposedCategory
                                 )
                               }
@@ -397,7 +415,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                               onClick={() =>
                                 openCorrectionModal(
                                   'payee',
-                                  firstSuggestion.id,
+                                  pendingPayeeIds,
                                   group.suggestedPayeeName || ''
                                 )
                               }
@@ -418,6 +436,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                             <th>Account</th>
                             <th>Amount</th>
                             <th>Status</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -432,6 +451,19 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                 <span className={`status-tag status-${suggestion.status}`}>
                                   {suggestion.status}
                                 </span>
+                              </td>
+                              <td className="row-actions">
+                                {(suggestion.status === 'approved' ||
+                                  suggestion.status === 'rejected') && (
+                                  <button
+                                    className="btn-sm btn-undo"
+                                    onClick={() => resetSuggestionMutation.mutate(suggestion.id)}
+                                    disabled={resetSuggestionMutation.isPending}
+                                    title="Undo and return to pending"
+                                  >
+                                    ↩ Undo
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -491,11 +523,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               <button
                 className="btn btn-reject"
                 onClick={handleCorrectionSubmit}
-                disabled={rejectPayeeMutation.isPending || rejectCategoryMutation.isPending}
+                disabled={
+                  correctPayeeMutation.isPending ||
+                  correctCategoryMutation.isPending ||
+                  (correctionModal.type === 'payee' ? !correctionInput.trim() : !selectedCategoryId)
+                }
               >
-                {(correctionModal.type === 'payee' ? correctionInput : selectedCategoryId)
-                  ? 'Submit Correction'
-                  : 'Reject Without Correction'}
+                Submit Correction
               </button>
             </div>
           </div>

@@ -349,6 +349,46 @@ export const api = {
   },
 
   /**
+   * Bulk correct category suggestions and approve them
+   */
+  async bulkCorrectCategorySuggestions(
+    suggestionIds: string[],
+    correction: { categoryId: string; categoryName?: string }
+  ): Promise<{ corrected: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/bulk-correct-category`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suggestionIds, ...correction }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to correct category suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Bulk correct payee suggestions and approve them
+   */
+  async bulkCorrectPayeeSuggestions(
+    suggestionIds: string[],
+    correction: { payeeId?: string; payeeName: string }
+  ): Promise<{ corrected: number }> {
+    const response = await fetch(`${API_BASE}/suggestions/bulk-correct-payee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suggestionIds, ...correction }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to correct payee suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Reset a suggestion back to pending (undo approve/reject)
    */
   async resetSuggestion(suggestionId: string) {

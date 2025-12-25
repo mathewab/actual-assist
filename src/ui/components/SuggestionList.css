@@ -234,6 +234,13 @@
   cursor: not-allowed;
 }
 
+/* Main row action group */
+.payee-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* Inline undo button */
 .undo-btn {
   padding: 4px 12px;
@@ -255,6 +262,21 @@
 .undo-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Row-level undo */
+.btn-sm.btn-undo {
+  background: #ff9800;
+  color: white;
+}
+
+.btn-sm.btn-undo:hover:not(:disabled) {
+  background: #f57c00;
+}
+
+.row-actions {
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* All-approved row styling */

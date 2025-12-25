@@ -1257,6 +1257,117 @@ ${categoryList}`;
   }
 
   /**
+   * Correct category suggestions and approve the corrected category
+   */
+  correctCategorySuggestions(
+    suggestionIds: string[],
+    correction: { categoryId: string; categoryName?: string }
+  ): { corrected: number } {
+    let corrected = 0;
+
+    for (const suggestionId of suggestionIds) {
+      try {
+        const suggestion = this.suggestionRepo.findById(suggestionId);
+        if (!suggestion) {
+          continue;
+        }
+
+        this.suggestionRepo.updateCategoryProposal(suggestionId, {
+          categoryId: correction.categoryId,
+          categoryName: correction.categoryName ?? 'Unknown',
+          categoryStatus: 'approved',
+          correction,
+        });
+
+        if (correction.categoryId && this.payeeCache) {
+          const payeeName =
+            suggestion.payeeSuggestion.proposedPayeeName || suggestion.transactionPayee;
+          if (payeeName) {
+            this.payeeCache.save({
+              budgetId: suggestion.budgetId,
+              payeeName,
+              categoryId: correction.categoryId,
+              categoryName: correction.categoryName || 'Unknown',
+              confidence: 1.0,
+              source: 'user_approved',
+            });
+          }
+        }
+
+        this.auditRepo.log({
+          eventType: 'suggestion_approved',
+          entityType: 'Suggestion',
+          entityId: suggestionId,
+          metadata: { type: 'category', corrected: true, correction },
+        });
+
+        corrected++;
+      } catch {
+        // Skip suggestions that can't be corrected (e.g., not found)
+      }
+    }
+
+    logger.info('Category corrections applied', {
+      corrected,
+      suggestionCount: suggestionIds.length,
+    });
+
+    return { corrected };
+  }
+
+  /**
+   * Correct payee suggestions and approve the corrected payee
+   */
+  correctPayeeSuggestions(
+    suggestionIds: string[],
+    correction: { payeeId?: string; payeeName: string }
+  ): { corrected: number } {
+    let corrected = 0;
+
+    for (const suggestionId of suggestionIds) {
+      try {
+        const suggestion = this.suggestionRepo.findById(suggestionId);
+        if (!suggestion) {
+          continue;
+        }
+
+        this.suggestionRepo.updatePayeeProposal(suggestionId, {
+          payeeId: correction.payeeId ?? null,
+          payeeName: correction.payeeName,
+          payeeStatus: 'approved',
+          correction,
+        });
+
+        if (this.payeeMatchCache) {
+          this.payeeMatchCache.save({
+            budgetId: suggestion.budgetId,
+            rawPayeeName: suggestion.transactionPayee || '',
+            canonicalPayeeId: correction.payeeId || null,
+            canonicalPayeeName: correction.payeeName,
+            confidence: 1.0,
+            source: 'user_approved',
+          });
+        }
+
+        this.auditRepo.log({
+          eventType: 'suggestion_approved',
+          entityType: 'Suggestion',
+          entityId: suggestionId,
+          metadata: { type: 'payee', corrected: true, correction },
+        });
+
+        corrected++;
+      } catch {
+        // Skip suggestions that can't be corrected (e.g., not found)
+      }
+    }
+
+    logger.info('Payee corrections applied', { corrected, suggestionCount: suggestionIds.length });
+
+    return { corrected };
+  }
+
+  /**
    * Reset a suggestion back to pending status
    * Allows users to undo an approve/reject action
    */

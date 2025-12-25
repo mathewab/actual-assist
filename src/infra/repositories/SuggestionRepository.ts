@@ -239,6 +239,118 @@ export class SuggestionRepository {
   }
 
   /**
+   * Update category proposal and status (used for user corrections)
+   */
+  updateCategoryProposal(
+    id: string,
+    params: {
+      categoryId: string | null;
+      categoryName: string | null;
+      categoryStatus: SuggestionComponentStatus;
+      correction?: { categoryId?: string | null; categoryName?: string | null };
+    }
+  ): void {
+    const suggestion = this.findById(id);
+    if (!suggestion) {
+      throw new NotFoundError('Suggestion', id);
+    }
+
+    const newCombinedStatus = computeCombinedStatus(
+      suggestion.payeeSuggestion.status,
+      params.categoryStatus
+    );
+    const now = new Date().toISOString();
+
+    let sql = `
+      UPDATE suggestions
+      SET proposed_category_id = ?,
+          proposed_category_name = ?,
+          category_status = ?,
+          status = ?,
+          updated_at = ?
+    `;
+    const sqlParams: any[] = [
+      params.categoryId,
+      params.categoryName,
+      params.categoryStatus,
+      newCombinedStatus,
+      now,
+    ];
+
+    if (params.correction) {
+      sql += `, corrected_category_id = ?, corrected_category_name = ?`;
+      sqlParams.push(params.correction.categoryId ?? null, params.correction.categoryName ?? null);
+    }
+
+    sql += ` WHERE id = ?`;
+    sqlParams.push(id);
+
+    this.db.execute(sql, sqlParams);
+    logger.debug('Suggestion category proposal updated', {
+      id,
+      categoryStatus: params.categoryStatus,
+      correction: params.correction,
+    });
+  }
+
+  /**
+   * Update payee proposal and status (used for user corrections)
+   */
+  updatePayeeProposal(
+    id: string,
+    params: {
+      payeeId: string | null;
+      payeeName: string | null;
+      payeeStatus: SuggestionComponentStatus;
+      correction?: { payeeId?: string | null; payeeName?: string | null };
+    }
+  ): void {
+    const suggestion = this.findById(id);
+    if (!suggestion) {
+      throw new NotFoundError('Suggestion', id);
+    }
+
+    const newCombinedStatus = computeCombinedStatus(
+      params.payeeStatus,
+      suggestion.categorySuggestion.status
+    );
+    const now = new Date().toISOString();
+
+    let sql = `
+      UPDATE suggestions
+      SET proposed_payee_id = ?,
+          proposed_payee_name = ?,
+          suggested_payee_name = ?,
+          payee_status = ?,
+          status = ?,
+          updated_at = ?
+    `;
+    const sqlParams: any[] = [
+      params.payeeId,
+      params.payeeName,
+      params.payeeName,
+      params.payeeStatus,
+      newCombinedStatus,
+      now,
+    ];
+
+    if (params.correction) {
+      sql += `, corrected_payee_id = ?, corrected_payee_name = ?`;
+      sqlParams.push(params.correction.payeeId ?? null, params.correction.payeeName ?? null);
+    }
+
+    sql += ` WHERE id = ?`;
+    sqlParams.push(id);
+
+    this.db.execute(sql, sqlParams);
+    logger.debug('Suggestion payee proposal updated', {
+      id,
+      payeeStatus: params.payeeStatus,
+      correction: params.correction,
+    });
+  }
+
+  /**
    * Delete all suggestions for a budget
    */
   deleteByBudgetId(budgetId: string): number {

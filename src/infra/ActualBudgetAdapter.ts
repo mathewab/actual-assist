@@ -40,9 +40,7 @@ type ActualTransaction = {
   transfer_id?: string | null;
 };
 
-function isVisibleNamedCategory(
-  cat: ActualCategory
-): cat is ActualCategory & { name: string } {
+function isVisibleNamedCategory(cat: ActualCategory): cat is ActualCategory & { name: string } {
   return !cat.hidden && Boolean(cat.id) && typeof cat.name === 'string';
 }
 
@@ -289,7 +287,9 @@ export class ActualBudgetAdapter {
     try {
       const payees = (await api.getPayees()) as ActualPayee[];
       return payees
-        .filter((p): p is ActualPayee & { name: string } => typeof p.id === 'string' && isNamedPayee(p))
+        .filter(
+          (p): p is ActualPayee & { name: string } => typeof p.id === 'string' && isNamedPayee(p)
+        )
         .map((p) => ({ id: p.id, name: p.name }));
     } catch (error) {
       throw new ActualBudgetError('Failed to fetch payees', { error });

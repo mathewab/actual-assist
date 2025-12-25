@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { api, Budget } from '../services/api';
 import './BudgetSelector.css';
 
@@ -38,7 +38,7 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
     loadBudgets();
   }, [selectedBudget, onBudgetSelect]);
 
-  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const budgetId = event.target.value;
     const budget = budgets.find((b) => b.id === budgetId);
     if (budget) {

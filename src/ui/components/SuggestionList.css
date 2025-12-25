@@ -1071,8 +1071,6 @@
 /* ===========================================
    LEGACY STYLES - Keeping for compatibility
    =========================================== */
-  border-top: 1px solid #eee;
-}
 
 .suggestion-component {
   flex: 1;

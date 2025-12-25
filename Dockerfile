@@ -19,7 +19,9 @@ COPY src ./src
 
 RUN npm ci
 RUN npm run build
-RUN mkdir -p dist/server/infra/db && cp src/infra/db/schema.sql dist/server/infra/db/
+RUN mkdir -p dist/server/infra/db/migrations \
+  && cp src/infra/db/schema.sql dist/server/infra/db/ \
+  && cp src/infra/db/migrations/*.cjs dist/server/infra/db/migrations/
 
 FROM node:20-alpine
 

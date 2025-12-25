@@ -8,6 +8,7 @@ import { validateEnv } from './infra/env.js';
 import { createLogger, setLogger } from './infra/logger.js';
 import rateLimit from 'express-rate-limit';
 import { DatabaseAdapter } from './infra/DatabaseAdapter.js';
+import { runMigrations } from './infra/migrations.js';
 import { ActualBudgetAdapter } from './infra/ActualBudgetAdapter.js';
 import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
 import { SuggestionRepository } from './infra/repositories/SuggestionRepository.js';
@@ -36,6 +37,7 @@ setLogger(loggerInstance);
 
 // Initialize infrastructure adapters (P6 - dependency discipline)
 const db = new DatabaseAdapter(env);
+await runMigrations(env);
 const actualBudget = new ActualBudgetAdapter(env);
 const openai = new OpenAIAdapter(env);
 

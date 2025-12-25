@@ -33,27 +33,9 @@ export class DatabaseAdapter {
       const schema = readFileSync(schemaPath, 'utf-8');
       this.db.exec(schema);
 
-      // Run migrations for schema changes
-      this.runMigrations();
-
       logger.info('Database schema initialized');
     } catch (error) {
       throw new DatabaseError('Failed to initialize database schema', { error });
-    }
-  }
-
-  /**
-   * Run incremental migrations for schema changes
-   * SQLite doesn't support IF NOT EXISTS for columns, so we check and add manually
-   */
-  private runMigrations(): void {
-    // Migration: Add suggested_payee_name column to suggestions table
-    const columns = this.db.pragma('table_info(suggestions)') as Array<{ name: string }>;
-    const hasColumn = columns.some((col) => col.name === 'suggested_payee_name');
-
-    if (!hasColumn) {
-      this.db.exec('ALTER TABLE suggestions ADD COLUMN suggested_payee_name TEXT');
-      logger.info('Migration: Added suggested_payee_name column to suggestions table');
     }
   }
 

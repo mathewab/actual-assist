@@ -1145,6 +1145,13 @@
   border-radius: 4px;
 }
 
+.btn-sm.icon-only {
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  line-height: 1;
+  min-width: 0;
+}
+
 .btn-sm.btn-approve {
   background: #4caf50;
   color: white;

@@ -131,6 +131,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     },
   });
 
+  const approveSuggestionMutation = useMutation({
+    mutationFn: (id: string) => api.approveSuggestion(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+    },
+  });
+
   const resetSuggestionMutation = useMutation({
     mutationFn: (id: string) => api.resetSuggestion(id),
     onSuccess: () => {
@@ -453,15 +460,27 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                 </span>
                               </td>
                               <td className="row-actions">
+                                {suggestion.status === 'pending' && (
+                                  <button
+                                    className="btn-sm btn-approve icon-only"
+                                    onClick={() => approveSuggestionMutation.mutate(suggestion.id)}
+                                    disabled={approveSuggestionMutation.isPending}
+                                    title="Approve"
+                                    aria-label="Approve"
+                                  >
+                                    ✓
+                                  </button>
+                                )}
                                 {(suggestion.status === 'approved' ||
                                   suggestion.status === 'rejected') && (
                                   <button
-                                    className="btn-sm btn-undo"
+                                    className="btn-sm btn-undo icon-only"
                                     onClick={() => resetSuggestionMutation.mutate(suggestion.id)}
                                     disabled={resetSuggestionMutation.isPending}
-                                    title="Undo and return to pending"
+                                    title="Undo"
+                                    aria-label="Undo"
                                   >
-                                    ↩ Undo
+                                    ↩
                                   </button>
                                 )}
                               </td>

@@ -133,7 +133,7 @@ if (env.NODE_ENV === 'production') {
   const uiDistPath = path.resolve(__dirname, '../ui');
   app.use(express.static(uiDistPath));
 
-  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+  app.get(/.*/, (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
@@ -148,7 +148,7 @@ if (env.NODE_ENV === 'production') {
 
   app.use(vite.middlewares);
 
-  app.get('*', async (req: Request, res: Response, next: NextFunction) => {
+  app.get(/.*/, async (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api')) {
       return next();
     }

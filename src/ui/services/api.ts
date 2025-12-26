@@ -80,36 +80,6 @@ export interface Suggestion {
   createdAt: string;
 }
 
-export interface SyncPlanChange {
-  id: string;
-  transactionId: string;
-  proposedCategoryId: string;
-  currentCategoryId: string | null;
-  suggestionId?: string;
-  // Human-readable fields for display
-  transactionPayee: string | null;
-  transactionDate: string | null;
-  transactionAmount: number | null;
-  transactionAccountName: string | null;
-  proposedCategoryName: string | null;
-  currentCategoryName: string | null;
-  proposedPayeeName: string | null;
-  hasPayeeChange: boolean;
-}
-
-export interface SyncPlan {
-  id: string;
-  budgetId: string;
-  changes: SyncPlanChange[];
-  dryRunSummary: {
-    totalChanges: number;
-    categoryChanges: number;
-    payeeChanges: number;
-    estimatedImpact: string;
-  };
-  createdAt: string;
-}
-
 /** Approved change ready to apply */
 export interface ApprovedChange {
   suggestionId: string;
@@ -532,40 +502,6 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to bulk reset suggestions');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Build a sync plan (legacy)
-   */
-  async buildSyncPlan(budgetId: string): Promise<SyncPlan> {
-    const response = await fetch(`${API_BASE}/sync/plan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to build sync plan');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Execute a sync plan (legacy)
-   */
-  async executeSyncPlan(budgetId: string) {
-    const response = await fetch(`${API_BASE}/sync/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to execute sync plan');
     }
 
     return response.json();

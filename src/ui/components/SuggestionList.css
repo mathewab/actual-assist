@@ -211,6 +211,12 @@
   border: 1px solid #4fc3f7;
 }
 
+.category-chip.missing {
+  background: #f5f5f5;
+  color: #757575;
+  border: 1px dashed #cfcfcf;
+}
+
 .confidence-chip {
   font-weight: 600;
   font-size: 0.7rem;
@@ -499,6 +505,17 @@
   background: #e3f2fd;
   color: #1565c0;
 }
+
+.status-tag.status-not-generated {
+  background: #f5f5f5;
+  color: #616161;
+}
+
+.status-tag.status-unknown {
+  background: #fff3e0;
+  color: #e65100;
+}
+
 
 /* ===========================================
    OLD STYLES BELOW - KEEPING FOR COMPATIBILITY

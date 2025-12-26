@@ -4,6 +4,7 @@ import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { Request, Response, NextFunction } from 'express';
 import { ValidationError } from '../domain/errors.js';
 import type { Suggestion } from '../domain/entities/Suggestion.js';
+import type { Transaction } from '../domain/entities/BudgetSnapshot.js';
 
 /**
  * Map suggestion to API response format
@@ -58,6 +59,21 @@ function mapSuggestionToResponse(s: Suggestion) {
   };
 }
 
+function mapTransactionToResponse(t: Transaction) {
+  return {
+    id: t.id,
+    accountId: t.accountId,
+    accountName: t.accountName,
+    date: t.date,
+    payeeId: t.payeeId,
+    payeeName: t.payeeName,
+    notes: t.notes,
+    categoryId: t.categoryId,
+    categoryName: t.categoryName,
+    amount: t.amount,
+  };
+}
+
 /**
  * Suggestion route handler
  * P5 (Separation of concerns): HTTP layer delegates to service layer
@@ -89,7 +105,7 @@ export function createSuggestionRouter(
   /**
    * GET /api/suggestions?budgetId=xxx - Get suggestions by budget
    */
-  router.get('/', (req: Request, res: Response, next: NextFunction) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { budgetId } = req.query;
 
@@ -97,10 +113,31 @@ export function createSuggestionRouter(
         throw new ValidationError('budgetId query parameter is required');
       }
 
-      const suggestions = suggestionService.getSuggestionsByBudgetId(budgetId);
+      const suggestions = await suggestionService.getSuggestionsByBudgetId(budgetId);
 
       res.json({
         suggestions: suggestions.map(mapSuggestionToResponse),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /api/suggestions/uncategorized?budgetId=xxx - Get uncategorized transactions
+   */
+  router.get('/uncategorized', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId } = req.query;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId query parameter is required');
+      }
+
+      const transactions = await suggestionService.getUncategorizedTransactions(budgetId);
+
+      res.json({
+        transactions: transactions.map(mapTransactionToResponse),
       });
     } catch (error) {
       next(error);

@@ -27,6 +27,7 @@ interface PayeeGroup {
   payeeRationale: string;
   categoryRationale: string;
   hasPayeeSuggestion: boolean;
+  hasCategorySuggestion: boolean;
   payeeStatus: SuggestionComponentStatus;
   categoryStatus: SuggestionComponentStatus;
 }
@@ -205,6 +206,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     }
   };
 
+  // Filter out applied suggestions - they appear in History page
+  const suggestions = (data?.suggestions || []).filter((s) => s.status !== 'applied');
+
   if (isLoading) {
     return <div className="loading">Loading suggestions...</div>;
   }
@@ -212,9 +216,6 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   if (error) {
     return <div className="error">Error loading suggestions: {error.message}</div>;
   }
-
-  // Filter out applied suggestions - they appear in History page
-  const suggestions = (data?.suggestions || []).filter((s) => s.status !== 'applied');
 
   // Group suggestions by payee
   const payeeGroups = groupByPayee(suggestions);
@@ -284,7 +285,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
       {payeeGroups.length === 0 ? (
         <div className="empty-state">
           <p>No suggestions available</p>
-          <p className="hint">Click &quot;Sync &amp; Generate&quot; to fetch new suggestions</p>
+          <p className="hint">Click &quot;Generate&quot; to fetch new suggestions</p>
         </div>
       ) : (
         <div className="payee-list">
@@ -292,6 +293,9 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
             const isExpanded = expandedPayees.has(group.payeeName);
             const pendingIds = group.suggestions
               .filter((s) => s.status === 'pending')
+              .map((s) => s.id);
+            const pendingApprovableIds = group.suggestions
+              .filter((s) => s.status === 'pending' && isApprovableSuggestion(s))
               .map((s) => s.id);
             const pendingCategoryIds = group.suggestions
               .filter((s) => s.categorySuggestion.status === 'pending')
@@ -306,9 +310,14 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               .filter((s) => s.status === 'approved')
               .map((s) => s.id);
             const hasPending = pendingIds.length > 0;
+            const hasPendingApprovable = pendingApprovableIds.length > 0;
             const hasApproved = approvedIds.length > 0;
             const hasProcessed = processedIds.length > 0;
             const firstSuggestion = group.suggestions[0];
+            const rejectableIds = group.suggestions
+              .filter((s) => s.status === 'pending' && isRejectableSuggestion(s))
+              .map((s) => s.id);
+            const hasRejectable = rejectableIds.length > 0;
 
             return (
               <div
@@ -336,7 +345,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                         </span>
                       )}
                     <span
-                      className={`chip category-chip ${group.categoryStatus === 'approved' ? 'approved' : ''}`}
+                      className={`chip category-chip ${group.categoryStatus === 'approved' ? 'approved' : ''} ${!group.hasCategorySuggestion ? 'missing' : ''}`}
                     >
                       {group.proposedCategory}
                     </span>
@@ -349,12 +358,12 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
                   {/* Action buttons */}
                   <div className="payee-row-actions">
-                    {hasPending && (
+                    {hasPendingApprovable && (
                       <button
                         className="approve-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          bulkApproveMutation.mutate(pendingIds);
+                          bulkApproveMutation.mutate(pendingApprovableIds);
                         }}
                         disabled={bulkApproveMutation.isPending}
                         title="Approve all suggestions"
@@ -388,14 +397,22 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                         <div className="suggestion-detail">
                           <div className="detail-header">
                             <span className="detail-label">Category</span>
-                            <span className="detail-value">{group.proposedCategory}</span>
+                            <span className="detail-value">
+                              {group.hasCategorySuggestion
+                                ? group.proposedCategory
+                                : 'Not generated'}
+                            </span>
                             <span
                               className={`detail-confidence confidence-${getConfidenceLevel(group.categoryConfidence)}`}
                             >
                               {Math.round(group.categoryConfidence * 100)}%
                             </span>
                           </div>
-                          <p className="detail-rationale">{group.categoryRationale}</p>
+                          <p className="detail-rationale">
+                            {group.hasCategorySuggestion
+                              ? group.categoryRationale
+                              : 'No suggestion yet. Generate or correct to proceed.'}
+                          </p>
                           <div className="detail-actions">
                             <button
                               className="detail-btn correct"
@@ -414,12 +431,17 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                               onClick={() => retrySuggestionMutation.mutate(firstSuggestion.id)}
                               disabled={retrySuggestionMutation.isPending}
                             >
-                              {retrySuggestionMutation.isPending ? '⏳' : '↻'} Retry
+                              {retrySuggestionMutation.isPending
+                                ? '⏳'
+                                : group.hasCategorySuggestion
+                                  ? '↻'
+                                  : '✨'}{' '}
+                              {group.hasCategorySuggestion ? 'Retry' : 'Generate'}
                             </button>
                             <button
                               className="detail-btn reject"
-                              onClick={() => bulkRejectMutation.mutate(pendingIds)}
-                              disabled={bulkRejectMutation.isPending}
+                              onClick={() => bulkRejectMutation.mutate(rejectableIds)}
+                              disabled={bulkRejectMutation.isPending || !hasRejectable}
                             >
                               ✕ Reject
                             </button>
@@ -474,15 +496,18 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                         </thead>
                         <tbody>
                           {group.suggestions.map((suggestion) => (
-                            <tr key={suggestion.id} className={`status-${suggestion.status}`}>
+                            <tr
+                              key={suggestion.id}
+                              className={`status-${getStatusClass(suggestion)}`}
+                            >
                               <td>{formatDate(suggestion.transactionDate)}</td>
                               <td>{suggestion.transactionAccountName || '—'}</td>
                               <td className="amount">
                                 {formatAmount(suggestion.transactionAmount)}
                               </td>
                               <td>
-                                <span className={`status-tag status-${suggestion.status}`}>
-                                  {suggestion.status}
+                                <span className={`status-tag status-${getStatusClass(suggestion)}`}>
+                                  {getStatusLabel(suggestion)}
                                 </span>
                               </td>
                               <td className="row-actions">
@@ -490,8 +515,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                   <button
                                     className="btn-sm btn-approve icon-only"
                                     onClick={() => approveSuggestionMutation.mutate(suggestion.id)}
-                                    disabled={approveSuggestionMutation.isPending}
-                                    title="Approve"
+                                    disabled={
+                                      approveSuggestionMutation.isPending ||
+                                      !isApprovableSuggestion(suggestion)
+                                    }
+                                    title={
+                                      isApprovableSuggestion(suggestion)
+                                        ? 'Approve'
+                                        : 'No suggestion to approve'
+                                    }
                                     aria-label="Approve"
                                   >
                                     ✓
@@ -612,36 +644,47 @@ function groupByPayee(suggestions: Suggestion[]): PayeeGroup[] {
   for (const [payeeName, items] of groups) {
     const pendingItems = items.filter((s) => s.status === 'pending');
     const avgConfidence = items.reduce((sum, s) => sum + s.confidence, 0) / items.length;
-    // Use first suggestion's category/rationale as representative
-    const first = items[0];
+    // Use a suggestion with a category proposal as representative when available
+    const representative =
+      items.find((s) => Boolean(s.categorySuggestion?.proposedCategoryId)) || items[0];
 
     // Extract independent payee and category data
-    const payeeSuggestion = first.payeeSuggestion;
-    const categorySuggestion = first.categorySuggestion;
+    const payeeSuggestion = representative.payeeSuggestion;
+    const categorySuggestion = representative.categorySuggestion;
 
     // Determine if there's a meaningful payee suggestion (different from original)
     const hasPayeeSuggestion = !!(
       payeeSuggestion?.proposedPayeeName && payeeSuggestion.proposedPayeeName !== payeeName
     );
+    const hasCategorySuggestion =
+      categorySuggestion?.proposedCategoryId !== null &&
+      categorySuggestion?.proposedCategoryId !== undefined;
 
     result.push({
       payeeName,
-      suggestedPayeeName: payeeSuggestion?.proposedPayeeName || first.suggestedPayeeName || null,
+      suggestedPayeeName:
+        payeeSuggestion?.proposedPayeeName || representative.suggestedPayeeName || null,
       suggestions: items.sort(
         (a, b) =>
           new Date(b.transactionDate || 0).getTime() - new Date(a.transactionDate || 0).getTime()
       ),
       pendingCount: pendingItems.length,
-      proposedCategory:
-        categorySuggestion?.proposedCategoryName || first.proposedCategoryName || 'Unknown',
-      proposedCategoryId: categorySuggestion?.proposedCategoryId || first.proposedCategoryId,
+      proposedCategory: hasCategorySuggestion
+        ? categorySuggestion?.proposedCategoryName ||
+          representative.proposedCategoryName ||
+          'Unknown'
+        : 'Not generated',
+      proposedCategoryId:
+        categorySuggestion?.proposedCategoryId || representative.proposedCategoryId,
       avgConfidence,
-      payeeConfidence: payeeSuggestion?.confidence ?? first.confidence,
-      categoryConfidence: categorySuggestion?.confidence ?? first.confidence,
+      payeeConfidence: payeeSuggestion?.confidence ?? representative.confidence,
+      categoryConfidence: categorySuggestion?.confidence ?? representative.confidence,
       payeeRationale: payeeSuggestion?.rationale || 'No payee change suggested',
-      categoryRationale:
-        categorySuggestion?.rationale || first.rationale || 'No rationale provided',
+      categoryRationale: hasCategorySuggestion
+        ? categorySuggestion?.rationale || representative.rationale || 'No rationale provided'
+        : 'No suggestion yet',
       hasPayeeSuggestion,
+      hasCategorySuggestion,
       payeeStatus: payeeSuggestion?.status || 'skipped',
       categoryStatus: categorySuggestion?.status || 'pending',
     });
@@ -683,4 +726,51 @@ function formatAmount(amount: number | null): string {
     currency: 'USD',
     minimumFractionDigits: 2,
   }).format(dollars);
+}
+
+function hasPayeeProposal(suggestion: Suggestion): boolean {
+  return Boolean(
+    suggestion.payeeSuggestion?.proposedPayeeName &&
+    suggestion.payeeSuggestion.proposedPayeeName !== suggestion.transactionPayee
+  );
+}
+
+function hasCategorySuggestion(suggestion: Suggestion): boolean {
+  return (
+    suggestion.categorySuggestion?.proposedCategoryId !== null &&
+    suggestion.categorySuggestion?.proposedCategoryId !== undefined
+  );
+}
+
+function isCategoryApprovable(suggestion: Suggestion): boolean {
+  const categoryId = suggestion.categorySuggestion?.proposedCategoryId;
+  return Boolean(categoryId && categoryId !== 'unknown');
+}
+
+function isApprovableSuggestion(suggestion: Suggestion): boolean {
+  return isCategoryApprovable(suggestion);
+}
+
+function isRejectableSuggestion(suggestion: Suggestion): boolean {
+  return hasCategorySuggestion(suggestion) || hasPayeeProposal(suggestion);
+}
+
+function getStatusLabel(suggestion: Suggestion): string {
+  if (!hasCategorySuggestion(suggestion) && !hasPayeeProposal(suggestion)) {
+    return 'not generated';
+  }
+  if (suggestion.categorySuggestion?.proposedCategoryId === 'unknown') {
+    return 'unknown';
+  }
+  return suggestion.status;
+}
+
+function getStatusClass(suggestion: Suggestion): string {
+  if (!hasCategorySuggestion(suggestion) && !hasPayeeProposal(suggestion)) {
+    return 'not-generated';
+  }
+  if (suggestion.categorySuggestion?.proposedCategoryId === 'unknown') {
+    return 'unknown';
+  }
+  return suggestion.status;
 }

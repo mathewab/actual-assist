@@ -65,15 +65,19 @@ export class SuggestionService {
 
   /**
    * Identify transactions that need an LLM retry because the previous attempt failed
-   * Only retry on actual LLM/API errors (indicated by empty rationale)
+   * Retry on actual LLM/API errors (empty rationale) or placeholders without a category suggestion
    * Do NOT retry valid responses from the LLM (even "unknown" ones)
    */
   private getRetryableTransactionIds(suggestions: Suggestion[]): string[] {
     const retryable = suggestions.filter((s) => {
       if (s.status !== 'pending') return false;
 
-      // Only retry if rationale is empty string (indicates LLM error)
-      return s.rationale === '';
+      const hasCategoryProposal =
+        s.categorySuggestion?.proposedCategoryId !== null &&
+        s.categorySuggestion?.proposedCategoryId !== undefined;
+
+      // Retry if LLM error (empty rationale) or no category suggestion yet
+      return s.rationale === '' || !hasCategoryProposal;
     });
 
     return Array.from(new Set(retryable.map((s) => s.transactionId)));
@@ -1082,8 +1086,48 @@ ${categoryList}`;
   /**
    * Get all suggestions for a budget
    */
-  getSuggestionsByBudgetId(budgetId: string): Suggestion[] {
-    return this.suggestionRepo.findByBudgetId(budgetId);
+  async getSuggestionsByBudgetId(budgetId: string): Promise<Suggestion[]> {
+    const suggestions = this.suggestionRepo.findByBudgetId(budgetId);
+    const existingTxIds = new Set(suggestions.map((s) => s.transactionId));
+
+    const transactions = await this.actualBudget.getTransactions();
+    const uncategorized = transactions.filter(
+      (txn) => txn.categoryId === null && !txn.isTransfer && !existingTxIds.has(txn.id)
+    );
+
+    if (uncategorized.length > 0) {
+      logger.info('Creating placeholder suggestions for uncategorized transactions', {
+        budgetId,
+        count: uncategorized.length,
+      });
+    }
+
+    const placeholders: Suggestion[] = [];
+    for (const txn of uncategorized) {
+      const placeholder = createSuggestion({
+        budgetId,
+        transactionId: txn.id,
+        transactionAccountId: txn.accountId,
+        transactionAccountName: txn.accountName,
+        transactionPayee: txn.payeeName,
+        transactionAmount: txn.amount,
+        transactionDate: txn.date,
+        currentCategoryId: txn.categoryId,
+        currentPayeeId: txn.payeeId,
+        proposedCategoryId: null,
+        proposedCategoryName: null,
+        categoryConfidence: 0,
+        categoryRationale: 'Not generated yet',
+        categoryStatus: 'pending',
+        payeeStatus: 'skipped',
+        payeeConfidence: 0,
+        payeeRationale: '',
+      });
+      this.suggestionRepo.save(placeholder);
+      placeholders.push(placeholder);
+    }
+
+    return suggestions.concat(placeholders);
   }
 
   /**
@@ -1094,6 +1138,23 @@ ${categoryList}`;
   }
 
   /**
+   * Get uncategorized transactions from the current budget
+   */
+  async getUncategorizedTransactions(budgetId: string): Promise<Transaction[]> {
+    logger.info('Fetching uncategorized transactions', { budgetId });
+    const transactions = await this.actualBudget.getTransactions();
+
+    const uncategorized = transactions.filter((txn) => txn.categoryId === null && !txn.isTransfer);
+
+    logger.info('Uncategorized transactions fetched', {
+      budgetId,
+      count: uncategorized.length,
+    });
+
+    return uncategorized;
+  }
+
+  /**
    * Approve a suggestion (legacy - approves both payee and category)
    * P7 (Explicit error handling): Throws NotFoundError if suggestion doesn't exist
    */
@@ -1101,6 +1162,18 @@ ${categoryList}`;
     const suggestion = this.suggestionRepo.findById(suggestionId);
     if (!suggestion) {
       throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    const hasCategoryProposal =
+      Boolean(suggestion.categorySuggestion?.proposedCategoryId) &&
+      suggestion.categorySuggestion?.proposedCategoryId !== 'unknown';
+    const hasPayeeProposal = Boolean(
+      suggestion.payeeSuggestion?.proposedPayeeName &&
+      suggestion.payeeSuggestion.proposedPayeeName !== suggestion.transactionPayee
+    );
+
+    if (!hasCategoryProposal && !hasPayeeProposal) {
+      throw new Error(`Suggestion has no actionable proposal: ${suggestionId}`);
     }
 
     this.suggestionRepo.updateStatus(suggestionId, 'approved');
@@ -1127,6 +1200,14 @@ ${categoryList}`;
       throw new Error(`Suggestion not found: ${suggestionId}`);
     }
 
+    const hasPayeeProposal = Boolean(
+      suggestion.payeeSuggestion?.proposedPayeeName &&
+      suggestion.payeeSuggestion.proposedPayeeName !== suggestion.transactionPayee
+    );
+    if (!hasPayeeProposal) {
+      throw new Error(`Suggestion has no payee proposal: ${suggestionId}`);
+    }
+
     this.suggestionRepo.updatePayeeStatus(suggestionId, 'approved');
     this.cacheApprovedPayeeMatch(suggestion);
 
@@ -1147,6 +1228,13 @@ ${categoryList}`;
     const suggestion = this.suggestionRepo.findById(suggestionId);
     if (!suggestion) {
       throw new Error(`Suggestion not found: ${suggestionId}`);
+    }
+
+    const hasCategoryProposal =
+      Boolean(suggestion.categorySuggestion?.proposedCategoryId) &&
+      suggestion.categorySuggestion?.proposedCategoryId !== 'unknown';
+    if (!hasCategoryProposal) {
+      throw new Error(`Suggestion has no category proposal: ${suggestionId}`);
     }
 
     this.suggestionRepo.updateCategoryStatus(suggestionId, 'approved');

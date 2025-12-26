@@ -21,6 +21,19 @@ export interface Payee {
   name: string;
 }
 
+export interface UncategorizedTransaction {
+  id: string;
+  accountId: string;
+  accountName: string | null;
+  date: string;
+  payeeId: string | null;
+  payeeName: string | null;
+  notes: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  amount: number;
+}
+
 /** Status for individual suggestion components */
 export type SuggestionComponentStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'skipped';
 
@@ -249,6 +262,21 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to fetch suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get uncategorized transactions for a budget
+   */
+  async getUncategorizedTransactions(
+    budgetId: string
+  ): Promise<{ transactions: UncategorizedTransaction[] }> {
+    const response = await fetch(`${API_BASE}/suggestions/uncategorized?budgetId=${budgetId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch uncategorized transactions');
     }
 
     return response.json();

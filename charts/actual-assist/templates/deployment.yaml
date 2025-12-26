@@ -14,6 +14,10 @@ spec:
       labels:
         {{- include "actual-assist.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.app.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -22,6 +26,10 @@ spec:
       - name: actual-assist
         image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+        {{- with .Values.app.containerSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         ports:
         - name: http
           containerPort: {{ .Values.app.service.targetPort }}

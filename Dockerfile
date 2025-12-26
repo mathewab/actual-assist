@@ -1,5 +1,5 @@
 # Multi-stage build for single app
-FROM node:24-alpine AS builder
+FROM node:24-bookworm-slim AS builder
 
 LABEL org.opencontainers.image.title="Actual Assist" \
       org.opencontainers.image.description="AI-powered budgeting assistant for Actual Budget" \
@@ -17,8 +17,9 @@ COPY tsconfig*.json ./
 COPY vite.config.ts ./
 COPY src ./src
 
-# Install build tools for native modules (node-gyp expects python, make, g++).
-RUN apk add --no-cache python3 make g++
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 RUN npm ci
 RUN npm run build
 RUN npm prune --omit=dev
@@ -26,19 +27,17 @@ RUN mkdir -p dist/server/infra/db/migrations \
   && cp src/infra/db/schema.sql dist/server/infra/db/ \
   && cp src/infra/db/migrations/*.cjs dist/server/infra/db/migrations/
 
-FROM node:24-alpine
+FROM gcr.io/distroless/nodejs24-debian12
 
 WORKDIR /app
 
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
-
 COPY --from=builder /app/dist ./dist
-
-RUN mkdir -p /app/data
+VOLUME ["/app/data"]
 
 EXPOSE 3000
 
 ENV NODE_ENV=production
 
-CMD ["node", "dist/server/server.js"]
+CMD ["dist/server/server.js"]

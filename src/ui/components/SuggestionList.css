@@ -26,27 +26,6 @@
   gap: 8px;
 }
 
-/* Sync button */
-.btn-sync {
-  padding: 6px 14px;
-  font-size: 0.85rem;
-  background: #1976d2;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-sync:hover:not(:disabled) {
-  background: #1565c0;
-}
-
-.btn-sync:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* Generate button */
 .btn-generate {
   padding: 6px 14px;
@@ -68,25 +47,40 @@
   cursor: not-allowed;
 }
 
-/* Resync button (red/warning) */
-.btn-resync {
+/* Apply Changes link button */
+.btn-apply-link {
   padding: 6px 14px;
   font-size: 0.85rem;
-  background: #d32f2f;
+  background: #2e7d32;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.2s;
+  text-decoration: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.btn-resync:hover:not(:disabled) {
-  background: #b71c1c;
+.btn-apply-link:hover {
+  background: #1b5e20;
 }
 
-.btn-resync:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.apply-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1b5e20;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(27, 94, 32, 0.25);
 }
 
 /* Loading & Error States */

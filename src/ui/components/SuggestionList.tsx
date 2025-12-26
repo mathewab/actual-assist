@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   api,
@@ -53,6 +54,13 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     enabled: !!budgetId,
   });
 
+  const { data: approvedChangesCount } = useQuery({
+    queryKey: ['approved-changes', budgetId],
+    queryFn: () => api.getApprovedChanges(budgetId),
+    enabled: !!budgetId,
+    select: (approved) => approved.changes.length,
+  });
+
   // Fetch categories for the dropdown
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
@@ -72,22 +80,8 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     {} as Record<string, Category[]>
   );
 
-  const syncJobMutation = useMutation({
-    mutationFn: () => api.createSyncJob(budgetId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
-    },
-  });
-
   const suggestionsJobMutation = useMutation({
     mutationFn: () => api.createSuggestionsJob(budgetId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
-    },
-  });
-
-  const syncAndGenerateJobMutation = useMutation({
-    mutationFn: () => api.createSyncAndGenerateJob(budgetId, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
@@ -208,6 +202,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
   // Filter out applied suggestions - they appear in History page
   const suggestions = (data?.suggestions || []).filter((s) => s.status !== 'applied');
+  const hasApprovedChanges = (approvedChangesCount ?? 0) > 0;
 
   if (isLoading) {
     return <div className="loading">Loading suggestions...</div>;
@@ -227,38 +222,20 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)
         </h2>
         <div className="header-buttons">
-          <button
-            className="btn btn-sync"
-            onClick={() => syncJobMutation.mutate()}
-            disabled={
-              syncJobMutation.isPending ||
-              suggestionsJobMutation.isPending ||
-              syncAndGenerateJobMutation.isPending
-            }
-          >
-            {syncJobMutation.isPending ? 'Starting sync...' : '🔄 Sync'}
-          </button>
+          {hasApprovedChanges && (
+            <NavLink to="/apply" className="btn btn-apply-link">
+              Apply Changes
+              <span className="apply-badge" aria-label={`${approvedChangesCount} to apply`}>
+                {approvedChangesCount}
+              </span>
+            </NavLink>
+          )}
           <button
             className="btn btn-generate"
             onClick={() => suggestionsJobMutation.mutate()}
-            disabled={
-              syncJobMutation.isPending ||
-              suggestionsJobMutation.isPending ||
-              syncAndGenerateJobMutation.isPending
-            }
+            disabled={suggestionsJobMutation.isPending}
           >
             {suggestionsJobMutation.isPending ? 'Starting generation...' : '✨ Generate'}
-          </button>
-          <button
-            className="btn btn-resync"
-            onClick={() => syncAndGenerateJobMutation.mutate()}
-            disabled={
-              syncJobMutation.isPending ||
-              suggestionsJobMutation.isPending ||
-              syncAndGenerateJobMutation.isPending
-            }
-          >
-            {syncAndGenerateJobMutation.isPending ? 'Starting resync...' : '⚠️ Resync'}
           </button>
         </div>
       </div>
@@ -267,19 +244,8 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
         <ProgressBar message="Retrying AI suggestion for payee group..." />
       )}
 
-      {(syncJobMutation.error ||
-        suggestionsJobMutation.error ||
-        syncAndGenerateJobMutation.error) && (
-        <div className="error">
-          Sync failed:{' '}
-          {
-            (
-              syncJobMutation.error ||
-              suggestionsJobMutation.error ||
-              syncAndGenerateJobMutation.error
-            )?.message
-          }
-        </div>
+      {suggestionsJobMutation.error && (
+        <div className="error">Generate failed: {suggestionsJobMutation.error.message}</div>
       )}
 
       {payeeGroups.length === 0 ? (

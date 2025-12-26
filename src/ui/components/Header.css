@@ -34,7 +34,8 @@
 
 .header-nav {
   display: flex;
-  gap: 4px;
+  gap: 8px;
+  align-items: center;
 }
 
 .header-actions {
@@ -61,4 +62,74 @@
 .nav-link.active {
   background: rgba(255, 255, 255, 0.25);
   color: white;
+}
+
+.nav-menu {
+  position: relative;
+}
+
+.nav-trigger {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-menu.active .nav-trigger,
+.nav-trigger:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.nav-caret {
+  margin-left: 6px;
+  font-size: 0.75rem;
+}
+
+.nav-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 180px;
+  padding: 8px;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 50;
+}
+
+.nav-menu:hover .nav-dropdown,
+.nav-menu:focus-within .nav-dropdown {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.nav-dropdown .nav-link {
+  color: #1f2937;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.nav-dropdown .nav-link:hover {
+  background: #e8f1fb;
+  color: #0f4c9a;
+}
+
+.nav-dropdown .nav-link.active {
+  background: #dce9f8;
+  color: #0f4c9a;
 }

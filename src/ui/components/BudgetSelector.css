@@ -36,6 +36,27 @@
   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
+.budget-sync-button {
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.budget-sync-button:hover:not(:disabled) {
+  background: #1565c0;
+}
+
+.budget-sync-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .budget-selector--loading,
 .budget-selector--error,
 .budget-selector--empty {

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Budget } from '../services/api';
 import './BudgetSelector.css';
 
@@ -15,6 +16,21 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const syncJobMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedBudget?.id) {
+        return Promise.reject(new Error('Select a budget to sync'));
+      }
+      return api.createSyncJob(selectedBudget.id);
+    },
+    onSuccess: () => {
+      if (selectedBudget?.id) {
+        queryClient.invalidateQueries({ queryKey: ['jobs', selectedBudget.id] });
+      }
+    },
+  });
 
   useEffect(() => {
     async function loadBudgets() {
@@ -88,6 +104,14 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
           </option>
         ))}
       </select>
+      <button
+        type="button"
+        className="budget-sync-button"
+        onClick={() => syncJobMutation.mutate()}
+        disabled={!selectedBudget?.id || syncJobMutation.isPending}
+      >
+        {syncJobMutation.isPending ? 'Syncing...' : '🔄 Sync'}
+      </button>
     </div>
   );
 }

@@ -1,0 +1,197 @@
+openapi: 3.0.3
+info:
+  title: Jobs Workflow API
+  version: 1.0.0
+servers:
+  - url: /api
+paths:
+  /jobs:
+    get:
+      summary: List jobs for a budget
+      parameters:
+        - in: query
+          name: budgetId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: type
+          required: false
+          schema:
+            type: string
+            enum: [sync, suggestions, sync_and_generate]
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [queued, running, succeeded, failed, canceled]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Job'
+  /jobs/{jobId}:
+    get:
+      summary: Get a single job by ID
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    $ref: '#/components/schemas/Job'
+                  steps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobStep'
+  /jobs/sync:
+    post:
+      summary: Create a sync job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/suggestions:
+    post:
+      summary: Create a suggestions generation job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/sync-and-generate:
+    post:
+      summary: Create a combined sync then generate job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/JobRequest'
+                - type: object
+                  properties:
+                    fullResync:
+                      type: boolean
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+components:
+  schemas:
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        budgetId:
+          type: string
+        type:
+          type: string
+          enum: [sync, suggestions, sync_and_generate]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, canceled]
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+    JobStep:
+      type: object
+      properties:
+        id:
+          type: string
+        jobId:
+          type: string
+        stepType:
+          type: string
+          enum: [sync, suggestions]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, canceled]
+        position:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+    JobRequest:
+      type: object
+      required: [budgetId]
+      properties:
+        budgetId:
+          type: string
+    JobResponse:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/Job'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobStep'

@@ -136,6 +136,34 @@ export interface AuditEvent {
   timestamp: string;
 }
 
+export type JobType = 'sync' | 'suggestions' | 'sync_and_generate';
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+
+export interface Job {
+  id: string;
+  budgetId: string;
+  type: JobType;
+  status: JobStatus;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureReason: string | null;
+  parentJobId: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface JobStep {
+  id: string;
+  jobId: string;
+  stepType: 'sync' | 'suggestions';
+  status: JobStatus;
+  position: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureReason: string | null;
+}
+
 export const api = {
   /**
    * List available budgets
@@ -243,6 +271,95 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to fetch suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * List jobs for a budget
+   */
+  async listJobs(params: {
+    budgetId: string;
+    type?: JobType;
+    status?: JobStatus;
+    limit?: number;
+  }): Promise<{ jobs: Job[] }> {
+    const query = new URLSearchParams({ budgetId: params.budgetId });
+    if (params.type) query.set('type', params.type);
+    if (params.status) query.set('status', params.status);
+    if (params.limit) query.set('limit', String(params.limit));
+
+    const response = await fetch(`${API_BASE}/jobs?${query.toString()}`);
+    if (!response.ok) {
+      throw new Error('Failed to list jobs');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a sync job
+   */
+  async createSyncJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create sync job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a suggestions generation job
+   */
+  async createSuggestionsJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create suggestions job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a combined sync and generate job
+   */
+  async createSyncAndGenerateJob(
+    budgetId: string,
+    fullResync = false
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/sync-and-generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, fullResync }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create sync and generate job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get job details with steps
+   */
+  async getJob(jobId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch job detail');
     }
 
     return response.json();

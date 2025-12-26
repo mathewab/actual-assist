@@ -71,17 +71,24 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     {} as Record<string, Category[]>
   );
 
-  const syncAndGenerateMutation = useMutation({
-    mutationFn: () => api.syncAndGenerateSuggestions(budgetId, false),
+  const syncJobMutation = useMutation({
+    mutationFn: () => api.createSyncJob(budgetId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['suggestions', budgetId] });
+      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
   });
 
-  const fullResyncMutation = useMutation({
-    mutationFn: () => api.syncAndGenerateSuggestions(budgetId, true),
+  const suggestionsJobMutation = useMutation({
+    mutationFn: () => api.createSuggestionsJob(budgetId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['suggestions', budgetId] });
+      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
+    },
+  });
+
+  const syncAndGenerateJobMutation = useMutation({
+    mutationFn: () => api.createSyncAndGenerateJob(budgetId, true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
   });
 
@@ -220,38 +227,56 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
         <div className="header-buttons">
           <button
             className="btn btn-sync"
-            onClick={() => syncAndGenerateMutation.mutate()}
-            disabled={syncAndGenerateMutation.isPending || fullResyncMutation.isPending}
+            onClick={() => syncJobMutation.mutate()}
+            disabled={
+              syncJobMutation.isPending ||
+              suggestionsJobMutation.isPending ||
+              syncAndGenerateJobMutation.isPending
+            }
           >
-            {syncAndGenerateMutation.isPending ? 'Syncing...' : '🔄 Sync'}
+            {syncJobMutation.isPending ? 'Starting sync...' : '🔄 Sync'}
+          </button>
+          <button
+            className="btn btn-generate"
+            onClick={() => suggestionsJobMutation.mutate()}
+            disabled={
+              syncJobMutation.isPending ||
+              suggestionsJobMutation.isPending ||
+              syncAndGenerateJobMutation.isPending
+            }
+          >
+            {suggestionsJobMutation.isPending ? 'Starting generation...' : '✨ Generate'}
           </button>
           <button
             className="btn btn-resync"
-            onClick={() => fullResyncMutation.mutate()}
-            disabled={syncAndGenerateMutation.isPending || fullResyncMutation.isPending}
+            onClick={() => syncAndGenerateJobMutation.mutate()}
+            disabled={
+              syncJobMutation.isPending ||
+              suggestionsJobMutation.isPending ||
+              syncAndGenerateJobMutation.isPending
+            }
           >
-            {fullResyncMutation.isPending ? 'Resyncing...' : '⚠️ Resync'}
+            {syncAndGenerateJobMutation.isPending ? 'Starting resync...' : '⚠️ Resync'}
           </button>
         </div>
       </div>
-
-      {(syncAndGenerateMutation.isPending || fullResyncMutation.isPending) && (
-        <ProgressBar
-          message={
-            fullResyncMutation.isPending
-              ? 'Full resync: downloading and regenerating all suggestions...'
-              : 'Syncing transactions and generating AI suggestions...'
-          }
-        />
-      )}
 
       {retrySuggestionMutation.isPending && (
         <ProgressBar message="Retrying AI suggestion for payee group..." />
       )}
 
-      {(syncAndGenerateMutation.error || fullResyncMutation.error) && (
+      {(syncJobMutation.error ||
+        suggestionsJobMutation.error ||
+        syncAndGenerateJobMutation.error) && (
         <div className="error">
-          Sync failed: {(syncAndGenerateMutation.error || fullResyncMutation.error)?.message}
+          Sync failed:{' '}
+          {
+            (
+              syncJobMutation.error ||
+              suggestionsJobMutation.error ||
+              syncAndGenerateJobMutation.error
+            )?.message
+          }
         </div>
       )}
 

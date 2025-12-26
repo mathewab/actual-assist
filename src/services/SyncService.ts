@@ -296,4 +296,12 @@ export class SyncService {
       throw error;
     }
   }
+
+  /**
+   * Sync budget data from Actual Budget
+   */
+  async syncBudget(budgetId: string): Promise<void> {
+    logger.info('Syncing budget data', { budgetId });
+    await this.actualBudget.sync();
+  }
 }

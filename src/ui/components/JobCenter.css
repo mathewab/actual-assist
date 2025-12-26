@@ -1,0 +1,267 @@
+.job-center {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.job-center-button {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.job-center-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.job-center-button.open {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.job-center-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.job-center-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.job-center-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.job-toast {
+  position: fixed;
+  top: 78px;
+  right: 24px;
+  z-index: 80;
+  background: #0f172a;
+  color: white;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 240px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.25);
+  border-left: 4px solid #38bdf8;
+}
+
+.job-toast.status-succeeded {
+  border-left-color: #22c55e;
+}
+
+.job-toast.status-failed {
+  border-left-color: #ef4444;
+}
+
+.job-toast.status-canceled {
+  border-left-color: #94a3b8;
+}
+
+.job-toast-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.job-toast-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.job-toast-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: white;
+  animation: job-toast-spin 0.9s linear infinite;
+}
+
+.job-toast-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.job-toast-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+}
+
+.job-history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.2);
+  z-index: 60;
+}
+
+.job-history-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 360px;
+  background: white;
+  color: #0f172a;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+  z-index: 70;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.job-history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.job-history-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.job-history-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.job-history-close {
+  border: none;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.job-history-close:hover {
+  background: #e2e8f0;
+}
+
+.job-history-empty {
+  font-size: 12px;
+  color: #64748b;
+  padding: 10px 2px;
+}
+
+.job-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.job-history-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+  margin-bottom: 8px;
+}
+
+.job-history-item:last-child {
+  margin-bottom: 0;
+}
+
+.job-history-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.job-history-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.job-history-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.job-history-failure {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: capitalize;
+  background: #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.status-running .status-tag {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-succeeded .status-tag {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-failed .status-tag {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-canceled .status-tag {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+@keyframes job-toast-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

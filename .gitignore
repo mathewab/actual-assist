@@ -14,6 +14,7 @@ build/
 .env
 .env.local
 .env.*.local
+.envrc
 
 # Logs
 logs/

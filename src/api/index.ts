@@ -4,9 +4,12 @@ import { createSuggestionRouter } from './suggestionRoutes.js';
 import { createSyncRouter } from './syncRoutes.js';
 import { createAuditRouter } from './auditRoutes.js';
 import { createBudgetRouter } from './budgetRoutes.js';
+import { createJobRouter } from './jobRoutes.js';
 import type { SnapshotService } from '../services/SnapshotService.js';
 import type { SuggestionService } from '../services/SuggestionService.js';
 import type { SyncService } from '../services/SyncService.js';
+import type { JobService } from '../services/JobService.js';
+import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 
@@ -19,6 +22,8 @@ export function createApiRouter(deps: {
   snapshotService: SnapshotService;
   suggestionService: SuggestionService;
   syncService: SyncService;
+  jobService: JobService;
+  jobOrchestrator: JobOrchestrator;
   auditRepo: AuditRepository;
   actualBudget: ActualBudgetAdapter;
 }): Router {
@@ -29,6 +34,7 @@ export function createApiRouter(deps: {
   router.use('/snapshots', createSnapshotRouter(deps.snapshotService));
   router.use('/suggestions', createSuggestionRouter(deps.suggestionService));
   router.use('/sync', createSyncRouter(deps.syncService));
+  router.use('/jobs', createJobRouter(deps.jobService, deps.jobOrchestrator));
   router.use('/audit', createAuditRouter(deps.auditRepo));
 
   return router;

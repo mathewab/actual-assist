@@ -14,7 +14,7 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 **Constitution-Driven Development**: This project follows strict engineering principles documented in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 
 **Tech Stack**:
-- **App**: Node.js 20, TypeScript 5, Express.js, React 18, Vite, TanStack Query
+- **App**: Node.js 24, TypeScript 5, Express.js, React 18, Vite, TanStack Query
 - **AI**: OpenAI GPT-4o-mini
 - **Storage**: SQLite (audit log)
 - **Deployment**: Docker, docker-compose
@@ -23,7 +23,7 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 
 ### Prerequisites
 
-- Node.js >= 20.0.0
+- Node.js >= 24.0.0
 - npm >= 10.0.0
 - Docker & docker-compose (for containerized deployment)
 - Actual Budget server URL and credentials

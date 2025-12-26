@@ -1,5 +1,5 @@
 # Multi-stage build for single app
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 LABEL org.opencontainers.image.title="Actual Assist" \
       org.opencontainers.image.description="AI-powered budgeting assistant for Actual Budget" \
@@ -17,18 +17,21 @@ COPY tsconfig*.json ./
 COPY vite.config.ts ./
 COPY src ./src
 
+# Install build tools for native modules (node-gyp expects python, make, g++).
+RUN apk add --no-cache python3 make g++
 RUN npm ci
 RUN npm run build
+RUN npm prune --omit=dev
 RUN mkdir -p dist/server/infra/db/migrations \
   && cp src/infra/db/schema.sql dist/server/infra/db/ \
   && cp src/infra/db/migrations/*.cjs dist/server/infra/db/migrations/
 
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY --from=builder /app/node_modules ./node_modules
 
 COPY --from=builder /app/dist ./dist
 

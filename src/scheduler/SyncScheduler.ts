@@ -1,6 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { logger } from '../infra/logger.js';
-import type { SuggestionService } from '../services/SuggestionService.js';
+import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { Env } from '../infra/env.js';
 
 /**
@@ -10,15 +10,12 @@ import type { Env } from '../infra/env.js';
  */
 export class SyncScheduler {
   private task: ScheduledTask | null = null;
-  private retryCount = 0;
-  private readonly maxRetries = 3;
-  private readonly retryDelays = [60000, 300000, 900000]; // 1min, 5min, 15min
   private isPaused = false;
   private static instance: SyncScheduler | null = null;
 
   constructor(
     private env: Env,
-    private suggestionService: SuggestionService,
+    private jobOrchestrator: JobOrchestrator,
     private budgetId: string
   ) {
     SyncScheduler.instance = this;
@@ -93,8 +90,7 @@ export class SyncScheduler {
   }
 
   /**
-   * Run sync with retry logic
-   * P7 (Error handling): Exponential backoff on failure
+   * Enqueue scheduled sync+suggest job
    */
   private async runSync(): Promise<void> {
     if (this.isPaused) {
@@ -104,44 +100,13 @@ export class SyncScheduler {
 
     try {
       logger.info('Periodic sync starting', { budgetId: this.budgetId });
-
-      const suggestions = await this.suggestionService.syncAndGenerateSuggestions(this.budgetId);
-
-      // Reset retry count on success
-      this.retryCount = 0;
-
-      logger.info('Periodic sync completed', {
-        budgetId: this.budgetId,
-        suggestionsGenerated: suggestions.length,
-      });
+      this.jobOrchestrator.startScheduledSyncAndSuggestJob(this.budgetId);
+      logger.info('Periodic sync job enqueued', { budgetId: this.budgetId });
     } catch (error) {
-      logger.error('Periodic sync failed', {
+      logger.error('Failed to enqueue periodic sync job', {
         budgetId: this.budgetId,
         error: error instanceof Error ? error.message : String(error),
-        retryCount: this.retryCount,
       });
-
-      // Retry with backoff if under max retries
-      if (this.retryCount < this.maxRetries) {
-        const delay = this.retryDelays[this.retryCount];
-        this.retryCount++;
-
-        logger.info('Scheduling retry', {
-          retryNumber: this.retryCount,
-          delayMs: delay,
-        });
-
-        setTimeout(() => this.runSync(), delay);
-      } else {
-        // Max retries exhausted - log critical error
-        logger.error('Periodic sync failed after max retries', {
-          budgetId: this.budgetId,
-          maxRetries: this.maxRetries,
-        });
-
-        // Reset for next scheduled run
-        this.retryCount = 0;
-      }
     }
   }
 }
@@ -151,10 +116,10 @@ export class SyncScheduler {
  */
 export function startScheduler(
   env: Env,
-  suggestionService: SuggestionService,
+  jobOrchestrator: JobOrchestrator,
   budgetId: string
 ): SyncScheduler {
-  const scheduler = new SyncScheduler(env, suggestionService, budgetId);
+  const scheduler = new SyncScheduler(env, jobOrchestrator, budgetId);
   scheduler.start();
   return scheduler;
 }

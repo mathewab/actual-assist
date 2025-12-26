@@ -23,7 +23,7 @@ export function App() {
   return (
     <BrowserRouter>
       <div className="app">
-        <Header budgetName={selectedBudget?.name} />
+        <Header budgetName={selectedBudget?.name} budgetId={selectedBudget?.id} />
 
         <div className="app-content">
           <BudgetSelector selectedBudget={selectedBudget} onBudgetSelect={handleBudgetSelect} />

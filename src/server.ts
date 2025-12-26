@@ -14,9 +14,14 @@ import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
 import { SuggestionRepository } from './infra/repositories/SuggestionRepository.js';
 import { AuditRepository } from './infra/repositories/AuditRepository.js';
 import { PayeeCacheRepository } from './infra/repositories/PayeeCacheRepository.js';
+import { JobRepository } from './infra/repositories/JobRepository.js';
+import { JobStepRepository } from './infra/repositories/JobStepRepository.js';
+import { JobEventRepository } from './infra/repositories/JobEventRepository.js';
 import { SnapshotService } from './services/SnapshotService.js';
 import { SuggestionService } from './services/SuggestionService.js';
 import { SyncService } from './services/SyncService.js';
+import { JobService } from './services/JobService.js';
+import { JobOrchestrator } from './services/JobOrchestrator.js';
 import { createApiRouter } from './api/index.js';
 import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
 import { startScheduler } from './scheduler/SyncScheduler.js';
@@ -45,6 +50,9 @@ const openai = new OpenAIAdapter(env);
 const suggestionRepo = new SuggestionRepository(db);
 const auditRepo = new AuditRepository(db);
 const payeeCache = new PayeeCacheRepository(db);
+const jobRepo = new JobRepository(db);
+const jobStepRepo = new JobStepRepository(db);
+const jobEventRepo = new JobEventRepository(db);
 
 // Initialize services
 const snapshotService = new SnapshotService(actualBudget, auditRepo, suggestionRepo);
@@ -56,6 +64,13 @@ const suggestionService = new SuggestionService(
   payeeCache
 );
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
+const jobService = new JobService(jobRepo, jobStepRepo, jobEventRepo);
+const jobOrchestrator = new JobOrchestrator(
+  jobService,
+  syncService,
+  suggestionService,
+  snapshotService
+);
 
 // Initialize Actual Budget connection
 await actualBudget.initialize();
@@ -105,9 +120,10 @@ app.get('/ready', async (_req: Request, res: Response) => {
 
 // Mount API routes
 const apiRouter = createApiRouter({
-  snapshotService,
   suggestionService,
   syncService,
+  jobService,
+  jobOrchestrator,
   auditRepo,
   actualBudget,
 });
@@ -165,7 +181,7 @@ const server = app.listen(env.PORT, () => {
 
   // Start periodic sync scheduler if interval is configured
   if (env.SYNC_INTERVAL_MINUTES > 0) {
-    startScheduler(env, suggestionService, env.ACTUAL_BUDGET_ID);
+    startScheduler(env, jobOrchestrator, env.ACTUAL_BUDGET_ID);
     loggerInstance.info('Periodic sync scheduler enabled', {
       intervalMinutes: env.SYNC_INTERVAL_MINUTES,
     });

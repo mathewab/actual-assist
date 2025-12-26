@@ -80,36 +80,6 @@ export interface Suggestion {
   createdAt: string;
 }
 
-export interface SyncPlanChange {
-  id: string;
-  transactionId: string;
-  proposedCategoryId: string;
-  currentCategoryId: string | null;
-  suggestionId?: string;
-  // Human-readable fields for display
-  transactionPayee: string | null;
-  transactionDate: string | null;
-  transactionAmount: number | null;
-  transactionAccountName: string | null;
-  proposedCategoryName: string | null;
-  currentCategoryName: string | null;
-  proposedPayeeName: string | null;
-  hasPayeeChange: boolean;
-}
-
-export interface SyncPlan {
-  id: string;
-  budgetId: string;
-  changes: SyncPlanChange[];
-  dryRunSummary: {
-    totalChanges: number;
-    categoryChanges: number;
-    payeeChanges: number;
-    estimatedImpact: string;
-  };
-  createdAt: string;
-}
-
 /** Approved change ready to apply */
 export interface ApprovedChange {
   suggestionId: string;
@@ -134,6 +104,42 @@ export interface AuditEvent {
   entityId: string;
   metadata: Record<string, unknown> | null;
   timestamp: string;
+}
+
+export type JobType =
+  | 'budget_sync'
+  | 'suggestions_generate'
+  | 'sync_and_suggest'
+  | 'suggestions_retry_payee'
+  | 'suggestions_apply'
+  | 'snapshot_create'
+  | 'snapshot_redownload'
+  | 'scheduled_sync_and_suggest';
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+
+export interface Job {
+  id: string;
+  budgetId: string;
+  type: JobType;
+  status: JobStatus;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureReason: string | null;
+  parentJobId: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface JobStep {
+  id: string;
+  jobId: string;
+  stepType: 'sync' | 'suggestions';
+  status: JobStatus;
+  position: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureReason: string | null;
 }
 
 export const api = {
@@ -167,15 +173,15 @@ export const api = {
   /**
    * Create a new budget snapshot
    */
-  async createSnapshot(budgetId: string, syncId?: string) {
-    const response = await fetch(`${API_BASE}/snapshots`, {
+  async createSnapshotJob(budgetId: string) {
+    const response = await fetch(`${API_BASE}/jobs/snapshot-create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, syncId }),
+      body: JSON.stringify({ budgetId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to create snapshot');
+      throw new Error('Failed to create snapshot job');
     }
 
     return response.json();
@@ -186,16 +192,16 @@ export const api = {
    */
   async generateSuggestions(
     budgetId: string,
-    maxSuggestions?: number
-  ): Promise<{ suggestions: Suggestion[]; total: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/generate`, {
+    _maxSuggestions?: number
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, ...(maxSuggestions && { maxSuggestions }) }),
+      body: JSON.stringify({ budgetId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate suggestions');
+      throw new Error('Failed to create suggestions job');
     }
 
     return response.json();
@@ -208,15 +214,15 @@ export const api = {
   async syncAndGenerateSuggestions(
     budgetId: string,
     fullSnapshot = false
-  ): Promise<{ suggestions: Suggestion[]; total: number; mode: string }> {
-    const response = await fetch(`${API_BASE}/suggestions/sync-and-generate`, {
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, fullSnapshot }),
+      body: JSON.stringify({ budgetId, fullResync: fullSnapshot }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to sync and generate suggestions');
+      throw new Error('Failed to create sync and suggest job');
     }
 
     return response.json();
@@ -243,6 +249,95 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to fetch suggestions');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * List jobs for a budget
+   */
+  async listJobs(params: {
+    budgetId: string;
+    type?: JobType;
+    status?: JobStatus;
+    limit?: number;
+  }): Promise<{ jobs: Job[] }> {
+    const query = new URLSearchParams({ budgetId: params.budgetId });
+    if (params.type) query.set('type', params.type);
+    if (params.status) query.set('status', params.status);
+    if (params.limit) query.set('limit', String(params.limit));
+
+    const response = await fetch(`${API_BASE}/jobs?${query.toString()}`);
+    if (!response.ok) {
+      throw new Error('Failed to list jobs');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a sync job
+   */
+  async createSyncJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/budget-sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create sync job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a suggestions generation job
+   */
+  async createSuggestionsJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create suggestions job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a combined sync and generate job
+   */
+  async createSyncAndGenerateJob(
+    budgetId: string,
+    fullResync = false
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, fullResync }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create sync and generate job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get job details with steps
+   */
+  async getJob(jobId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch job detail');
     }
 
     return response.json();
@@ -421,40 +516,6 @@ export const api = {
   },
 
   /**
-   * Build a sync plan (legacy)
-   */
-  async buildSyncPlan(budgetId: string): Promise<SyncPlan> {
-    const response = await fetch(`${API_BASE}/sync/plan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to build sync plan');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Execute a sync plan (legacy)
-   */
-  async executeSyncPlan(budgetId: string) {
-    const response = await fetch(`${API_BASE}/sync/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to execute sync plan');
-    }
-
-    return response.json();
-  },
-
-  /**
    * Get approved suggestions ready to apply
    */
   async getApprovedChanges(budgetId: string): Promise<{ changes: ApprovedChange[] }> {
@@ -473,15 +534,15 @@ export const api = {
   async applySuggestions(
     budgetId: string,
     suggestionIds: string[]
-  ): Promise<{ success: boolean; applied: number }> {
-    const response = await fetch(`${API_BASE}/sync/apply`, {
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, suggestionIds }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to apply suggestions');
+      throw new Error('Failed to create apply suggestions job');
     }
 
     return response.json();
@@ -492,14 +553,34 @@ export const api = {
    * Retries all suggestions in the same payee group
    */
   async retrySuggestion(
+    budgetId: string,
     suggestionId: string
-  ): Promise<{ success: boolean; suggestions: Suggestion[]; count: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/retry`, {
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-retry`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, suggestionId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to retry suggestion');
+      throw new Error('Failed to create retry suggestion job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Redownload snapshot
+   */
+  async redownloadSnapshotJob(budgetId: string) {
+    const response = await fetch(`${API_BASE}/jobs/snapshot-redownload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create snapshot redownload job');
     }
 
     return response.json();

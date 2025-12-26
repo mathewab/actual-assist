@@ -56,6 +56,44 @@ CREATE TABLE IF NOT EXISTS audit_log (
   timestamp TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Jobs: Track user-initiated background work (sync, suggestions, combined)
+CREATE TABLE IF NOT EXISTS jobs (
+  id TEXT PRIMARY KEY,              -- UUID v4
+  budget_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  started_at TEXT,
+  completed_at TEXT,
+  failure_reason TEXT,
+  parent_job_id TEXT,
+  metadata TEXT
+);
+
+-- Job steps: Ordered steps for combined jobs
+CREATE TABLE IF NOT EXISTS job_steps (
+  id TEXT PRIMARY KEY,              -- UUID v4
+  job_id TEXT NOT NULL,
+  step_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  started_at TEXT,
+  completed_at TEXT,
+  failure_reason TEXT,
+  UNIQUE(job_id, position)
+);
+
+-- Job events: Immutable job/step status transitions
+CREATE TABLE IF NOT EXISTS job_events (
+  id TEXT PRIMARY KEY,              -- UUID v4
+  job_id TEXT NOT NULL,
+  job_step_id TEXT,
+  status TEXT NOT NULL,
+  message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Payee category cache: Store learned payee→category mappings to reduce LLM calls
 CREATE TABLE IF NOT EXISTS payee_category_cache (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +122,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_budget_transaction
 
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_budget ON jobs(budget_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(type);
+CREATE INDEX IF NOT EXISTS idx_job_steps_job ON job_steps(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_steps_status ON job_steps(status);
+CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_events_step ON job_events(job_step_id);
 CREATE INDEX IF NOT EXISTS idx_payee_cache_budget ON payee_category_cache(budget_id);
 CREATE INDEX IF NOT EXISTS idx_payee_cache_payee ON payee_category_cache(payee_name);
 

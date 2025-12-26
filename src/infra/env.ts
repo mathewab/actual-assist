@@ -35,6 +35,20 @@ const envSchema = z.object({
     .refine((n) => n >= 1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
     .default('360'),
 
+  // Job timeout handling
+  JOB_TIMEOUT_MINUTES: z
+    .string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .refine((n) => n >= 1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
+    .default('60'),
+  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z
+    .string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .refine((n) => n >= 1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
+    .default('5'),
+
   // Rate limiting (API)
   RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).default('60000'),
   RATE_LIMIT_MAX_REQUESTS: z.string().regex(/^\d+$/).transform(Number).default('120'),

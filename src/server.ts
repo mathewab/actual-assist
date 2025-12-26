@@ -22,6 +22,7 @@ import { SuggestionService } from './services/SuggestionService.js';
 import { SyncService } from './services/SyncService.js';
 import { JobService } from './services/JobService.js';
 import { JobOrchestrator } from './services/JobOrchestrator.js';
+import { JobTimeoutService } from './services/JobTimeoutService.js';
 import { createApiRouter } from './api/index.js';
 import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
 import { startScheduler } from './scheduler/SyncScheduler.js';
@@ -71,6 +72,7 @@ const jobOrchestrator = new JobOrchestrator(
   suggestionService,
   snapshotService
 );
+const jobTimeoutService = new JobTimeoutService(jobRepo, jobStepRepo, jobService);
 
 // Initialize Actual Budget connection
 await actualBudget.initialize();
@@ -172,6 +174,8 @@ app.use(notFoundHandler);
 // Global error handler (P7 - explicit error handling, T046)
 app.use(createErrorHandler(env));
 
+let jobTimeoutInterval: ReturnType<typeof setInterval> | null = null;
+
 // Start server
 const server = app.listen(env.PORT, () => {
   loggerInstance.info(`Server started`, {
@@ -186,11 +190,41 @@ const server = app.listen(env.PORT, () => {
       intervalMinutes: env.SYNC_INTERVAL_MINUTES,
     });
   }
+
+  // Start job timeout checks
+  if (env.JOB_TIMEOUT_MINUTES > 0) {
+    const checkIntervalMs = env.JOB_TIMEOUT_CHECK_INTERVAL_MINUTES * 60 * 1000;
+    const runTimeoutCheck = () => {
+      const { jobsFailed, stepsFailed } = jobTimeoutService.failTimedOutJobs(
+        env.JOB_TIMEOUT_MINUTES
+      );
+      if (jobsFailed > 0 || stepsFailed > 0) {
+        loggerInstance.info('Timed out jobs marked failed', {
+          timeoutMinutes: env.JOB_TIMEOUT_MINUTES,
+          jobsFailed,
+          stepsFailed,
+        });
+      }
+    };
+
+    runTimeoutCheck();
+    jobTimeoutInterval = setInterval(runTimeoutCheck, checkIntervalMs);
+    jobTimeoutInterval.unref?.();
+
+    loggerInstance.info('Job timeout monitor enabled', {
+      timeoutMinutes: env.JOB_TIMEOUT_MINUTES,
+      checkIntervalMinutes: env.JOB_TIMEOUT_CHECK_INTERVAL_MINUTES,
+    });
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   loggerInstance.info('SIGTERM received, shutting down gracefully');
+  if (jobTimeoutInterval) {
+    clearInterval(jobTimeoutInterval);
+    jobTimeoutInterval = null;
+  }
   server.close(() => {
     loggerInstance.info('Server closed');
     process.exit(0);

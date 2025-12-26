@@ -10,7 +10,7 @@ import { ValidationError, NotFoundError } from '../domain/errors.js';
 import { logger } from '../infra/logger.js';
 
 const jobTransitions: Record<JobStatus, JobStatus[]> = {
-  queued: ['running', 'canceled'],
+  queued: ['running', 'failed', 'canceled'],
   running: ['succeeded', 'failed', 'canceled'],
   succeeded: [],
   failed: [],
@@ -18,7 +18,7 @@ const jobTransitions: Record<JobStatus, JobStatus[]> = {
 };
 
 const stepTransitions: Record<JobStepStatus, JobStepStatus[]> = {
-  queued: ['running', 'canceled'],
+  queued: ['running', 'failed', 'canceled'],
   running: ['succeeded', 'failed', 'canceled'],
   succeeded: [],
   failed: [],
@@ -127,6 +127,23 @@ export class JobService {
     logger.info('Job failed', { jobId, reason });
   }
 
+  markJobFailedIfActive(jobId: string, reason: string): boolean {
+    const job = this.getJob(jobId);
+    if (job.status !== 'running' && job.status !== 'queued') {
+      return false;
+    }
+    const completedAt = new Date();
+    this.jobRepo.updateStatus({
+      jobId,
+      status: 'failed',
+      completedAt,
+      failureReason: reason,
+    });
+    this.recordEvent(jobId, null, 'failed', reason);
+    logger.info('Job failed', { jobId, reason });
+    return true;
+  }
+
   markJobCanceled(jobId: string, reason?: string | null): void {
     const job = this.getJob(jobId);
     this.assertJobTransition(job.status, 'canceled');
@@ -171,6 +188,23 @@ export class JobService {
     });
     this.recordEvent(step.jobId, step.id, 'failed', reason);
     logger.info('Job step failed', { stepId, jobId: step.jobId, reason });
+  }
+
+  markStepFailedIfActive(stepId: string, reason: string): boolean {
+    const step = this.getStep(stepId);
+    if (step.status !== 'running' && step.status !== 'queued') {
+      return false;
+    }
+    const completedAt = new Date();
+    this.stepRepo.updateStatus({
+      stepId,
+      status: 'failed',
+      completedAt,
+      failureReason: reason,
+    });
+    this.recordEvent(step.jobId, step.id, 'failed', reason);
+    logger.info('Job step failed', { stepId, jobId: step.jobId, reason });
+    return true;
   }
 
   private getStep(stepId: string): JobStep {

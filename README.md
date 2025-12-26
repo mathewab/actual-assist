@@ -144,6 +144,8 @@ Optional:
 - `ACTUAL_ENCRYPTION_KEY`: Budget encryption key
 - `NODE_ENV`: `development` | `production` | `test`
 - `LOG_LEVEL`: `error` | `warn` | `info` | `debug`
+- `JOB_TIMEOUT_MINUTES`: Minutes before a job is marked failed (default: 60)
+- `JOB_TIMEOUT_CHECK_INTERVAL_MINUTES`: How often to scan for timed-out jobs (default: 5)
 - `VITE_API_BASE_URL`: API base URL (defaults to `/api`)
 
 ## API Documentation

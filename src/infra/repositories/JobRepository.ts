@@ -126,6 +126,18 @@ export class JobRepository {
     return rows.map((row) => row.id);
   }
 
+  listTimedOutJobs(cutoff: Date): Job[] {
+    const sql = `
+      SELECT * FROM jobs
+      WHERE (status = 'running' AND started_at IS NOT NULL AND started_at < ?)
+         OR (status = 'queued' AND created_at < ?)
+      ORDER BY created_at ASC
+    `;
+
+    const rows = this.db.query<JobRow>(sql, [cutoff.toISOString(), cutoff.toISOString()]);
+    return rows.map((row) => this.mapRowToJob(row));
+  }
+
   deleteByIds(jobIds: string[]): void {
     if (jobIds.length === 0) return;
     const placeholders = jobIds.map(() => '?').join(', ');

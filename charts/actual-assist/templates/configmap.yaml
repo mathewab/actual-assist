@@ -7,6 +7,8 @@ metadata:
 data:
   NODE_ENV: {{ .Values.env.nodeEnv | quote }}
   SYNC_INTERVAL_MINUTES: {{ .Values.env.syncIntervalMinutes | quote }}
+  JOB_TIMEOUT_MINUTES: {{ .Values.env.jobTimeoutMinutes | quote }}
+  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: {{ .Values.env.jobTimeoutCheckIntervalMinutes | quote }}
   SQLITE_DB_PATH: {{ .Values.env.sqliteDbPath | quote }}
   PORT: {{ .Values.env.port | quote }}
   DATA_DIR: {{ .Values.env.dataDir | quote }}

@@ -84,6 +84,8 @@ secrets:
 env:
   nodeEnv: production
   syncIntervalMinutes: 360  # 6 hours default
+  jobTimeoutMinutes: 60
+  jobTimeoutCheckIntervalMinutes: 5
   sqliteDbPath: /data/actual-assist.db
   port: 3000
   dataDir: /data

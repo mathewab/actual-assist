@@ -78,6 +78,18 @@ export class JobStepRepository {
     return rows.map((row) => this.mapRowToJobStep(row));
   }
 
+  listTimedOutSteps(cutoff: Date): JobStep[] {
+    const sql = `
+      SELECT * FROM job_steps
+      WHERE (status = 'running' AND started_at IS NOT NULL AND started_at < ?)
+         OR (status = 'queued' AND created_at < ?)
+      ORDER BY created_at ASC
+    `;
+
+    const rows = this.db.query<JobStepRow>(sql, [cutoff.toISOString(), cutoff.toISOString()]);
+    return rows.map((row) => this.mapRowToJobStep(row));
+  }
+
   deleteByJobIds(jobIds: string[]): void {
     if (jobIds.length === 0) return;
     const placeholders = jobIds.map(() => '?').join(', ');

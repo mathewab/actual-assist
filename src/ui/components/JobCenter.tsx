@@ -23,12 +23,22 @@ function formatTimestamp(value: string | null): string {
 
 function formatJobType(type: Job['type']): string {
   switch (type) {
-    case 'sync':
-      return 'Sync';
-    case 'suggestions':
-      return 'Suggestions';
-    case 'sync_and_generate':
-      return 'Sync + Generate';
+    case 'budget_sync':
+      return 'Sync Budget';
+    case 'suggestions_generate':
+      return 'Generate Suggestions';
+    case 'sync_and_suggest':
+      return 'Sync & Generate';
+    case 'suggestions_retry_payee':
+      return 'Retry Suggestions';
+    case 'suggestions_apply':
+      return 'Apply Suggestions';
+    case 'snapshot_create':
+      return 'Create Snapshot';
+    case 'snapshot_redownload':
+      return 'Redownload Snapshot';
+    case 'scheduled_sync_and_suggest':
+      return 'Scheduled Sync & Generate';
     default:
       return type;
   }

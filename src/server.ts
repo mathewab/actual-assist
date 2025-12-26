@@ -65,7 +65,12 @@ const suggestionService = new SuggestionService(
 );
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
 const jobService = new JobService(jobRepo, jobStepRepo, jobEventRepo);
-const jobOrchestrator = new JobOrchestrator(jobService, syncService, suggestionService);
+const jobOrchestrator = new JobOrchestrator(
+  jobService,
+  syncService,
+  suggestionService,
+  snapshotService
+);
 
 // Initialize Actual Budget connection
 await actualBudget.initialize();
@@ -115,7 +120,6 @@ app.get('/ready', async (_req: Request, res: Response) => {
 
 // Mount API routes
 const apiRouter = createApiRouter({
-  snapshotService,
   suggestionService,
   syncService,
   jobService,
@@ -177,7 +181,7 @@ const server = app.listen(env.PORT, () => {
 
   // Start periodic sync scheduler if interval is configured
   if (env.SYNC_INTERVAL_MINUTES > 0) {
-    startScheduler(env, suggestionService, env.ACTUAL_BUDGET_ID);
+    startScheduler(env, jobOrchestrator, env.ACTUAL_BUDGET_ID);
     loggerInstance.info('Periodic sync scheduler enabled', {
       intervalMinutes: env.SYNC_INTERVAL_MINUTES,
     });

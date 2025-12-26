@@ -83,6 +83,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
 
   /**
    * POST /api/jobs/sync
+   * Legacy alias for /api/jobs/budget-sync
    */
   router.post('/sync', (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -92,7 +93,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSyncJob(budgetId);
+      const result = jobOrchestrator.startBudgetSyncJob(budgetId);
       res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {
       next(error);
@@ -101,6 +102,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
 
   /**
    * POST /api/jobs/suggestions
+   * Legacy alias for /api/jobs/suggestions-generate
    */
   router.post('/suggestions', (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -110,7 +112,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSuggestionsJob(budgetId);
+      const result = jobOrchestrator.startSuggestionsGenerateJob(budgetId);
       res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {
       next(error);
@@ -119,6 +121,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
 
   /**
    * POST /api/jobs/sync-and-generate
+   * Legacy alias for /api/jobs/sync-and-suggest
    */
   router.post('/sync-and-generate', (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -128,7 +131,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSyncAndGenerateJob({
+      const result = jobOrchestrator.startSyncAndSuggestJob({
         budgetId,
         fullResync: fullResync === true,
       });
@@ -136,6 +139,146 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
         job: mapJobToResponse(result.job),
         steps: result.steps.map(mapStepToResponse),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/budget-sync
+   */
+  router.post('/budget-sync', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const result = jobOrchestrator.startBudgetSyncJob(budgetId);
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/suggestions-generate
+   */
+  router.post('/suggestions-generate', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const result = jobOrchestrator.startSuggestionsGenerateJob(budgetId);
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/sync-and-suggest
+   */
+  router.post('/sync-and-suggest', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId, fullResync } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const result = jobOrchestrator.startSyncAndSuggestJob({
+        budgetId,
+        fullResync: fullResync === true,
+      });
+      res.status(201).json({
+        job: mapJobToResponse(result.job),
+        steps: result.steps.map(mapStepToResponse),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/suggestions-retry
+   */
+  router.post('/suggestions-retry', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId, suggestionId } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      if (!suggestionId || typeof suggestionId !== 'string') {
+        throw new ValidationError('suggestionId is required in request body');
+      }
+
+      const result = jobOrchestrator.startSuggestionsRetryJob(budgetId, suggestionId);
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/suggestions-apply
+   */
+  router.post('/suggestions-apply', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId, suggestionIds } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      if (!Array.isArray(suggestionIds) || suggestionIds.length === 0) {
+        throw new ValidationError('suggestionIds array is required');
+      }
+
+      const result = jobOrchestrator.startSuggestionsApplyJob(budgetId, suggestionIds);
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/snapshot-create
+   */
+  router.post('/snapshot-create', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const result = jobOrchestrator.startSnapshotCreateJob(budgetId);
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/jobs/snapshot-redownload
+   */
+  router.post('/snapshot-redownload', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const result = jobOrchestrator.startSnapshotRedownloadJob(budgetId);
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {
       next(error);
     }

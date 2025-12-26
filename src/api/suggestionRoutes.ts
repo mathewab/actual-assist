@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { SuggestionService } from '../services/SuggestionService.js';
+import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { Request, Response, NextFunction } from 'express';
 import { ValidationError } from '../domain/errors.js';
 import type { Suggestion } from '../domain/entities/Suggestion.js';
@@ -61,7 +62,10 @@ function mapSuggestionToResponse(s: Suggestion) {
  * Suggestion route handler
  * P5 (Separation of concerns): HTTP layer delegates to service layer
  */
-export function createSuggestionRouter(suggestionService: SuggestionService): Router {
+export function createSuggestionRouter(
+  suggestionService: SuggestionService,
+  jobOrchestrator: JobOrchestrator
+): Router {
   const router = Router();
 
   /**
@@ -75,12 +79,8 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const suggestions = await suggestionService.generateSuggestions(budgetId);
-
-      res.json({
-        suggestions: suggestions.map(mapSuggestionToResponse),
-        total: suggestions.length,
-      });
+      const result = jobOrchestrator.startSuggestionsGenerateJob(budgetId);
+      res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);
     }
@@ -279,15 +279,13 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const suggestions = await suggestionService.syncAndGenerateSuggestions(
+      const result = jobOrchestrator.startSyncAndSuggestJob({
         budgetId,
-        fullSnapshot === true
-      );
-
-      res.json({
-        suggestions: suggestions.map(mapSuggestionToResponse),
-        total: suggestions.length,
-        mode: fullSnapshot ? 'full' : 'diff',
+        fullResync: fullSnapshot === true,
+      });
+      res.status(201).json({
+        job: result.job,
+        steps: result.steps,
       });
     } catch (error) {
       next(error);
@@ -301,12 +299,14 @@ export function createSuggestionRouter(suggestionService: SuggestionService): Ro
   router.post('/:id/retry', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const updatedSuggestions = await suggestionService.retryPayeeGroup(id);
-      res.json({
-        success: true,
-        suggestions: updatedSuggestions.map(mapSuggestionToResponse),
-        count: updatedSuggestions.length,
-      });
+      const { budgetId } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const result = jobOrchestrator.startSuggestionsRetryJob(budgetId, id);
+      res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);
     }

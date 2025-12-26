@@ -23,3 +23,26 @@
 - **Alternatives considered**:
   - WebSockets/server-sent events: rejected for scope and dependency reasons.
   - Pure client-side optimistic state: rejected because it cannot reflect server-side failures.
+
+## Decision 4: Expand job coverage to all long-running operations
+
+- **Decision**: Migrate remaining async work (suggestions generate/retry, snapshot create/redownload, apply suggestions, scheduled sync+suggest) into the jobs system.
+- **Rationale**: Ensures consistent visibility, auditability, and failure handling across all long-running user actions.
+- **Alternatives considered**:
+  - Leave these paths synchronous: rejected due to inconsistent UX and lack of durable status.
+  - One-off background workers per endpoint: rejected as duplication and harder to audit.
+
+## Decision 5: Use explicit, domain-scoped job type names
+
+- **Decision**: Adopt clearer job type IDs (e.g., `budget_sync`, `suggestions_generate`, `snapshot_redownload`) and user-facing labels.
+- **Rationale**: Improves UX clarity and avoids ambiguous “sync/generate” names when listing multiple job types.
+- **Alternatives considered**:
+  - Keep existing short names: rejected because they become unclear once more job types are added.
+  - Encode details only in metadata: rejected because list filtering and readability suffer.
+
+## Decision 6: Scheduler enqueues jobs instead of running work inline
+
+- **Decision**: Change the scheduler to enqueue `scheduled_sync_and_suggest` jobs; retries/backoff handled by job runner logic.
+- **Rationale**: Aligns scheduled work with the same lifecycle tracking and error reporting as user-initiated jobs.
+- **Alternatives considered**:
+  - Keep scheduler performing work directly: rejected due to missing job visibility and duplicated retry logic.

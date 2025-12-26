@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { SyncService } from '../services/SyncService.js';
+import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { Request, Response, NextFunction } from 'express';
 import { ValidationError } from '../domain/errors.js';
 
@@ -7,7 +8,10 @@ import { ValidationError } from '../domain/errors.js';
  * Sync route handler
  * P5 (Separation of concerns): HTTP layer delegates to service layer
  */
-export function createSyncRouter(syncService: SyncService): Router {
+export function createSyncRouter(
+  syncService: SyncService,
+  jobOrchestrator: JobOrchestrator
+): Router {
   const router = Router();
 
   /**
@@ -43,8 +47,8 @@ export function createSyncRouter(syncService: SyncService): Router {
         throw new ValidationError('suggestionIds array is required');
       }
 
-      const result = await syncService.applySpecificSuggestions(budgetId, suggestionIds);
-      res.json(result);
+      const result = jobOrchestrator.startSuggestionsApplyJob(budgetId, suggestionIds);
+      res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);
     }

@@ -2,6 +2,7 @@ import { logger } from '../infra/logger.js';
 import type { SuggestionService } from './SuggestionService.js';
 import type { JobService } from './JobService.js';
 import type { SyncService } from './SyncService.js';
+import type { SnapshotService } from './SnapshotService.js';
 import type { Job } from '../domain/entities/Job.js';
 import type { JobStep } from '../domain/entities/JobStep.js';
 
@@ -10,35 +11,38 @@ import type { JobStep } from '../domain/entities/JobStep.js';
  * P5 (Separation of concerns): Orchestration separate from job lifecycle updates
  */
 export class JobOrchestrator {
+  private readonly scheduledRetryDelays = [60000, 300000, 900000]; // 1min, 5min, 15min
+
   constructor(
     private jobService: JobService,
     private syncService: SyncService,
-    private suggestionService: SuggestionService
+    private suggestionService: SuggestionService,
+    private snapshotService: SnapshotService
   ) {}
 
-  startSyncJob(budgetId: string): { job: Job } {
-    const job = this.jobService.createJob({ budgetId, type: 'sync' });
+  startBudgetSyncJob(budgetId: string): { job: Job } {
+    const job = this.jobService.createJob({ budgetId, type: 'budget_sync' });
     this.runSingleJob(job, async () => {
       await this.syncService.syncBudget(budgetId);
     });
     return { job };
   }
 
-  startSuggestionsJob(budgetId: string): { job: Job } {
-    const job = this.jobService.createJob({ budgetId, type: 'suggestions' });
+  startSuggestionsGenerateJob(budgetId: string): { job: Job } {
+    const job = this.jobService.createJob({ budgetId, type: 'suggestions_generate' });
     this.runSingleJob(job, async () => {
       await this.suggestionService.generateSuggestions(budgetId);
     });
     return { job };
   }
 
-  startSyncAndGenerateJob(params: { budgetId: string; fullResync?: boolean }): {
+  startSyncAndSuggestJob(params: { budgetId: string; fullResync?: boolean }): {
     job: Job;
     steps: JobStep[];
   } {
     const job = this.jobService.createJob({
       budgetId: params.budgetId,
-      type: 'sync_and_generate',
+      type: 'sync_and_suggest',
       metadata: { fullResync: params.fullResync === true },
     });
 
@@ -49,6 +53,64 @@ export class JobOrchestrator {
 
     this.runCombinedJob(job, steps, params.fullResync === true);
     return { job, steps };
+  }
+
+  startSuggestionsRetryJob(budgetId: string, suggestionId: string): { job: Job } {
+    const job = this.jobService.createJob({
+      budgetId,
+      type: 'suggestions_retry_payee',
+      metadata: { suggestionId },
+    });
+    this.runSingleJob(job, async () => {
+      await this.suggestionService.retryPayeeGroup(suggestionId);
+    });
+    return { job };
+  }
+
+  startSuggestionsApplyJob(budgetId: string, suggestionIds: string[]): { job: Job } {
+    const job = this.jobService.createJob({
+      budgetId,
+      type: 'suggestions_apply',
+      metadata: { suggestionIds },
+    });
+    this.runSingleJob(job, async () => {
+      await this.syncService.applySpecificSuggestions(budgetId, suggestionIds);
+    });
+    return { job };
+  }
+
+  startSnapshotCreateJob(budgetId: string): { job: Job } {
+    const job = this.jobService.createJob({ budgetId, type: 'snapshot_create' });
+    this.runSingleJob(job, async () => {
+      await this.snapshotService.createSnapshot(budgetId);
+    });
+    return { job };
+  }
+
+  startSnapshotRedownloadJob(budgetId: string): { job: Job } {
+    const job = this.jobService.createJob({
+      budgetId,
+      type: 'snapshot_redownload',
+      metadata: { redownload: true },
+    });
+    this.runSingleJob(job, async () => {
+      await this.snapshotService.createSnapshot(budgetId);
+    });
+    return { job };
+  }
+
+  startScheduledSyncAndSuggestJob(budgetId: string): { job: Job } {
+    const job = this.jobService.createJob({
+      budgetId,
+      type: 'scheduled_sync_and_suggest',
+      metadata: { trigger: 'scheduled' },
+    });
+
+    this.runScheduledJob(job, async () => {
+      await this.suggestionService.syncAndGenerateSuggestions(budgetId);
+    });
+
+    return { job };
   }
 
   private runSingleJob(job: Job, fn: () => Promise<void>): void {
@@ -75,9 +137,9 @@ export class JobOrchestrator {
 
         await this.executeStep(steps[1], async () => {
           if (fullResync) {
-            await this.suggestionService.generateSuggestions(job.budgetId);
+            await this.suggestionService.syncAndGenerateSuggestions(job.budgetId, true);
           } else {
-            await this.suggestionService.generateSuggestions(job.budgetId);
+            await this.suggestionService.syncAndGenerateSuggestions(job.budgetId, false);
           }
         });
 
@@ -85,6 +147,37 @@ export class JobOrchestrator {
       } catch (error) {
         const reason = this.formatFailureReason(error);
         logger.error('Combined job execution failed', { jobId: job.id, error: reason });
+        this.jobService.markJobFailed(job.id, reason);
+      }
+    });
+  }
+
+  private runScheduledJob(job: Job, fn: () => Promise<void>): void {
+    setImmediate(async () => {
+      let attempt = 0;
+      try {
+        this.jobService.markJobRunning(job.id);
+        while (true) {
+          try {
+            await fn();
+            this.jobService.markJobSucceeded(job.id);
+            return;
+          } catch (error) {
+            const reason = this.formatFailureReason(error);
+            if (attempt >= this.scheduledRetryDelays.length) {
+              logger.error('Scheduled job failed after retries', { jobId: job.id, error: reason });
+              this.jobService.markJobFailed(job.id, reason);
+              return;
+            }
+            const delay = this.scheduledRetryDelays[attempt];
+            attempt += 1;
+            logger.warn('Scheduled job retrying', { jobId: job.id, attempt, delayMs: delay });
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
+        }
+      } catch (error) {
+        const reason = this.formatFailureReason(error);
+        logger.error('Scheduled job execution failed', { jobId: job.id, error: reason });
         this.jobService.markJobFailed(job.id, reason);
       }
     });

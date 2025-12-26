@@ -2,7 +2,15 @@
  * Job entity - unit of work initiated by a user
  * P1 (Single Responsibility): Represents job lifecycle state
  */
-export type JobType = 'sync' | 'suggestions' | 'sync_and_generate';
+export type JobType =
+  | 'budget_sync'
+  | 'suggestions_generate'
+  | 'sync_and_suggest'
+  | 'suggestions_retry_payee'
+  | 'suggestions_apply'
+  | 'snapshot_create'
+  | 'snapshot_redownload'
+  | 'scheduled_sync_and_suggest';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
 export interface Job {

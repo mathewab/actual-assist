@@ -97,15 +97,35 @@
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: Async Job Migration (Cross-Cutting)
+
+**Purpose**: Migrate remaining async/background operations into jobs with clear job types and endpoints
+
+- [x] T030 Update job type enums and metadata to include new async job types in /home/ashish/projects/actual-assist/src/domain/entities/Job.ts
+- [x] T031 Update job type mappings and labels for new job types in /home/ashish/projects/actual-assist/src/ui/services/api.ts
+- [x] T032 Update JobOrchestrator to run new job types (generate/retry/apply/snapshot/scheduled) in /home/ashish/projects/actual-assist/src/services/JobOrchestrator.ts
+- [x] T033 [P] Add job creation endpoints for new job types in /home/ashish/projects/actual-assist/src/api/jobRoutes.ts
+- [x] T034 [P] Migrate suggestions generate/sync-and-generate/retry to enqueue jobs in /home/ashish/projects/actual-assist/src/api/suggestionRoutes.ts
+- [x] T035 [P] Migrate apply suggestions to enqueue jobs in /home/ashish/projects/actual-assist/src/api/syncRoutes.ts
+- [x] T036 [P] Migrate snapshot create/redownload to enqueue jobs in /home/ashish/projects/actual-assist/src/api/snapshotRoutes.ts
+- [x] T037 Update scheduler to enqueue scheduled sync+suggest jobs and move retry/backoff into job execution in /home/ashish/projects/actual-assist/src/scheduler/SyncScheduler.ts
+- [x] T038 [P] Update UI API client methods to call new job endpoints for generate/retry/apply/snapshot in /home/ashish/projects/actual-assist/src/ui/services/api.ts
+- [x] T039 [P] Update suggestion actions to use new job endpoints and refresh job list in /home/ashish/projects/actual-assist/src/ui/components/SuggestionList.tsx
+- [x] T040 [P] Update apply flow to create apply jobs and reflect job status in /home/ashish/projects/actual-assist/src/ui/components/ApplyChanges.tsx
+- [x] T041 [P] Extend job type formatting for new job types in /home/ashish/projects/actual-assist/src/ui/components/JobList.tsx
+- [x] T042 [P] Extend job type formatting for new job types in /home/ashish/projects/actual-assist/src/ui/components/JobCenter.tsx
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [x] T030 [P] Add retention cleanup task for jobs older than 30 days in /home/ashish/projects/actual-assist/src/services/JobRetentionService.ts
-- [x] T031 Update quickstart verification steps if needed in /home/ashish/projects/actual-assist/specs/003-add-jobs-workflow/quickstart.md
-- [x] T032 [P] Add error mapping and user-safe failure reasons in /home/ashish/projects/actual-assist/src/api/jobRoutes.ts
-- [x] T033 [P] Add structured logging for job lifecycle events in /home/ashish/projects/actual-assist/src/services/JobService.ts
-- [x] T034 Run quickstart.md validation steps in /home/ashish/projects/actual-assist/specs/003-add-jobs-workflow/quickstart.md
+- [x] T043 [P] Add retention cleanup task for jobs older than 30 days in /home/ashish/projects/actual-assist/src/services/JobRetentionService.ts
+- [x] T044 Update quickstart verification steps if needed in /home/ashish/projects/actual-assist/specs/003-add-jobs-workflow/quickstart.md
+- [x] T045 [P] Add error mapping and user-safe failure reasons in /home/ashish/projects/actual-assist/src/api/jobRoutes.ts
+- [x] T046 [P] Add structured logging for job lifecycle events in /home/ashish/projects/actual-assist/src/services/JobService.ts
+- [x] T047 Run quickstart.md validation steps in /home/ashish/projects/actual-assist/specs/003-add-jobs-workflow/quickstart.md
 
 ---
 
@@ -117,6 +137,7 @@
 - **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
 - **User Stories (Phase 3+)**: All depend on Foundational phase completion
   - User stories can proceed in parallel (if staffed) or sequentially (P1 → P2 → P3)
+- **Async Migration (Phase 6)**: Depends on foundational job infrastructure and impacts multiple user stories
 - **Polish (Final Phase)**: Depends on desired user stories being complete
 
 ### User Story Dependencies
@@ -137,6 +158,7 @@
 - Foundational repository/entity tasks can be done in parallel where files do not overlap
 - User Story 1 and User Story 2 can proceed in parallel after Foundational phase
 - UI tasks can proceed in parallel with backend tasks once endpoints are defined
+- Async migration tasks marked [P] can be parallelized across API/UI/scheduler files
 
 ---
 
@@ -145,6 +167,24 @@
 ```bash
 Task: "Add sync job creation endpoint handler in /home/ashish/projects/actual-assist/src/api/jobRoutes.ts"
 Task: "Add UI jobs list polling and status display in /home/ashish/projects/actual-assist/src/ui/components/JobList.tsx"
+```
+
+---
+
+## Parallel Example: User Story 2
+
+```bash
+Task: "Add suggestions job execution path in /home/ashish/projects/actual-assist/src/services/JobOrchestrator.ts"
+Task: "Extend UI job list filtering to show suggestions jobs in /home/ashish/projects/actual-assist/src/ui/components/JobList.tsx"
+```
+
+---
+
+## Parallel Example: User Story 3
+
+```bash
+Task: "Add combined job orchestration with JobStep tracking in /home/ashish/projects/actual-assist/src/services/JobOrchestrator.ts"
+Task: "Add UI job detail/steps view in /home/ashish/projects/actual-assist/src/ui/components/JobDetail.tsx"
 ```
 
 ---
@@ -164,7 +204,8 @@ Task: "Add UI jobs list polling and status display in /home/ashish/projects/actu
 2. User Story 1 → Validate
 3. User Story 2 → Validate
 4. User Story 3 → Validate
-5. Polish and cleanup
+5. Async migration of remaining background operations
+6. Polish and cleanup
 
 ### Parallel Team Strategy
 

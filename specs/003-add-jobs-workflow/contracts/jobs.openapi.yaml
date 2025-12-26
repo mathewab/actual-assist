@@ -19,7 +19,15 @@ paths:
           required: false
           schema:
             type: string
-            enum: [sync, suggestions, sync_and_generate]
+            enum:
+              - budget_sync
+              - suggestions_generate
+              - sync_and_suggest
+              - suggestions_retry_payee
+              - suggestions_apply
+              - snapshot_create
+              - snapshot_redownload
+              - scheduled_sync_and_suggest
         - in: query
           name: status
           required: false
@@ -71,7 +79,7 @@ paths:
                       $ref: '#/components/schemas/JobStep'
   /jobs/sync:
     post:
-      summary: Create a sync job
+      summary: Create a sync job (legacy alias)
       requestBody:
         required: true
         content:
@@ -87,7 +95,7 @@ paths:
                 $ref: '#/components/schemas/JobResponse'
   /jobs/suggestions:
     post:
-      summary: Create a suggestions generation job
+      summary: Create a suggestions generation job (legacy alias)
       requestBody:
         required: true
         content:
@@ -103,7 +111,7 @@ paths:
                 $ref: '#/components/schemas/JobResponse'
   /jobs/sync-and-generate:
     post:
-      summary: Create a combined sync then generate job
+      summary: Create a combined sync then generate job (legacy alias)
       requestBody:
         required: true
         content:
@@ -122,6 +130,123 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobResponse'
+  /jobs/budget-sync:
+    post:
+      summary: Create a budget sync job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/suggestions-generate:
+    post:
+      summary: Create a suggestions generation job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/sync-and-suggest:
+    post:
+      summary: Create a combined sync then suggest job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/JobRequest'
+                - type: object
+                  properties:
+                    fullResync:
+                      type: boolean
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/suggestions-retry:
+    post:
+      summary: Create a retry suggestions job for a payee group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrySuggestionsRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/suggestions-apply:
+    post:
+      summary: Create an apply approved suggestions job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplySuggestionsRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/snapshot-create:
+    post:
+      summary: Create a snapshot job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+  /jobs/snapshot-redownload:
+    post:
+      summary: Create a snapshot redownload job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
 components:
   schemas:
     Job:
@@ -133,7 +258,15 @@ components:
           type: string
         type:
           type: string
-          enum: [sync, suggestions, sync_and_generate]
+          enum:
+            - budget_sync
+            - suggestions_generate
+            - sync_and_suggest
+            - suggestions_retry_payee
+            - suggestions_apply
+            - snapshot_create
+            - snapshot_redownload
+            - scheduled_sync_and_suggest
         status:
           type: string
           enum: [queued, running, succeeded, failed, canceled]
@@ -186,6 +319,24 @@ components:
       properties:
         budgetId:
           type: string
+    RetrySuggestionsRequest:
+      type: object
+      required: [budgetId, suggestionId]
+      properties:
+        budgetId:
+          type: string
+        suggestionId:
+          type: string
+    ApplySuggestionsRequest:
+      type: object
+      required: [budgetId, suggestionIds]
+      properties:
+        budgetId:
+          type: string
+        suggestionIds:
+          type: array
+          items:
+            type: string
     JobResponse:
       type: object
       properties:

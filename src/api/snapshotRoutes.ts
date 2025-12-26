@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import type { SnapshotService } from '../services/SnapshotService.js';
+import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { Request, Response, NextFunction } from 'express';
 
 /**
  * Snapshot route handler
  * P5 (Separation of concerns): HTTP layer delegates to service layer
  */
-export function createSnapshotRouter(snapshotService: SnapshotService): Router {
+export function createSnapshotRouter(jobOrchestrator: JobOrchestrator): Router {
   const router = Router();
 
   /**
@@ -17,15 +17,8 @@ export function createSnapshotRouter(snapshotService: SnapshotService): Router {
     try {
       const { budgetId } = req.body;
 
-      const snapshot = await snapshotService.createSnapshot(budgetId);
-
-      res.status(201).json({
-        budgetId: snapshot.budgetId,
-        filepath: snapshot.filepath,
-        downloadedAt: snapshot.downloadedAt,
-        transactionCount: snapshot.transactionCount,
-        categoryCount: snapshot.categoryCount,
-      });
+      const result = jobOrchestrator.startSnapshotCreateJob(budgetId);
+      res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);
     }
@@ -39,17 +32,8 @@ export function createSnapshotRouter(snapshotService: SnapshotService): Router {
     try {
       const { budgetId } = req.body;
 
-      // Force redownload by creating a new snapshot (replaces existing)
-      const snapshot = await snapshotService.createSnapshot(budgetId);
-
-      res.json({
-        budgetId: snapshot.budgetId,
-        filepath: snapshot.filepath,
-        downloadedAt: snapshot.downloadedAt,
-        transactionCount: snapshot.transactionCount,
-        categoryCount: snapshot.categoryCount,
-        redownloaded: true,
-      });
+      const result = jobOrchestrator.startSnapshotRedownloadJob(budgetId);
+      res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);
     }

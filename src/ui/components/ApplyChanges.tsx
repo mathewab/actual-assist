@@ -46,9 +46,10 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
   const applyMutation = useMutation({
     mutationFn: (suggestionIds: string[]) => api.applySuggestions(budgetId, suggestionIds),
     onSuccess: () => {
-      // Refresh both the approved changes and suggestions lists
+      // Refresh lists and jobs after job creation
       queryClient.invalidateQueries({ queryKey: ['approved-changes', budgetId] });
       queryClient.invalidateQueries({ queryKey: ['suggestions', budgetId] });
+      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
       setExcludedIds(new Set());
     },
   });
@@ -219,13 +220,11 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
             </button>
           </div>
 
-          {applyMutation.isPending && (
-            <ProgressBar message="Applying changes to Actual Budget..." />
-          )}
+          {applyMutation.isPending && <ProgressBar message="Starting apply job..." />}
 
           {applyMutation.isSuccess && (
             <div className="success-message">
-              ✓ Successfully applied {applyMutation.data.applied} change(s)!
+              ✓ Apply job started. Track progress in the job center.
             </div>
           )}
 

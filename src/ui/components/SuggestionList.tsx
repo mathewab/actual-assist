@@ -153,9 +153,10 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const retrySuggestionMutation = useMutation({
-    mutationFn: (id: string) => api.retrySuggestion(id),
+    mutationFn: (id: string) => api.retrySuggestion(budgetId, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
   });
 

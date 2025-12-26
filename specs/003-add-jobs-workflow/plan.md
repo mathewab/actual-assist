@@ -7,7 +7,7 @@
 
 ## Summary
 
-Introduce a persistent jobs workflow for sync and suggestions generation, including a combined “sync then generate” flow. Provide job status visibility via API and UI, backed by durable storage and explicit orchestration steps.
+Introduce a persistent jobs workflow for sync and suggestions generation, including a combined “sync then generate” flow. Provide job status visibility via API and UI, backed by durable storage and explicit orchestration steps. Extend the jobs system to cover remaining async/background operations (suggestions generate/retry, snapshot create/redownload, apply suggestions, and scheduled sync+suggest) so all long-running work is tracked consistently.
 
 ## Technical Context
 
@@ -20,6 +20,7 @@ Introduce a persistent jobs workflow for sync and suggestions generation, includ
 **Performance Goals**: Job status visible within 5 seconds of completion; job list retrieval under 1 second for typical datasets  
 **Constraints**: Job history retention default 30 days; status transitions must be auditable and deterministic  
 **Scale/Scope**: Single-tenant usage; hundreds of jobs per budget; low-concurrency interactive traffic
+**Out of Scope**: Legacy sync plan build/execute workflow (deprecated and removed).
 
 ## Constitution Check
 
@@ -90,6 +91,35 @@ Design artifacts produced:
 - `data-model.md` for Job, JobStep, and state transitions.
 - `contracts/` for job lifecycle and status endpoints.
 - `quickstart.md` for feature verification steps.
+
+## Scope Update: Async Work Migration
+
+### Async Operations to Migrate
+
+- `POST /api/suggestions/generate` (generate suggestions on-demand)
+- `POST /api/suggestions/sync-and-generate` (sync + diff-based suggestions)
+- `POST /api/suggestions/:id/retry` (retry payee group suggestions)
+- `POST /api/snapshots` (create snapshot)
+- `POST /api/snapshots/redownload` (force redownload)
+- `POST /api/sync/apply` (apply approved suggestions)
+- Scheduler: `SyncScheduler.runSync` (scheduled sync + suggest with retry/backoff)
+
+### Job Types (System IDs → UX Labels)
+
+- `budget_sync` → “Sync Budget”
+- `suggestions_generate` → “Generate Suggestions”
+- `sync_and_suggest` → “Sync & Generate Suggestions”
+- `suggestions_retry_payee` → “Retry Suggestions (Payee Group)”
+- `suggestions_apply` → “Apply Approved Suggestions”
+- `snapshot_create` → “Create Snapshot”
+- `snapshot_redownload` → “Redownload Snapshot”
+- `scheduled_sync_and_suggest` → “Scheduled Sync & Generate”
+
+### Migration Approach
+
+- Replace direct async execution in API routes with job creation + orchestration, returning `{ job, steps }` consistently.
+- Move scheduler work to enqueue `scheduled_sync_and_suggest` jobs; retry/backoff handled by job runner or re-queue logic, not `setTimeout` in the scheduler.
+- Ensure job metadata captures trigger context (user-initiated vs scheduled) for UX and audit visibility.
 
 ## Constitution Check (Post-Design)
 

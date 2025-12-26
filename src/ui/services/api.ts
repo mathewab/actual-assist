@@ -106,7 +106,15 @@ export interface AuditEvent {
   timestamp: string;
 }
 
-export type JobType = 'sync' | 'suggestions' | 'sync_and_generate';
+export type JobType =
+  | 'budget_sync'
+  | 'suggestions_generate'
+  | 'sync_and_suggest'
+  | 'suggestions_retry_payee'
+  | 'suggestions_apply'
+  | 'snapshot_create'
+  | 'snapshot_redownload'
+  | 'scheduled_sync_and_suggest';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
 export interface Job {
@@ -165,15 +173,15 @@ export const api = {
   /**
    * Create a new budget snapshot
    */
-  async createSnapshot(budgetId: string, syncId?: string) {
-    const response = await fetch(`${API_BASE}/snapshots`, {
+  async createSnapshotJob(budgetId: string) {
+    const response = await fetch(`${API_BASE}/jobs/snapshot-create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, syncId }),
+      body: JSON.stringify({ budgetId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to create snapshot');
+      throw new Error('Failed to create snapshot job');
     }
 
     return response.json();
@@ -184,16 +192,16 @@ export const api = {
    */
   async generateSuggestions(
     budgetId: string,
-    maxSuggestions?: number
-  ): Promise<{ suggestions: Suggestion[]; total: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/generate`, {
+    _maxSuggestions?: number
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, ...(maxSuggestions && { maxSuggestions }) }),
+      body: JSON.stringify({ budgetId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate suggestions');
+      throw new Error('Failed to create suggestions job');
     }
 
     return response.json();
@@ -206,15 +214,15 @@ export const api = {
   async syncAndGenerateSuggestions(
     budgetId: string,
     fullSnapshot = false
-  ): Promise<{ suggestions: Suggestion[]; total: number; mode: string }> {
-    const response = await fetch(`${API_BASE}/suggestions/sync-and-generate`, {
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, fullSnapshot }),
+      body: JSON.stringify({ budgetId, fullResync: fullSnapshot }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to sync and generate suggestions');
+      throw new Error('Failed to create sync and suggest job');
     }
 
     return response.json();
@@ -272,7 +280,7 @@ export const api = {
    * Create a sync job
    */
   async createSyncJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/sync`, {
+    const response = await fetch(`${API_BASE}/jobs/budget-sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId }),
@@ -289,7 +297,7 @@ export const api = {
    * Create a suggestions generation job
    */
   async createSuggestionsJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/suggestions`, {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId }),
@@ -309,7 +317,7 @@ export const api = {
     budgetId: string,
     fullResync = false
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/sync-and-generate`, {
+    const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, fullResync }),
@@ -526,15 +534,15 @@ export const api = {
   async applySuggestions(
     budgetId: string,
     suggestionIds: string[]
-  ): Promise<{ success: boolean; applied: number }> {
-    const response = await fetch(`${API_BASE}/sync/apply`, {
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, suggestionIds }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to apply suggestions');
+      throw new Error('Failed to create apply suggestions job');
     }
 
     return response.json();
@@ -545,14 +553,34 @@ export const api = {
    * Retries all suggestions in the same payee group
    */
   async retrySuggestion(
+    budgetId: string,
     suggestionId: string
-  ): Promise<{ success: boolean; suggestions: Suggestion[]; count: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/retry`, {
+  ): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/suggestions-retry`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, suggestionId }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to retry suggestion');
+      throw new Error('Failed to create retry suggestion job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Redownload snapshot
+   */
+  async redownloadSnapshotJob(budgetId: string) {
+    const response = await fetch(`${API_BASE}/jobs/snapshot-redownload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create snapshot redownload job');
     }
 
     return response.json();

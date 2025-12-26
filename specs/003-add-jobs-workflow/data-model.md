@@ -4,19 +4,27 @@
 
 ### Job
 
-**Purpose**: Represents a user-initiated unit of work (sync, suggestions generation, or combined flow).
+**Purpose**: Represents a user-initiated or scheduled unit of work (sync, suggestions generation, snapshot operations, apply, or combined flow).
 
 **Fields**:
 - `id` (string, unique): Job identifier.
 - `budgetId` (string): Budget the job operates on.
-- `type` (enum): `sync`, `suggestions`, `sync_and_generate`.
+- `type` (enum):
+  - `budget_sync`
+  - `suggestions_generate`
+  - `sync_and_suggest`
+  - `suggestions_retry_payee`
+  - `suggestions_apply`
+  - `snapshot_create`
+  - `snapshot_redownload`
+  - `scheduled_sync_and_suggest`
 - `status` (enum): `queued`, `running`, `succeeded`, `failed`, `canceled`.
 - `createdAt` (timestamp)
 - `startedAt` (timestamp, nullable)
 - `completedAt` (timestamp, nullable)
 - `failureReason` (string, nullable; user-safe)
 - `parentJobId` (string, nullable): Links step jobs to a combined parent if steps are modeled as jobs.
-- `metadata` (object, optional): Non-sensitive context (e.g., fullResync flag).
+- `metadata` (object, optional): Non-sensitive context (e.g., fullResync flag, trigger source, retry count, suggestionIds).
 
 **Validation Rules**:
 - `type` and `status` are required.
@@ -30,7 +38,7 @@
 
 ### JobStep
 
-**Purpose**: Tracks ordered steps for combined jobs.
+**Purpose**: Tracks ordered steps for combined jobs (sync + suggestions).
 
 **Fields**:
 - `id` (string, unique)

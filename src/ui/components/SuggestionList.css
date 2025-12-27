@@ -1072,20 +1072,45 @@
   }
   
   .payee-row-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .expand-toggle {
+    align-self: flex-start;
+  }
+  
+  .payee-details {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+  
+  .payee-name {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .payee-chips {
+    width: 100%;
     flex-wrap: wrap;
   }
-  
-  .payee-row-left {
-    flex: 1 1 100%;
-    margin-bottom: 8px;
+
+  .chip {
+    max-width: 100%;
   }
-  
-  .payee-row-middle {
-    flex: 1 1 60%;
-  }
-  
+
   .payee-row-actions {
-    flex: 0 0 auto;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .payee-row-actions .approve-btn,
+  .payee-row-actions .undo-btn {
+    width: auto;
+    justify-content: center;
   }
 
   .legend {
@@ -1309,4 +1334,47 @@
 
 .btn-reject:hover:not(:disabled) {
   background: #e53935;
+}
+
+@media (max-width: 768px) {
+  .suggestion-list {
+    padding: 12px;
+  }
+
+  .suggestion-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .header-buttons {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .payee-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .payee-meta {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .payee-rationale {
+    white-space: normal;
+  }
+
+  .payee-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .payee-actions .btn-approve-all,
+  .payee-actions .btn-reject-all {
+    width: 100%;
+    justify-content: center;
+  }
 }

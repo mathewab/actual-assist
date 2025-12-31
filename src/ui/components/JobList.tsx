@@ -2,11 +2,27 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Job } from '../services/api';
 import { JobDetail } from './JobDetail';
-import './JobList.css';
 
 interface JobListProps {
   budgetId: string;
 }
+
+const statusTagClass = (status: string) => {
+  switch (status) {
+    case 'queued':
+      return 'bg-slate-200 text-slate-600';
+    case 'running':
+      return 'bg-blue-100 text-blue-700';
+    case 'succeeded':
+      return 'bg-emerald-100 text-emerald-700';
+    case 'failed':
+      return 'bg-rose-100 text-rose-700';
+    case 'canceled':
+      return 'bg-slate-100 text-slate-500';
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+};
 
 function formatTimestamp(value: string | null): string {
   if (!value) return '—';
@@ -48,47 +64,73 @@ export function JobList({ budgetId }: JobListProps) {
   });
 
   if (!budgetId) return null;
-  if (isLoading) return <div className="job-list">Loading jobs...</div>;
+  if (isLoading) {
+    return (
+      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+        Loading jobs...
+      </div>
+    );
+  }
   if (error) {
-    return <div className="job-list error">Error loading jobs: {(error as Error).message}</div>;
+    return (
+      <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        Error loading jobs: {(error as Error).message}
+      </div>
+    );
   }
 
   const jobs = data?.jobs ?? [];
 
   return (
-    <div className="job-list">
-      <div className="job-list-header">
-        <h3>Jobs</h3>
-        <span className="job-list-count">{jobs.length} recent</span>
+    <div className="my-4 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-base font-semibold text-slate-800">Jobs</h3>
+        <span className="text-xs text-slate-500">{jobs.length} recent</span>
       </div>
       {jobs.length === 0 ? (
-        <div className="job-list-empty">No jobs yet</div>
+        <div className="text-sm text-slate-500">No jobs yet</div>
       ) : (
-        <table className="job-list-table">
+        <table className="w-full border-collapse text-xs">
           <thead>
             <tr>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Started</th>
-              <th>Completed</th>
-              <th>Failure</th>
-              <th></th>
+              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
+                Type
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
+                Status
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
+                Started
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
+                Completed
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
+                Failure
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600"></th>
             </tr>
           </thead>
           <tbody>
             {jobs.map((job) => (
-              <tr key={job.id} className={`status-${job.status}`}>
-                <td>{formatJobType(job.type)}</td>
-                <td>
-                  <span className={`status-tag status-${job.status}`}>{job.status}</span>
+              <tr key={job.id} className="border-b border-slate-100 last:border-b-0">
+                <td className="px-2 py-2">{formatJobType(job.type)}</td>
+                <td className="px-2 py-2">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${statusTagClass(
+                      job.status
+                    )}`}
+                  >
+                    {job.status}
+                  </span>
                 </td>
-                <td>{formatTimestamp(job.startedAt)}</td>
-                <td>{formatTimestamp(job.completedAt)}</td>
-                <td className="job-failure">{job.failureReason || '—'}</td>
-                <td>
+                <td className="px-2 py-2">{formatTimestamp(job.startedAt)}</td>
+                <td className="px-2 py-2">{formatTimestamp(job.completedAt)}</td>
+                <td className="px-2 py-2 text-rose-700">{job.failureReason || '—'}</td>
+                <td className="px-2 py-2">
                   {job.type === 'sync_and_suggest' ? (
                     <button
-                      className="job-detail-toggle"
+                      className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[0.7rem] font-semibold text-indigo-700 transition hover:bg-indigo-100"
                       onClick={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
                     >
                       {selectedJobId === job.id ? 'Hide' : 'Details'}

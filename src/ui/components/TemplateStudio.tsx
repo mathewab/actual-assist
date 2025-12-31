@@ -7,7 +7,6 @@ import {
   extractTemplateComments,
   type TemplateEntry,
 } from './templateNotes';
-import './TemplateStudio.css';
 
 interface TemplateStudioProps {
   budgetId: string;
@@ -740,56 +739,44 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
         return draftLineMap.get(draft.id) ?? '';
       });
 
-      const appendedBlocks = drafts
-        .filter((draft) => draft.sourceIndex === null)
-        .map((draft) => ({
-          comment: draft.comment.trimEnd(),
-          line: draftLineMap.get(draft.id) ?? '',
-        }))
-        .filter((block) => block.comment || block.line);
-
-      return buildNoteFromExisting(
+      const updated = buildNoteFromExisting(
         activeCategory.note,
-        activeTemplateEntries,
-        commentsByManagedIndex,
-        replacements,
-        appendedBlocks
+        replacements.filter((item) => item !== null),
+        commentsByManagedIndex
       );
+
+      return updated;
     }
 
-    if (!renderedValue) {
-      return '';
-    }
-
-    const merged: string[] = [];
-
-    drafts.forEach((draft, index) => {
-      const comment = draft.comment.trimEnd();
-      if (comment) {
-        merged.push(...comment.split('\n'));
-      }
-      const templateLine = draftRenderLines[index];
-      if (templateLine) {
-        merged.push(templateLine);
-      }
-      if (index < drafts.length - 1) {
-        merged.push('');
-      }
-    });
-
-    return merged.join('\n').trimEnd();
+    return buildNoteFromExisting(
+      '',
+      draftRenderLines,
+      drafts.map((draft) => draft.comment)
+    );
   })();
 
+  const fieldClass =
+    'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200';
+  const labelClass = 'flex flex-col gap-2 text-xs font-semibold text-slate-600';
+  const checkboxClass = 'flex items-center gap-2 text-xs font-semibold text-slate-600';
+  const inlineStackClass = 'flex items-center gap-2';
+  const textareaClass =
+    'min-h-[56px] w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200';
+  const outputTextareaClass =
+    'min-h-[140px] w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200';
+
   return (
-    <section className="template-studio">
-      <header className="template-studio-header">
+    <section className="flex flex-col gap-6 p-6">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2>Budget Template Studio</h2>
-          <p>View existing notes and build new template lines before updating Actual.</p>
+          <h2 className="text-xl font-semibold text-slate-800">Budget Template Studio</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            View existing notes and build new template lines before updating Actual.
+          </p>
         </div>
         <button
           type="button"
-          className="template-refresh"
+          className="rounded-md bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-300"
           onClick={async () => {
             const result = await refetch();
             if (activeCategoryId && result.data) {
@@ -806,20 +793,27 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
         </button>
       </header>
 
-      <div className="template-studio-grid">
-        <section className="template-list">
-          <div className="template-list-header">
-            <h3>Categories & Notes</h3>
+      <div className="grid gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(340px,1.2fr)]">
+        <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-3">
+            <h3 className="text-base font-semibold text-slate-800">Categories & Notes</h3>
             <input
               type="search"
+              className={fieldClass}
               placeholder="Filter by category or group"
               value={filterText}
               onChange={(event) => setFilterText(event.target.value)}
             />
-            <div className="template-category-select">
-              <label htmlFor="template-category-picker">Select category</label>
+            <div className="flex flex-col gap-2 lg:hidden">
+              <label
+                className="text-xs font-semibold text-slate-600"
+                htmlFor="template-category-picker"
+              >
+                Select category
+              </label>
               <select
                 id="template-category-picker"
+                className={fieldClass}
                 value={activeCategoryId ?? ''}
                 onChange={(event) => {
                   const nextId = event.target.value || null;
@@ -841,68 +835,92 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             </div>
           </div>
 
-          <div className="template-note-preview">
-            <h4>Selected category notes</h4>
+          <div className="rounded-xl border border-slate-200 bg-white p-3 lg:hidden">
+            <h4 className="text-sm font-semibold text-slate-800">Selected category notes</h4>
             {activeCategory ? (
-              <pre>{activeCategory.note ? activeCategory.note : 'No notes yet'}</pre>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-600">
+                {activeCategory.note ? activeCategory.note : 'No notes yet'}
+              </pre>
             ) : (
-              <p>Select a category to view its notes.</p>
+              <p className="mt-2 text-xs text-slate-500">Select a category to view its notes.</p>
             )}
           </div>
 
-          {isLoading && <p className="template-state">Remembering your templates...</p>}
-          {error && <p className="template-state error">Failed to load templates.</p>}
+          {isLoading && <p className="text-sm text-slate-500">Remembering your templates...</p>}
+          {error && <p className="text-sm text-rose-700">Failed to load templates.</p>}
 
           {!isLoading && filteredTemplates.length === 0 && (
-            <p className="template-state">No categories found.</p>
+            <p className="text-sm text-slate-500">No categories found.</p>
           )}
 
-          <div className="template-card-list">
+          <div className="hidden max-h-[520px] flex-col gap-3 overflow-auto pr-1 lg:flex">
             {filteredTemplates.map((item) => (
               <button
                 type="button"
                 key={item.id}
-                className={`template-card ${item.id === activeCategoryId ? 'active' : ''}`}
+                className={[
+                  'flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition',
+                  'hover:border-blue-300 hover:shadow-md',
+                  item.id === activeCategoryId ? 'border-blue-300 shadow-md' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 onClick={() => handleUseCategory(item)}
               >
-                <div className="template-card-title">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h4>{item.name}</h4>
-                    <span>{item.groupName || 'Uncategorized'}</span>
+                    <h4 className="text-sm font-semibold text-slate-800">{item.name}</h4>
+                    <span className="text-xs text-slate-500">
+                      {item.groupName || 'Uncategorized'}
+                    </span>
                   </div>
-                  {item.source && <span className="template-source">Source: {item.source}</span>}
+                  {item.source && (
+                    <span className="rounded-full bg-sky-100 px-2 py-1 text-[0.65rem] font-semibold text-sky-700">
+                      Source: {item.source}
+                    </span>
+                  )}
                 </div>
                 {item.parseError ? (
-                  <div className="template-error">{item.parseError}</div>
+                  <div className="rounded-md bg-rose-100 px-2 py-1 text-xs text-rose-700">
+                    {item.parseError}
+                  </div>
                 ) : (
-                  <pre className="template-rendered">{item.note ? item.note : 'No notes yet'}</pre>
+                  <pre className="whitespace-pre-wrap rounded-md bg-slate-100 p-2 text-xs text-slate-600">
+                    {item.note ? item.note : 'No notes yet'}
+                  </pre>
                 )}
               </button>
             ))}
           </div>
         </section>
 
-        <section className="template-editor">
-          <div className="template-editor-header">
+        <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h3>Render Templates</h3>
-              <p>Build templates with form controls and render the note lines.</p>
+              <h3 className="text-base font-semibold text-slate-800">Render Templates</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Build templates with form controls and render the note lines.
+              </p>
             </div>
             {activeCategory && (
-              <div className="template-editor-meta">
-                Editing: <strong>{activeCategory.name}</strong>
+              <div className="inline-flex rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+                Editing: <strong className="ml-1">{activeCategory.name}</strong>
               </div>
             )}
           </div>
 
-          <div className="template-builder">
-            <div className="template-builder-toolbar">
-              <div className="template-builder-controls">
-                <label className="template-label" htmlFor="template-type-select">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <label
+                  className="text-xs font-semibold text-slate-600"
+                  htmlFor="template-type-select"
+                >
                   Add template
                 </label>
                 <select
                   id="template-type-select"
+                  className={fieldClass}
                   value={newTemplateType}
                   onChange={(event) => setNewTemplateType(event.target.value as TemplateType)}
                 >
@@ -918,36 +936,44 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   <option value="limit">Limit</option>
                   <option value="goal">Goal</option>
                 </select>
-                <button type="button" className="template-secondary" onClick={addDraft}>
+                <button
+                  type="button"
+                  className="rounded-md bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                  onClick={addDraft}
+                >
                   Add
                 </button>
               </div>
-              <span className="template-hint">
+              <span className="text-xs text-slate-500">
                 Set priority to control order; leave blank for default.
               </span>
             </div>
 
             {drafts.length === 0 && (
-              <div className="template-empty">
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
                 No templates yet. Use “Add” to start building one.
               </div>
             )}
 
-            <div className="template-builder-list">
+            <div className="flex flex-col gap-4">
               {drafts.map((draft, index) => (
-                <div key={draft.id} className="template-builder-card">
-                  <div className="template-builder-card-header">
+                <div
+                  key={draft.id}
+                  className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h4>
+                      <h4 className="text-sm font-semibold text-slate-800">
                         {index + 1}. {draft.type.toUpperCase()}
                       </h4>
                       {draft.type !== 'goal' &&
                         draft.type !== 'remainder' &&
                         draft.type !== 'limit' && (
-                          <label className="inline-label">
+                          <label className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
                             Priority
                             <input
                               type="number"
+                              className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
                               value={draft.priority}
                               onChange={(event) =>
                                 updateDraft(draft.id, { priority: event.target.value })
@@ -958,16 +984,17 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                     </div>
                     <button
                       type="button"
-                      className="template-remove"
+                      className="rounded-md bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
                       onClick={() => removeDraft(draft.id)}
                     >
                       Remove
                     </button>
                   </div>
 
-                  <label className="template-comment">
+                  <label className={labelClass}>
                     Label / comment (optional)
                     <textarea
+                      className={textareaClass}
                       value={draft.comment}
                       onChange={(event) => updateDraft(draft.id, { comment: event.target.value })}
                       placeholder="Example: Disney"
@@ -976,18 +1003,19 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   </label>
 
                   {draft.type === 'simple' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Monthly amount
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.monthly}
                           onChange={(event) =>
                             updateDraft(draft.id, { monthly: event.target.value })
                           }
                         />
                       </label>
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.limitEnabled}
@@ -997,19 +1025,21 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                       </label>
                       {draft.limitEnabled && (
                         <>
-                          <label>
+                          <label className={labelClass}>
                             Limit amount
                             <input
                               type="number"
+                              className={fieldClass}
                               value={draft.limitAmount}
                               onChange={(event) =>
                                 updateDraft(draft.id, { limitAmount: event.target.value })
                               }
                             />
                           </label>
-                          <label>
+                          <label className={labelClass}>
                             Limit period
                             <select
+                              className={fieldClass}
                               value={draft.limitPeriod}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1022,10 +1052,11 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                               <option value="monthly">Monthly</option>
                             </select>
                           </label>
-                          <label>
+                          <label className={labelClass}>
                             Limit start
                             <input
                               type="date"
+                              className={fieldClass}
                               placeholder="YYYY-MM-DD"
                               value={draft.limitStart}
                               onChange={(event) =>
@@ -1039,18 +1070,19 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'percentage' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Percent
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.percent}
                           onChange={(event) =>
                             updateDraft(draft.id, { percent: event.target.value })
                           }
                         />
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Category
                         <AutocompleteInput
                           value={draft.category}
@@ -1062,7 +1094,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           }))}
                         />
                       </label>
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.previous}
@@ -1076,28 +1108,31 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'periodic' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Amount
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.amount}
                           onChange={(event) =>
                             updateDraft(draft.id, { amount: event.target.value })
                           }
                         />
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Repeat every
-                        <div className="inline-stack">
+                        <div className={inlineStackClass}>
                           <input
                             type="number"
+                            className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                             value={draft.periodAmount}
                             onChange={(event) =>
                               updateDraft(draft.id, { periodAmount: event.target.value })
                             }
                           />
                           <select
+                            className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                             value={draft.periodUnit}
                             onChange={(event) =>
                               updateDraft(draft.id, {
@@ -1112,10 +1147,11 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           </select>
                         </div>
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Starting date
                         <input
                           type="date"
+                          className={fieldClass}
                           placeholder="YYYY-MM-DD"
                           value={draft.starting}
                           onChange={(event) =>
@@ -1123,7 +1159,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           }
                         />
                       </label>
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.limitEnabled}
@@ -1133,19 +1169,21 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                       </label>
                       {draft.limitEnabled && (
                         <>
-                          <label>
+                          <label className={labelClass}>
                             Limit amount
                             <input
                               type="number"
+                              className={fieldClass}
                               value={draft.limitAmount}
                               onChange={(event) =>
                                 updateDraft(draft.id, { limitAmount: event.target.value })
                               }
                             />
                           </label>
-                          <label>
+                          <label className={labelClass}>
                             Limit period
                             <select
+                              className={fieldClass}
                               value={draft.limitPeriod}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1158,10 +1196,11 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                               <option value="monthly">Monthly</option>
                             </select>
                           </label>
-                          <label>
+                          <label className={labelClass}>
                             Limit start
                             <input
                               type="date"
+                              className={fieldClass}
                               placeholder="YYYY-MM-DD"
                               value={draft.limitStart}
                               onChange={(event) =>
@@ -1169,7 +1208,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                               }
                             />
                           </label>
-                          <label className="checkbox">
+                          <label className={checkboxClass}>
                             <input
                               type="checkbox"
                               checked={draft.limitHold}
@@ -1185,31 +1224,34 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {(draft.type === 'by' || draft.type === 'spend') && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Amount
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.amount}
                           onChange={(event) =>
                             updateDraft(draft.id, { amount: event.target.value })
                           }
                         />
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Month (YYYY-MM)
                         <input
                           type="text"
+                          className={fieldClass}
                           placeholder="2026-01"
                           value={draft.month}
                           onChange={(event) => updateDraft(draft.id, { month: event.target.value })}
                         />
                       </label>
                       {draft.type === 'spend' && (
-                        <label>
+                        <label className={labelClass}>
                           Spend from (YYYY-MM)
                           <input
                             type="text"
+                            className={fieldClass}
                             placeholder="2025-10"
                             value={draft.from}
                             onChange={(event) =>
@@ -1218,7 +1260,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           />
                         </label>
                       )}
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.repeatUnit !== ''}
@@ -1231,40 +1273,40 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                         Repeat
                       </label>
                       {draft.repeatUnit && (
-                        <>
-                          <label>
-                            Repeat every
-                            <div className="inline-stack">
-                              <input
-                                type="number"
-                                value={draft.repeat}
-                                min="1"
-                                placeholder="1"
-                                onChange={(event) =>
-                                  updateDraft(draft.id, { repeat: event.target.value })
-                                }
-                              />
-                              <select
-                                value={draft.repeatUnit}
-                                onChange={(event) =>
-                                  updateDraft(draft.id, {
-                                    repeatUnit: event.target.value as RepeatUnit,
-                                  })
-                                }
-                              >
-                                <option value="month">Month(s)</option>
-                                <option value="year">Year(s)</option>
-                              </select>
-                            </div>
-                          </label>
-                        </>
+                        <label className={labelClass}>
+                          Repeat every
+                          <div className={inlineStackClass}>
+                            <input
+                              type="number"
+                              className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              value={draft.repeat}
+                              min="1"
+                              placeholder="1"
+                              onChange={(event) =>
+                                updateDraft(draft.id, { repeat: event.target.value })
+                              }
+                            />
+                            <select
+                              className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              value={draft.repeatUnit}
+                              onChange={(event) =>
+                                updateDraft(draft.id, {
+                                  repeatUnit: event.target.value as RepeatUnit,
+                                })
+                              }
+                            >
+                              <option value="month">Month(s)</option>
+                              <option value="year">Year(s)</option>
+                            </select>
+                          </div>
+                        </label>
                       )}
                     </div>
                   )}
 
                   {draft.type === 'schedule' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Schedule name
                         <AutocompleteInput
                           value={draft.name}
@@ -1273,17 +1315,18 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           options={scheduleOptions}
                         />
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Adjustment (%)
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.adjustment}
                           onChange={(event) =>
                             updateDraft(draft.id, { adjustment: event.target.value })
                           }
                         />
                       </label>
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.full}
@@ -1297,11 +1340,12 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'average' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Number of months
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.numMonths}
                           onChange={(event) =>
                             updateDraft(draft.id, { numMonths: event.target.value })
@@ -1312,11 +1356,12 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'copy' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Copy from months ago
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.lookBack}
                           onChange={(event) =>
                             updateDraft(draft.id, { lookBack: event.target.value })
@@ -1327,18 +1372,19 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'remainder' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Weight (default 1)
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.weight}
                           onChange={(event) =>
                             updateDraft(draft.id, { weight: event.target.value })
                           }
                         />
                       </label>
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.limitEnabled}
@@ -1348,19 +1394,21 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                       </label>
                       {draft.limitEnabled && (
                         <>
-                          <label>
+                          <label className={labelClass}>
                             Limit amount
                             <input
                               type="number"
+                              className={fieldClass}
                               value={draft.limitAmount}
                               onChange={(event) =>
                                 updateDraft(draft.id, { limitAmount: event.target.value })
                               }
                             />
                           </label>
-                          <label>
+                          <label className={labelClass}>
                             Limit period
                             <select
+                              className={fieldClass}
                               value={draft.limitPeriod}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1373,10 +1421,11 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                               <option value="monthly">Monthly</option>
                             </select>
                           </label>
-                          <label>
+                          <label className={labelClass}>
                             Limit start
                             <input
                               type="date"
+                              className={fieldClass}
                               placeholder="YYYY-MM-DD"
                               value={draft.limitStart}
                               onChange={(event) =>
@@ -1384,7 +1433,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                               }
                             />
                           </label>
-                          <label className="checkbox">
+                          <label className={checkboxClass}>
                             <input
                               type="checkbox"
                               checked={draft.limitHold}
@@ -1400,20 +1449,22 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'limit' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Limit amount
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.limitAmount}
                           onChange={(event) =>
                             updateDraft(draft.id, { limitAmount: event.target.value })
                           }
                         />
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Period
                         <select
+                          className={fieldClass}
                           value={draft.limitPeriod}
                           onChange={(event) =>
                             updateDraft(draft.id, {
@@ -1426,10 +1477,11 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           <option value="monthly">Monthly</option>
                         </select>
                       </label>
-                      <label>
+                      <label className={labelClass}>
                         Start date
                         <input
                           type="date"
+                          className={fieldClass}
                           placeholder="YYYY-MM-DD"
                           value={draft.limitStart}
                           onChange={(event) =>
@@ -1437,7 +1489,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                           }
                         />
                       </label>
-                      <label className="checkbox">
+                      <label className={checkboxClass}>
                         <input
                           type="checkbox"
                           checked={draft.limitHold}
@@ -1451,11 +1503,12 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   )}
 
                   {draft.type === 'goal' && (
-                    <div className="template-fields">
-                      <label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className={labelClass}>
                         Goal amount
                         <input
                           type="number"
+                          className={fieldClass}
                           value={draft.amount}
                           onChange={(event) =>
                             updateDraft(draft.id, { amount: event.target.value })
@@ -1469,10 +1522,10 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             </div>
           </div>
 
-          <div className="template-actions">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              className="template-primary"
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-70"
               onClick={handleRender}
               disabled={renderMutation.isPending}
             >
@@ -1480,7 +1533,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             </button>
             <button
               type="button"
-              className="template-primary"
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-70"
               onClick={() => {
                 if (!activeCategory) {
                   setEditorError('Select a category to apply notes');
@@ -1497,20 +1550,23 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             </button>
           </div>
 
-          {editorError && <p className="template-state error">{editorError}</p>}
+          {editorError && <p className="text-sm text-rose-700">{editorError}</p>}
           {applyStatus && (
-            <p className={`template-state ${applyStatus.isError ? 'error' : ''}`}>
+            <p className={`text-sm ${applyStatus.isError ? 'text-rose-700' : 'text-slate-500'}`}>
               {applyStatus.message}
             </p>
           )}
 
-          <div className="template-output-header">
-            <label className="template-label" htmlFor="template-rendered-full">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label
+              className="text-xs font-semibold text-slate-600"
+              htmlFor="template-rendered-full"
+            >
               Rendered Notes (with labels)
             </label>
             <button
               type="button"
-              className="template-secondary"
+              className="rounded-md bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-60"
               onClick={handleCopy}
               disabled={!renderedWithComments}
             >
@@ -1519,7 +1575,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
           </div>
           <textarea
             id="template-rendered-full"
-            className="template-textarea template-textarea--output"
+            className={outputTextareaClass}
             value={renderedWithComments}
             readOnly
             spellCheck={false}
@@ -1628,9 +1684,10 @@ function AutocompleteInput({ value, onChange, options, placeholder }: Autocomple
   };
 
   return (
-    <div className="autocomplete" ref={wrapperRef}>
+    <div className="relative w-full" ref={wrapperRef}>
       <input
         type="text"
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
         value={value}
         placeholder={placeholder}
         onChange={(event) => {
@@ -1652,12 +1709,16 @@ function AutocompleteInput({ value, onChange, options, placeholder }: Autocomple
         onKeyDown={handleKeyDown}
       />
       {isOpen && filteredOptions.length > 0 && (
-        <div className="autocomplete-list" role="listbox" ref={listRef}>
+        <div
+          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+          role="listbox"
+          ref={listRef}
+        >
           {filteredOptions.map((option, index) => (
             <button
               type="button"
               key={`${option.value}-${option.label}`}
-              className={`autocomplete-item ${index === highlightedIndex ? 'active' : ''}`}
+              className={`w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-sky-50 ${index === highlightedIndex ? 'bg-sky-50 text-sky-800' : ''}`}
               data-option-index={index}
               onMouseEnter={() => setHighlightedIndex(index)}
               onClick={() => handleSelect(option)}

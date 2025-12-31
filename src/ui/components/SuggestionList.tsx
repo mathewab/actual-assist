@@ -8,7 +8,6 @@ import {
   type Category,
 } from '../services/api';
 import { ProgressBar } from './ProgressBar';
-import './SuggestionList.css';
 
 interface SuggestionListProps {
   budgetId: string;
@@ -40,6 +39,36 @@ interface CorrectionModalState {
   suggestionIds: string[];
   currentValue: string;
 }
+
+const confidenceClass = (level: string) => {
+  switch (level) {
+    case 'high':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'medium':
+      return 'bg-amber-50 text-amber-700';
+    default:
+      return 'bg-rose-50 text-rose-700';
+  }
+};
+
+const statusTagClass = (status: string) => {
+  switch (status) {
+    case 'pending':
+      return 'bg-amber-50 text-amber-700';
+    case 'approved':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'rejected':
+      return 'bg-rose-50 text-rose-700';
+    case 'applied':
+      return 'bg-blue-50 text-blue-700';
+    case 'not-generated':
+      return 'bg-slate-100 text-slate-600';
+    case 'unknown':
+      return 'bg-amber-50 text-amber-700';
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+};
 
 export function SuggestionList({ budgetId }: SuggestionListProps) {
   const queryClient = useQueryClient();
@@ -205,33 +234,47 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const hasApprovedChanges = (approvedChangesCount ?? 0) > 0;
 
   if (isLoading) {
-    return <div className="loading">Loading suggestions...</div>;
+    return (
+      <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
+        Loading suggestions...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="error">Error loading suggestions: {error.message}</div>;
+    return (
+      <div className="rounded-md bg-rose-50 px-6 py-4 text-center text-sm text-rose-700">
+        Error loading suggestions: {error.message}
+      </div>
+    );
   }
 
   // Group suggestions by payee
   const payeeGroups = groupByPayee(suggestions);
 
   return (
-    <div className="suggestion-list">
-      <div className="suggestion-list-header">
-        <h2>
+    <div className="mx-auto w-full max-w-[1200px] p-4">
+      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold text-slate-800">
           Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)
         </h2>
-        <div className="header-buttons">
+        <div className="flex flex-wrap gap-2">
           {hasApprovedChanges && (
-            <NavLink to="/apply" className="btn btn-apply-link">
+            <NavLink
+              to="/apply"
+              className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+            >
               Apply Changes
-              <span className="apply-badge" aria-label={`${approvedChangesCount} to apply`}>
+              <span
+                className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-2 text-xs font-bold text-emerald-700 shadow"
+                aria-label={`${approvedChangesCount} to apply`}
+              >
                 {approvedChangesCount}
               </span>
             </NavLink>
           )}
           <button
-            className="btn btn-generate"
+            className="rounded-md bg-amber-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => suggestionsJobMutation.mutate()}
             disabled={suggestionsJobMutation.isPending}
           >
@@ -245,16 +288,20 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
       )}
 
       {suggestionsJobMutation.error && (
-        <div className="error">Generate failed: {suggestionsJobMutation.error.message}</div>
+        <div className="mb-3 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          Generate failed: {suggestionsJobMutation.error.message}
+        </div>
       )}
 
       {payeeGroups.length === 0 ? (
-        <div className="empty-state">
+        <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
           <p>No suggestions available</p>
-          <p className="hint">Click &quot;Generate&quot; to fetch new suggestions</p>
+          <p className="mt-2 text-xs text-slate-400">
+            Click &quot;Generate&quot; to fetch new suggestions
+          </p>
         </div>
       ) : (
-        <div className="payee-list">
+        <div className="flex flex-col gap-px overflow-hidden rounded-md bg-slate-200">
           {payeeGroups.map((group) => {
             const isExpanded = expandedPayees.has(group.payeeName);
             const pendingIds = group.suggestions
@@ -285,48 +332,71 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               .map((s) => s.id);
             const hasRejectable = rejectableIds.length > 0;
 
-            return (
-              <div
-                key={group.payeeName}
-                className={`payee-row ${isExpanded ? 'expanded' : ''} ${hasApproved && !hasPending ? 'all-approved' : ''}`}
-              >
-                {/* Main row - always visible */}
-                <div className="payee-row-main" onClick={() => toggleExpanded(group.payeeName)}>
-                  <span className="expand-toggle">{isExpanded ? '▼' : '▶'}</span>
+            const rowClasses = [
+              'transition',
+              isExpanded ? 'bg-slate-50' : 'bg-white',
+              !isExpanded ? 'hover:bg-slate-50' : '',
+              hasApproved && !hasPending ? 'bg-emerald-50 hover:bg-emerald-100' : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
 
-                  <div className="payee-details">
-                    <span className="payee-name">{group.payeeName}</span>
-                    <span className="payee-count">
+            return (
+              <div key={group.payeeName} className={rowClasses}>
+                {/* Main row - always visible */}
+                <div
+                  className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:gap-3"
+                  onClick={() => toggleExpanded(group.payeeName)}
+                >
+                  <span className="text-xs text-slate-400">{isExpanded ? '▼' : '▶'}</span>
+
+                  <div className="flex min-w-0 flex-col gap-0.5 md:flex-[0_0_220px]">
+                    <span className="text-sm font-medium text-slate-800 md:truncate">
+                      {group.payeeName}
+                    </span>
+                    <span className="text-xs text-slate-400">
                       {group.suggestions.length} txn{group.suggestions.length !== 1 ? 's' : ''}
                     </span>
                   </div>
 
-                  <div className="payee-chips">
+                  <div className="flex flex-1 flex-wrap items-center gap-2">
                     {group.hasPayeeSuggestion &&
                       (group.payeeStatus === 'pending' || group.payeeStatus === 'approved') && (
                         <span
-                          className={`chip payee-chip ${group.payeeStatus === 'approved' ? 'approved' : ''}`}
+                          className={`inline-flex max-w-[180px] items-center truncate rounded px-2 py-0.5 text-xs ${
+                            group.payeeStatus === 'approved'
+                              ? 'border border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700'
+                              : 'bg-violet-50 text-violet-700'
+                          }`}
                         >
                           → {group.suggestedPayeeName}
                         </span>
                       )}
                     <span
-                      className={`chip category-chip ${group.categoryStatus === 'approved' ? 'approved' : ''} ${!group.hasCategorySuggestion ? 'missing' : ''}`}
+                      className={`inline-flex max-w-[180px] items-center truncate rounded px-2 py-0.5 text-xs ${
+                        !group.hasCategorySuggestion
+                          ? 'border border-dashed border-slate-300 bg-slate-100 text-slate-500'
+                          : group.categoryStatus === 'approved'
+                            ? 'border border-sky-200 bg-sky-50 text-sky-700'
+                            : 'bg-blue-50 text-blue-700'
+                      }`}
                     >
                       {group.proposedCategory}
                     </span>
                     <span
-                      className={`chip confidence-chip confidence-${getConfidenceLevel(group.avgConfidence)}`}
+                      className={`inline-flex items-center rounded px-2 py-0.5 text-[0.7rem] font-semibold ${confidenceClass(
+                        getConfidenceLevel(group.avgConfidence)
+                      )}`}
                     >
                       {Math.round(group.avgConfidence * 100)}%
                     </span>
                   </div>
 
                   {/* Action buttons */}
-                  <div className="payee-row-actions">
+                  <div className="flex shrink-0 gap-2 self-end md:self-center">
                     {hasPendingApprovable && (
                       <button
-                        className="approve-btn"
+                        className="rounded bg-emerald-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
                         onClick={(e) => {
                           e.stopPropagation();
                           bulkApproveMutation.mutate(pendingApprovableIds);
@@ -339,7 +409,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                     )}
                     {hasProcessed && (
                       <button
-                        className="undo-btn"
+                        className="rounded bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
                         onClick={(e) => {
                           e.stopPropagation();
                           bulkResetMutation.mutate(processedIds);
@@ -355,33 +425,37 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
                 {/* Expanded section - reasoning + actions + transactions */}
                 {isExpanded && (
-                  <div className="payee-expanded">
+                  <div className="border-t border-slate-200 px-4 pb-4 pt-3 md:pl-7">
                     {/* Suggestion details with reasoning */}
-                    <div className="suggestion-details">
+                    <div className="flex flex-col gap-3">
                       {/* Category suggestion */}
                       {group.categoryStatus === 'pending' && (
-                        <div className="suggestion-detail">
-                          <div className="detail-header">
-                            <span className="detail-label">Category</span>
-                            <span className="detail-value">
+                        <div className="rounded-md border border-slate-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
+                              Category
+                            </span>
+                            <span className="text-sm font-medium text-slate-700">
                               {group.hasCategorySuggestion
                                 ? group.proposedCategory
                                 : 'Not generated'}
                             </span>
                             <span
-                              className={`detail-confidence confidence-${getConfidenceLevel(group.categoryConfidence)}`}
+                              className={`ml-auto rounded px-2 py-0.5 text-[0.65rem] font-semibold ${confidenceClass(
+                                getConfidenceLevel(group.categoryConfidence)
+                              )}`}
                             >
                               {Math.round(group.categoryConfidence * 100)}%
                             </span>
                           </div>
-                          <p className="detail-rationale">
+                          <p className="mt-2 text-sm text-slate-600">
                             {group.hasCategorySuggestion
                               ? group.categoryRationale
                               : 'No suggestion yet. Generate or correct to proceed.'}
                           </p>
-                          <div className="detail-actions">
+                          <div className="mt-3 flex flex-wrap gap-2">
                             <button
-                              className="detail-btn correct"
+                              className="rounded bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                               onClick={() =>
                                 openCorrectionModal(
                                   'category',
@@ -393,7 +467,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                               ✎ Correct
                             </button>
                             <button
-                              className="detail-btn retry"
+                              className="rounded bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
                               onClick={() => retrySuggestionMutation.mutate(firstSuggestion.id)}
                               disabled={retrySuggestionMutation.isPending}
                             >
@@ -405,7 +479,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                               {group.hasCategorySuggestion ? 'Retry' : 'Generate'}
                             </button>
                             <button
-                              className="detail-btn reject"
+                              className="rounded bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
                               onClick={() => bulkRejectMutation.mutate(rejectableIds)}
                               disabled={bulkRejectMutation.isPending || !hasRejectable}
                             >
@@ -417,22 +491,26 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
                       {/* Payee suggestion (if different from original) */}
                       {group.hasPayeeSuggestion && group.payeeStatus === 'pending' && (
-                        <div className="suggestion-detail">
-                          <div className="detail-header">
-                            <span className="detail-label">Payee</span>
-                            <span className="detail-value">
+                        <div className="rounded-md border border-slate-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
+                              Payee
+                            </span>
+                            <span className="text-sm font-medium text-slate-700">
                               {group.payeeName} → {group.suggestedPayeeName}
                             </span>
                             <span
-                              className={`detail-confidence confidence-${getConfidenceLevel(group.payeeConfidence)}`}
+                              className={`ml-auto rounded px-2 py-0.5 text-[0.65rem] font-semibold ${confidenceClass(
+                                getConfidenceLevel(group.payeeConfidence)
+                              )}`}
                             >
                               {Math.round(group.payeeConfidence * 100)}%
                             </span>
                           </div>
-                          <p className="detail-rationale">{group.payeeRationale}</p>
-                          <div className="detail-actions">
+                          <p className="mt-2 text-sm text-slate-600">{group.payeeRationale}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
                             <button
-                              className="detail-btn correct"
+                              className="rounded bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                               onClick={() =>
                                 openCorrectionModal(
                                   'payee',
@@ -449,67 +527,94 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                     </div>
 
                     {/* Transactions table */}
-                    <div className="transactions-section">
-                      <table className="compact-table">
+                    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                      <table className="w-full border-collapse text-xs">
                         <thead>
                           <tr>
-                            <th>Date</th>
-                            <th>Account</th>
-                            <th>Amount</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
+                              Date
+                            </th>
+                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
+                              Account
+                            </th>
+                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
+                              Amount
+                            </th>
+                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
+                              Status
+                            </th>
+                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
+                              Actions
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {group.suggestions.map((suggestion) => (
-                            <tr
-                              key={suggestion.id}
-                              className={`status-${getStatusClass(suggestion)}`}
-                            >
-                              <td>{formatDate(suggestion.transactionDate)}</td>
-                              <td>{suggestion.transactionAccountName || '—'}</td>
-                              <td className="amount">
-                                {formatAmount(suggestion.transactionAmount)}
-                              </td>
-                              <td>
-                                <span className={`status-tag status-${getStatusClass(suggestion)}`}>
-                                  {getStatusLabel(suggestion)}
-                                </span>
-                              </td>
-                              <td className="row-actions">
-                                {suggestion.status === 'pending' && (
-                                  <button
-                                    className="btn-sm btn-approve icon-only"
-                                    onClick={() => approveSuggestionMutation.mutate(suggestion.id)}
-                                    disabled={
-                                      approveSuggestionMutation.isPending ||
-                                      !isApprovableSuggestion(suggestion)
-                                    }
-                                    title={
-                                      isApprovableSuggestion(suggestion)
-                                        ? 'Approve'
-                                        : 'No suggestion to approve'
-                                    }
-                                    aria-label="Approve"
+                          {group.suggestions.map((suggestion) => {
+                            const statusClass = getStatusClass(suggestion);
+                            return (
+                              <tr
+                                key={suggestion.id}
+                                className={`border-t border-slate-100 ${
+                                  ['approved', 'rejected', 'applied'].includes(statusClass)
+                                    ? 'opacity-50'
+                                    : ''
+                                }`}
+                              >
+                                <td className="px-3 py-2">
+                                  {formatDate(suggestion.transactionDate)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {suggestion.transactionAccountName || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono text-[0.7rem]">
+                                  {formatAmount(suggestion.transactionAmount)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span
+                                    className={`inline-flex rounded px-2 py-0.5 text-[0.65rem] font-semibold uppercase ${statusTagClass(
+                                      statusClass
+                                    )}`}
                                   >
-                                    ✓
-                                  </button>
-                                )}
-                                {(suggestion.status === 'approved' ||
-                                  suggestion.status === 'rejected') && (
-                                  <button
-                                    className="btn-sm btn-undo icon-only"
-                                    onClick={() => resetSuggestionMutation.mutate(suggestion.id)}
-                                    disabled={resetSuggestionMutation.isPending}
-                                    title="Undo"
-                                    aria-label="Undo"
-                                  >
-                                    ↩
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                                    {getStatusLabel(suggestion)}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {suggestion.status === 'pending' && (
+                                    <button
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                                      onClick={() =>
+                                        approveSuggestionMutation.mutate(suggestion.id)
+                                      }
+                                      disabled={
+                                        approveSuggestionMutation.isPending ||
+                                        !isApprovableSuggestion(suggestion)
+                                      }
+                                      title={
+                                        isApprovableSuggestion(suggestion)
+                                          ? 'Approve'
+                                          : 'No suggestion to approve'
+                                      }
+                                      aria-label="Approve"
+                                    >
+                                      ✓
+                                    </button>
+                                  )}
+                                  {(suggestion.status === 'approved' ||
+                                    suggestion.status === 'rejected') && (
+                                    <button
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-amber-500 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                                      onClick={() => resetSuggestionMutation.mutate(suggestion.id)}
+                                      disabled={resetSuggestionMutation.isPending}
+                                      title="Undo"
+                                      aria-label="Undo"
+                                    >
+                                      ↩
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -523,17 +628,25 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
       {/* Correction Modal */}
       {correctionModal && (
-        <div className="modal-overlay" onClick={() => setCorrectionModal(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Provide Correct {correctionModal.type === 'payee' ? 'Payee' : 'Category'}</h3>
-            <p className="modal-hint">
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40"
+          onClick={() => setCorrectionModal(null)}
+        >
+          <div
+            className="w-[90%] max-w-sm rounded-lg bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-slate-800">
+              Provide Correct {correctionModal.type === 'payee' ? 'Payee' : 'Category'}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
               Current suggestion: <strong>{correctionModal.currentValue}</strong>
             </p>
 
             {correctionModal.type === 'payee' ? (
               <input
                 type="text"
-                className="correction-input"
+                className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 placeholder="Enter correct payee name..."
                 value={correctionInput}
                 onChange={(e) => setCorrectionInput(e.target.value)}
@@ -541,7 +654,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               />
             ) : (
               <select
-                className="correction-select"
+                className="mt-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
                 autoFocus
@@ -559,12 +672,15 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               </select>
             )}
 
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setCorrectionModal(null)}>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                onClick={() => setCorrectionModal(null)}
+              >
                 Cancel
               </button>
               <button
-                className="btn btn-reject"
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={handleCorrectionSubmit}
                 disabled={
                   correctPayeeMutation.isPending ||
@@ -579,17 +695,17 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
         </div>
       )}
 
-      <div className="legend">
-        <span className="legend-item">
-          <span className="legend-color confidence-high"></span> ≥80%
+      <div className="mt-3 flex flex-wrap items-center gap-4 rounded-md bg-slate-100 px-3 py-2 text-[0.7rem] text-slate-500">
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-emerald-500"></span> ≥80%
         </span>
-        <span className="legend-item">
-          <span className="legend-color confidence-medium"></span> 50-79%
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-amber-400"></span> 50-79%
         </span>
-        <span className="legend-item">
-          <span className="legend-color confidence-low"></span> &lt;50%
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-rose-400"></span> &lt;50%
         </span>
-        <span className="legend-hint">Click row to expand</span>
+        <span className="text-slate-400 md:ml-auto">Click row to expand</span>
       </div>
     </div>
   );

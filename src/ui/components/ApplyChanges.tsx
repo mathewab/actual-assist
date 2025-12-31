@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type ApprovedChange } from '../services/api';
 import { ProgressBar } from './ProgressBar';
-import './ApplyChanges.css';
 
 interface ApplyChangesProps {
   budgetId: string;
@@ -94,8 +93,8 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
 
   if (isLoading) {
     return (
-      <div className="apply-changes">
-        <h2>Apply Changes</h2>
+      <div className="mx-auto w-full max-w-[1200px] p-5">
+        <h2 className="text-lg font-semibold text-slate-800">Apply Changes</h2>
         <ProgressBar message="Loading approved suggestions..." />
       </div>
     );
@@ -103,43 +102,50 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
 
   if (error) {
     return (
-      <div className="apply-changes">
-        <h2>Apply Changes</h2>
-        <div className="error">Error: {error.message}</div>
+      <div className="mx-auto w-full max-w-[1200px] p-5">
+        <h2 className="text-lg font-semibold text-slate-800">Apply Changes</h2>
+        <div className="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          Error: {error.message}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="apply-changes">
-      <div className="apply-header">
-        <h2>Apply Changes</h2>
-        <button className="btn btn-refresh" onClick={() => refetch()}>
+    <div className="mx-auto w-full max-w-[1200px] p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-800">Apply Changes</h2>
+        <button
+          className="rounded-md border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+          onClick={() => refetch()}
+        >
           ↻ Refresh
         </button>
       </div>
 
       {changes.length === 0 ? (
-        <div className="empty-state">
+        <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
           <p>No approved suggestions to apply</p>
-          <p className="hint">Approve suggestions in the Review tab first</p>
+          <p className="mt-2 text-xs text-slate-400">Approve suggestions in the Review tab first</p>
         </div>
       ) : (
         <>
-          <div className="summary-bar">
-            <span className="summary-count">
+          <div className="mb-3 flex items-center gap-3 rounded-md bg-slate-100 px-4 py-3 text-sm text-slate-700">
+            <span>
               <strong>{selectedChanges.length}</strong> of {changes.length} selected
             </span>
             {excludedIds.size > 0 && (
-              <span className="summary-excluded">({excludedIds.size} excluded)</span>
+              <span className="text-xs font-medium text-amber-700">
+                ({excludedIds.size} excluded)
+              </span>
             )}
           </div>
 
-          <div className="changes-table-container">
-            <table className="changes-table">
+          <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
-                  <th className="checkbox-col">
+                  <th className="w-10 whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
                     <input
                       type="checkbox"
                       checked={excludedIds.size === 0}
@@ -151,13 +157,24 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
                       }}
                       onChange={toggleAll}
                       title={excludedIds.size === 0 ? 'Deselect all' : 'Select all'}
+                      className="h-4 w-4 cursor-pointer accent-blue-600"
                     />
                   </th>
-                  <th>Date</th>
-                  <th>Payee</th>
-                  <th>Amount</th>
-                  <th>Account</th>
-                  <th>Category</th>
+                  <th className="whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
+                    Date
+                  </th>
+                  <th className="whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
+                    Payee
+                  </th>
+                  <th className="whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
+                    Amount
+                  </th>
+                  <th className="whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
+                    Account
+                  </th>
+                  <th className="whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
+                    Category
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -166,35 +183,54 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
                   return (
                     <tr
                       key={change.suggestionId}
-                      className={isExcluded ? 'excluded' : ''}
+                      className={[
+                        'cursor-pointer transition',
+                        isExcluded
+                          ? 'bg-slate-50 opacity-60 hover:bg-slate-100'
+                          : 'hover:bg-slate-50',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                       onClick={() => toggleExclude(change.suggestionId)}
                     >
-                      <td className="checkbox-col" onClick={(e) => e.stopPropagation()}>
+                      <td
+                        className="w-10 border-b border-slate-100 px-3 py-2 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <input
                           type="checkbox"
                           checked={!isExcluded}
                           onChange={() => toggleExclude(change.suggestionId)}
+                          className="h-4 w-4 cursor-pointer accent-blue-600"
                         />
                       </td>
-                      <td>{formatDate(change.transactionDate)}</td>
-                      <td className="payee-cell">
+                      <td className="border-b border-slate-100 px-3 py-2">
+                        {formatDate(change.transactionDate)}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-2 font-medium text-slate-800">
                         {change.transactionPayee || '—'}
                         {change.hasPayeeChange && change.proposedPayeeName && (
-                          <span className="inline-change">
-                            <span className="arrow">→</span>
-                            <span className="to-value payee-chip">{change.proposedPayeeName}</span>
+                          <span className="ml-2 inline-flex items-center gap-1 text-xs">
+                            <span className="font-semibold text-blue-600">→</span>
+                            <span className="rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                              {change.proposedPayeeName}
+                            </span>
                           </span>
                         )}
                       </td>
-                      <td className="amount-cell">{formatAmount(change.transactionAmount)}</td>
-                      <td>{change.transactionAccountName || '—'}</td>
-                      <td>
-                        <span className="from-value">
+                      <td className="border-b border-slate-100 px-3 py-2 font-mono text-xs">
+                        {formatAmount(change.transactionAmount)}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-2">
+                        {change.transactionAccountName || '—'}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-2">
+                        <span className="text-xs text-slate-500">
                           {change.currentCategoryName || 'Uncategorized'}
                         </span>
-                        <span className="inline-change">
-                          <span className="arrow">→</span>
-                          <span className="to-value category-chip">
+                        <span className="ml-2 inline-flex items-center gap-1 text-xs">
+                          <span className="font-semibold text-blue-600">→</span>
+                          <span className="rounded bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
                             {change.proposedCategoryName || change.proposedCategoryId}
                           </span>
                         </span>
@@ -206,9 +242,9 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
             </table>
           </div>
 
-          <div className="apply-actions">
+          <div className="mt-4">
             <button
-              className="btn btn-apply"
+              className="w-full rounded-md bg-emerald-500 px-6 py-3 text-base font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-400"
               onClick={handleApply}
               disabled={applyMutation.isPending || selectedChanges.length === 0}
             >
@@ -223,13 +259,15 @@ export function ApplyChanges({ budgetId }: ApplyChangesProps) {
           {applyMutation.isPending && <ProgressBar message="Starting apply job..." />}
 
           {applyMutation.isSuccess && (
-            <div className="success-message">
+            <div className="mt-4 rounded-md bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700">
               ✓ Apply job started. Track progress in the job center.
             </div>
           )}
 
           {applyMutation.error && (
-            <div className="error">Failed to apply changes: {applyMutation.error.message}</div>
+            <div className="mt-4 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              Failed to apply changes: {applyMutation.error.message}
+            </div>
           )}
         </>
       )}

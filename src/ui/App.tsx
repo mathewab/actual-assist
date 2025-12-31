@@ -8,7 +8,6 @@ import { History } from './components/History';
 import { Audit } from './components/Audit';
 import { TemplateStudio } from './components/TemplateStudio';
 import type { Budget } from './services/api';
-import './App.css';
 
 /**
  * Main App component
@@ -23,14 +22,14 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <div className="app">
+      <div className="flex min-h-screen flex-col bg-slate-100">
         <Header budgetName={selectedBudget?.name} budgetId={selectedBudget?.id} />
 
-        <div className="app-content">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-5 py-5">
           <BudgetSelector selectedBudget={selectedBudget} onBudgetSelect={handleBudgetSelect} />
 
           {selectedBudget ? (
-            <main className="app-main">
+            <main className="min-h-[400px] rounded-lg bg-white shadow-sm">
               <Routes>
                 <Route path="/" element={<SuggestionList budgetId={selectedBudget.id} />} />
                 <Route path="/apply" element={<ApplyChanges budgetId={selectedBudget.id} />} />
@@ -44,7 +43,7 @@ export function App() {
               </Routes>
             </main>
           ) : (
-            <main className="app-main app-main--empty">
+            <main className="flex min-h-[400px] items-center justify-center rounded-lg bg-white px-6 py-10 text-sm text-slate-500 shadow-sm">
               <p>Please select a budget to get started.</p>
             </main>
           )}

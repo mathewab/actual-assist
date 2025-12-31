@@ -1,7 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Budget } from '../services/api';
-import './BudgetSelector.css';
 
 interface BudgetSelectorProps {
   selectedBudget: Budget | null;
@@ -64,8 +63,8 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
 
   if (loading) {
     return (
-      <div className="budget-selector budget-selector--loading">
-        <span className="budget-selector__spinner"></span>
+      <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-50 px-4 py-4 text-sm text-slate-500">
+        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-blue-500" />
         Loading budgets...
       </div>
     );
@@ -73,25 +72,29 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
 
   if (error) {
     return (
-      <div className="budget-selector budget-selector--error">
-        <span className="budget-selector__error-icon">⚠️</span>
+      <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-50 px-4 py-4 text-sm text-amber-700">
+        <span aria-hidden="true">⚠️</span>
         {error}
       </div>
     );
   }
 
   if (budgets.length === 0) {
-    return <div className="budget-selector budget-selector--empty">No budgets available</div>;
+    return (
+      <div className="flex items-center justify-center rounded-lg bg-slate-50 px-4 py-4 text-sm text-slate-500">
+        No budgets available
+      </div>
+    );
   }
 
   return (
-    <div className="budget-selector">
-      <label htmlFor="budget-select" className="budget-selector__label">
+    <div className="flex flex-col gap-3 rounded-lg bg-slate-50 p-4 sm:flex-row sm:items-center">
+      <label htmlFor="budget-select" className="min-w-fit font-semibold text-slate-600">
         Budget:
       </label>
       <select
         id="budget-select"
-        className="budget-selector__select"
+        className="w-full max-w-full flex-1 rounded-md border border-slate-300 bg-white px-4 py-2 text-base shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200 sm:max-w-[400px]"
         value={selectedBudget?.id || ''}
         onChange={handleChange}
       >
@@ -106,7 +109,7 @@ export function BudgetSelector({ selectedBudget, onBudgetSelect }: BudgetSelecto
       </select>
       <button
         type="button"
-        className="budget-sync-button"
+        className="whitespace-nowrap rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         onClick={() => syncJobMutation.mutate()}
         disabled={!selectedBudget?.id || syncJobMutation.isPending}
       >

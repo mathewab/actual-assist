@@ -29,6 +29,20 @@ type ActualCategoryGroup = {
   is_income?: boolean;
 };
 
+type ActualCategoryRow = {
+  id: string;
+  name?: string | null;
+  group_id?: string | null;
+  goal_def?: string | null;
+  template_settings?: unknown;
+  hidden?: boolean;
+};
+
+type ActualCategoryGroupRow = {
+  id: string;
+  name?: string | null;
+};
+
 type ActualTransaction = {
   id: string;
   date: string;
@@ -40,12 +54,84 @@ type ActualTransaction = {
   transfer_id?: string | null;
 };
 
+type ActualSchedule = {
+  id: string;
+  name?: string | null;
+  tombstone?: boolean;
+};
+
 function isVisibleNamedCategory(cat: ActualCategory): cat is ActualCategory & { name: string } {
   return !cat.hidden && Boolean(cat.id) && typeof cat.name === 'string';
 }
 
 function isNamedPayee(payee: ActualPayee): payee is ActualPayee & { name: string } {
   return typeof payee.name === 'string';
+}
+
+type TemplateRecord = Record<string, unknown>;
+
+export interface CategoryTemplateSummary {
+  id: string;
+  name: string;
+  groupId: string;
+  groupName: string;
+  templates: TemplateRecord[];
+  renderedNote: string;
+  note: string | null;
+  source: string | null;
+  parseError: string | null;
+}
+
+function parseTemplateSettingsSource(settings: unknown): string | null {
+  if (!settings) {
+    return null;
+  }
+
+  if (typeof settings === 'string') {
+    try {
+      const parsed = JSON.parse(settings);
+      if (parsed && typeof parsed === 'object' && 'source' in parsed) {
+        const source = (parsed as { source?: unknown }).source;
+        return typeof source === 'string' ? source : null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof settings === 'object' && settings !== null && 'source' in settings) {
+    const source = (settings as { source?: unknown }).source;
+    return typeof source === 'string' ? source : null;
+  }
+
+  return null;
+}
+
+function parseGoalDef(goalDef: unknown): {
+  templates: TemplateRecord[];
+  parseError: string | null;
+} {
+  if (!goalDef) {
+    return { templates: [], parseError: null };
+  }
+
+  if (Array.isArray(goalDef)) {
+    return { templates: goalDef as TemplateRecord[], parseError: null };
+  }
+
+  if (typeof goalDef === 'string') {
+    try {
+      const parsed = JSON.parse(goalDef);
+      if (Array.isArray(parsed)) {
+        return { templates: parsed as TemplateRecord[], parseError: null };
+      }
+      return { templates: [], parseError: 'goal_def is not an array' };
+    } catch {
+      return { templates: [], parseError: 'Failed to parse goal_def JSON' };
+    }
+  }
+
+  return { templates: [], parseError: 'Unsupported goal_def format' };
 }
 
 /**
@@ -192,6 +278,168 @@ export class ActualBudgetAdapter {
   }
 
   /**
+   * List categories with template data and notes
+   */
+  async listCategoryTemplates(): Promise<CategoryTemplateSummary[]> {
+    this.ensureInitialized();
+
+    if (!api.internal?.send || !api.q || !api.aqlQuery) {
+      throw new ActualBudgetError('Actual Budget internal API unavailable');
+    }
+
+    try {
+      await api.internal.send('budget/store-note-templates', null);
+
+      const [categoryResult, groupResult] = await Promise.all([
+        api.aqlQuery(api.q('categories').select('*')),
+        api.aqlQuery(api.q('category_groups').select('*')),
+      ]);
+
+      const categories = (categoryResult.data as ActualCategoryRow[]).filter(
+        (category) => !category.hidden && category.name
+      );
+      const categoryGroups = groupResult.data as ActualCategoryGroupRow[];
+      const categoryIds = categories.map((category) => category.id);
+      const notesResult = categoryIds.length
+        ? await api.aqlQuery(
+            api
+              .q('notes')
+              .filter({ id: { $oneof: categoryIds } })
+              .select('*')
+          )
+        : { data: [] as Array<{ id: string; note?: string | null }> };
+      const notesMap = new Map<string, string | null>(
+        (notesResult.data as Array<{ id: string; note?: string | null }>).map((note) => [
+          note.id,
+          note.note ?? null,
+        ])
+      );
+      const groupMap = new Map(categoryGroups.map((group) => [group.id, group.name || 'Unknown']));
+      const categoryGroupNameMap = new Map<string, string>();
+      try {
+        const categorized = await this.getCategories();
+        categorized.forEach((category) => {
+          categoryGroupNameMap.set(category.id, category.groupName || 'Unknown');
+        });
+      } catch {
+        // Fallback to group map when category lookup fails
+      }
+
+      const templateSummaries: CategoryTemplateSummary[] = [];
+
+      for (const category of categories) {
+        const { templates, parseError } = parseGoalDef(category.goal_def);
+        const renderedNote =
+          templates.length > 0
+            ? await api.internal.send('budget/render-note-templates', templates)
+            : '';
+
+        templateSummaries.push({
+          id: category.id,
+          name: category.name || 'Unnamed',
+          groupId: category.group_id || 'unknown',
+          groupName:
+            categoryGroupNameMap.get(category.id) ||
+            groupMap.get(category.group_id || '') ||
+            'Unknown',
+          templates,
+          renderedNote,
+          note: notesMap.get(category.id) ?? null,
+          source: parseTemplateSettingsSource(category.template_settings),
+          parseError,
+        });
+      }
+
+      return templateSummaries.sort((a, b) => {
+        const groupCompare = a.groupName.localeCompare(b.groupName);
+        if (groupCompare !== 0) {
+          return groupCompare;
+        }
+        return a.name.localeCompare(b.name);
+      });
+    } catch (error) {
+      throw new ActualBudgetError('Failed to load category templates', { error });
+    }
+  }
+
+  /**
+   * Render template objects back into note lines
+   */
+  async renderNoteTemplates(templates: TemplateRecord[]): Promise<string> {
+    this.ensureInitialized();
+
+    if (!api.internal?.send) {
+      throw new ActualBudgetError('Actual Budget internal API unavailable');
+    }
+
+    try {
+      return await api.internal.send('budget/render-note-templates', templates);
+    } catch (error) {
+      throw new ActualBudgetError('Failed to render note templates', { error });
+    }
+  }
+
+  /**
+   * Fetch a single category note
+   */
+  async getCategoryNote(categoryId: string): Promise<string | null> {
+    this.ensureInitialized();
+
+    if (!api.q || !api.aqlQuery) {
+      throw new ActualBudgetError('Actual Budget internal API unavailable');
+    }
+
+    try {
+      const result = await api.aqlQuery(api.q('notes').filter({ id: categoryId }).select('*'));
+      const note = result.data?.[0]?.note;
+      return typeof note === 'string' ? note : null;
+    } catch (error) {
+      throw new ActualBudgetError('Failed to fetch category note', { categoryId, error });
+    }
+  }
+
+  /**
+   * Update category notes
+   */
+  async updateCategoryNote(categoryId: string, note: string | null): Promise<void> {
+    this.ensureInitialized();
+
+    if (!api.internal?.send) {
+      throw new ActualBudgetError('Actual Budget internal API unavailable');
+    }
+
+    try {
+      await api.internal.send('notes-save', { id: categoryId, note });
+    } catch (error) {
+      throw new ActualBudgetError('Failed to update category notes', {
+        categoryId,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Check templates based on current notes
+   */
+  async checkTemplates(): Promise<{ message: string; pre?: string | null }> {
+    this.ensureInitialized();
+
+    if (!api.internal?.send) {
+      throw new ActualBudgetError('Actual Budget internal API unavailable');
+    }
+
+    try {
+      const result = (await api.internal.send('budget/check-templates', null)) as {
+        message: string;
+        pre?: string;
+      };
+      return { message: result.message, pre: result.pre ?? null };
+    } catch (error) {
+      throw new ActualBudgetError('Failed to check templates', { error });
+    }
+  }
+
+  /**
    * Update transaction category
    * P7 (Explicit error handling): Wraps API call with error context
    */
@@ -293,6 +541,27 @@ export class ActualBudgetAdapter {
         .map((p) => ({ id: p.id, name: p.name }));
     } catch (error) {
       throw new ActualBudgetError('Failed to fetch payees', { error });
+    }
+  }
+
+  /**
+   * Get active schedule names from the budget
+   */
+  async getSchedules(): Promise<{ id: string; name: string }[]> {
+    this.ensureInitialized();
+
+    try {
+      const schedules = (await api.getSchedules()) as ActualSchedule[];
+      return schedules
+        .filter(
+          (schedule): schedule is ActualSchedule & { id: string; name: string } =>
+            typeof schedule.id === 'string' &&
+            typeof schedule.name === 'string' &&
+            !schedule.tombstone
+        )
+        .map((schedule) => ({ id: schedule.id, name: schedule.name }));
+    } catch (error) {
+      throw new ActualBudgetError('Failed to fetch schedules', { error });
     }
   }
 

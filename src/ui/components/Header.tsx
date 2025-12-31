@@ -13,6 +13,7 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
   const isSuggestionsSection =
     location.pathname === '/' || location.pathname.startsWith('/history');
   const isSystemSection = location.pathname.startsWith('/audit');
+  const isTemplatesSection = location.pathname.startsWith('/templates');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement | null>(null);
 
@@ -96,6 +97,20 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Audit Log
+              </NavLink>
+            </div>
+          </div>
+          <div className={`nav-menu ${isTemplatesSection ? 'active' : ''}`}>
+            <button type="button" className="nav-trigger" aria-haspopup="menu">
+              Budget <span className="nav-caret">▾</span>
+            </button>
+            <div className="nav-dropdown" role="menu">
+              <NavLink
+                to="/templates"
+                className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Templates
               </NavLink>
             </div>
           </div>

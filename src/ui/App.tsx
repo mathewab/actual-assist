@@ -6,6 +6,7 @@ import { SuggestionList } from './components/SuggestionList';
 import { ApplyChanges } from './components/ApplyChanges';
 import { History } from './components/History';
 import { Audit } from './components/Audit';
+import { TemplateStudio } from './components/TemplateStudio';
 import type { Budget } from './services/api';
 import './App.css';
 
@@ -35,6 +36,10 @@ export function App() {
                 <Route path="/apply" element={<ApplyChanges budgetId={selectedBudget.id} />} />
                 <Route path="/history" element={<History budgetId={selectedBudget.id} />} />
                 <Route path="/audit" element={<Audit />} />
+                <Route
+                  path="/templates"
+                  element={<TemplateStudio budgetId={selectedBudget.id} />}
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>

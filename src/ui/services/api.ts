@@ -16,6 +16,22 @@ export interface Category {
   groupName?: string;
 }
 
+export interface CategoryTemplateSummary {
+  id: string;
+  name: string;
+  groupName: string;
+  templates: Record<string, unknown>[];
+  renderedNote: string;
+  note: string | null;
+  source: string | null;
+  parseError: string | null;
+}
+
+export interface ScheduleSummary {
+  id: string;
+  name: string;
+}
+
 export interface Payee {
   id: string;
   name: string;
@@ -178,6 +194,74 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to get categories');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * List category goal templates parsed from notes
+   */
+  async listCategoryTemplates(): Promise<{ templates: CategoryTemplateSummary[] }> {
+    const response = await fetch(`${API_BASE}/budgets/templates`);
+
+    if (!response.ok) {
+      throw new Error('Failed to get templates');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * List schedule names for template suggestions
+   */
+  async listSchedules(): Promise<{ schedules: ScheduleSummary[] }> {
+    const response = await fetch(`${API_BASE}/budgets/schedules`);
+
+    if (!response.ok) {
+      throw new Error('Failed to get schedules');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Render template objects into note strings
+   */
+  async renderNoteTemplates(templates: Record<string, unknown>[]): Promise<{ rendered: string }> {
+    const response = await fetch(`${API_BASE}/budgets/templates/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templates }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to render templates');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Apply rendered note to category and optionally sync
+   */
+  async applyCategoryNote(
+    categoryId: string,
+    note: string | null,
+    sync: boolean
+  ): Promise<{
+    check: { message: string; pre?: string | null };
+    synced: boolean;
+    rolledBack: boolean;
+  }> {
+    const response = await fetch(`${API_BASE}/budgets/templates/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoryId, note, sync }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to apply template notes');
     }
 
     return response.json();

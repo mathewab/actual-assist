@@ -119,6 +119,12 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     select: (approved) => approved.changes.length,
   });
 
+  const { data: uncategorizedData, isLoading: isUncategorizedLoading } = useQuery({
+    queryKey: ['uncategorized', budgetId],
+    queryFn: () => api.getUncategorizedTransactions(budgetId),
+    enabled: !!budgetId,
+  });
+
   // Fetch categories for the dropdown
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
@@ -126,6 +132,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const categories = categoriesData?.categories || [];
+  const uncategorizedCount = uncategorizedData?.transactions.length ?? 0;
 
   // Group categories by group name for better UX
   const groupedCategories = categories.reduce(
@@ -322,15 +329,21 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               </Badge>
             </Button>
           )}
-          <Button
-            variant="contained"
-            color="warning"
-            size="small"
-            onClick={() => suggestionsJobMutation.mutate()}
-            disabled={suggestionsJobMutation.isPending}
-          >
-            {suggestionsJobMutation.isPending ? 'Starting generation...' : 'Generate'}
-          </Button>
+          {(isUncategorizedLoading || uncategorizedCount > 0) && (
+            <Button
+              variant="contained"
+              color="warning"
+              size="small"
+              onClick={() => suggestionsJobMutation.mutate()}
+              disabled={
+                suggestionsJobMutation.isPending ||
+                isUncategorizedLoading ||
+                uncategorizedCount === 0
+              }
+            >
+              {suggestionsJobMutation.isPending ? 'Starting generation...' : 'Generate (AI)'}
+            </Button>
+          )}
         </Stack>
       </Box>
 
@@ -340,7 +353,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
       {suggestionsJobMutation.error && (
         <Alert severity="error" variant="outlined" sx={{ mb: 2 }}>
-          Generate failed: {suggestionsJobMutation.error.message}
+          Generate (AI) failed: {suggestionsJobMutation.error.message}
         </Alert>
       )}
 
@@ -350,10 +363,14 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           sx={{ px: 4, py: 6, textAlign: 'center', bgcolor: 'background.default' }}
         >
           <Typography variant="body2" color="text.secondary">
-            No suggestions available
+            {uncategorizedCount === 0
+              ? 'No uncategorized transactions found'
+              : 'No suggestions available yet'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Click &quot;Generate&quot; to fetch new suggestions
+            {uncategorizedCount === 0
+              ? 'All transactions are categorized.'
+              : 'Click "Generate (AI)" to request new suggestions'}
           </Typography>
         </Paper>
       ) : (
@@ -517,7 +534,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                             {group.hasCategorySuggestion
                               ? group.categoryRationale
-                              : 'No suggestion yet. Generate or correct to proceed.'}
+                              : 'No suggestion yet. Generate (AI) or correct to proceed.'}
                           </Typography>
                           <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
                             <Button
@@ -544,7 +561,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                 ? 'Working...'
                                 : group.hasCategorySuggestion
                                   ? 'Retry'
-                                  : 'Generate'}
+                                  : 'Generate (AI)'}
                             </Button>
                             <Button
                               size="small"
@@ -845,26 +862,30 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
         </DialogActions>
       </Dialog>
 
-      <Divider sx={{ my: 2 }} />
-      <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default' }}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'success.main' }} />
-            <Typography variant="caption">≥80%</Typography>
-          </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'warning.main' }} />
-            <Typography variant="caption">50-79%</Typography>
-          </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'error.main' }} />
-            <Typography variant="caption">&lt;50%</Typography>
-          </Stack>
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-            Click row to expand
-          </Typography>
-        </Stack>
-      </Paper>
+      {payeeGroups.length > 0 && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default' }}>
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'success.main' }} />
+                <Typography variant="caption">≥80%</Typography>
+              </Stack>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'warning.main' }} />
+                <Typography variant="caption">50-79%</Typography>
+              </Stack>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'error.main' }} />
+                <Typography variant="caption">&lt;50%</Typography>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                Click row to expand
+              </Typography>
+            </Stack>
+          </Paper>
+        </>
+      )}
     </Box>
   );
 }

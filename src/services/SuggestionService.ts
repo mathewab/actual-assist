@@ -117,6 +117,19 @@ export class SuggestionService {
       logger.info('Cleaned up orphaned suggestions for deleted transactions', { count: cleanedUp });
     }
 
+    const uncategorizedTransactionIds = new Set(
+      transactions.filter((txn) => txn.categoryId === null && !txn.isTransfer).map((txn) => txn.id)
+    );
+    const resolvedCleaned = this.suggestionRepo.cleanupResolvedSuggestions(
+      budgetId,
+      uncategorizedTransactionIds
+    );
+    if (resolvedCleaned > 0) {
+      logger.info('Cleaned up resolved suggestions for categorized transactions', {
+        count: resolvedCleaned,
+      });
+    }
+
     // Get existing pending suggestion transaction IDs for deduplication
     // (excluding retryable ones which will be regenerated)
     const existingPendingTxIds = this.suggestionRepo.getExistingPendingTransactionIds(budgetId);
@@ -1087,10 +1100,23 @@ ${categoryList}`;
    * Get all suggestions for a budget
    */
   async getSuggestionsByBudgetId(budgetId: string): Promise<Suggestion[]> {
+    const transactions = await this.actualBudget.getTransactions();
+    const uncategorizedTransactionIds = new Set(
+      transactions.filter((txn) => txn.categoryId === null && !txn.isTransfer).map((txn) => txn.id)
+    );
+    const resolvedCleaned = this.suggestionRepo.cleanupResolvedSuggestions(
+      budgetId,
+      uncategorizedTransactionIds
+    );
+    if (resolvedCleaned > 0) {
+      logger.info('Cleaned up resolved suggestions for categorized transactions', {
+        count: resolvedCleaned,
+      });
+    }
+
     const suggestions = this.suggestionRepo.findByBudgetId(budgetId);
     const existingTxIds = new Set(suggestions.map((s) => s.transactionId));
 
-    const transactions = await this.actualBudget.getTransactions();
     const uncategorized = transactions.filter(
       (txn) => txn.categoryId === null && !txn.isTransfer && !existingTxIds.has(txn.id)
     );

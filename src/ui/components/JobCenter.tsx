@@ -67,9 +67,9 @@ function formatJobType(type: Job['type']): string {
     case 'budget_sync':
       return 'Sync Budget';
     case 'suggestions_generate':
-      return 'Generate Suggestions';
+      return 'Generate Suggestions (AI)';
     case 'sync_and_suggest':
-      return 'Sync & Generate';
+      return 'Sync & Generate (AI)';
     case 'suggestions_retry_payee':
       return 'Retry Suggestions';
     case 'suggestions_apply':
@@ -79,7 +79,7 @@ function formatJobType(type: Job['type']): string {
     case 'snapshot_redownload':
       return 'Redownload Snapshot';
     case 'scheduled_sync_and_suggest':
-      return 'Scheduled Sync & Generate';
+      return 'Scheduled Sync & Generate (AI)';
     default:
       return type;
   }

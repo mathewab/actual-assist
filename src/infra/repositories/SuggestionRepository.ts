@@ -462,6 +462,41 @@ export class SuggestionRepository {
   }
 
   /**
+   * Delete suggestions for transactions that are no longer uncategorized
+   * Keeps applied suggestions for history
+   */
+  cleanupResolvedSuggestions(budgetId: string, uncategorizedTransactionIds: Set<string>): number {
+    const rows = this.db.query<{ id: string; transaction_id: string }>(
+      `SELECT id, transaction_id FROM suggestions WHERE budget_id = ? AND status != 'applied'`,
+      [budgetId]
+    );
+
+    const resolvedIds = rows
+      .filter((row) => !uncategorizedTransactionIds.has(row.transaction_id))
+      .map((row) => row.id);
+
+    if (resolvedIds.length === 0) {
+      return 0;
+    }
+
+    const placeholders = resolvedIds.map(() => '?').join(',');
+    const deleteCount = this.db.execute(
+      `DELETE FROM suggestions WHERE id IN (${placeholders})`,
+      resolvedIds
+    );
+
+    logger.info('Cleaned up resolved suggestions', {
+      budgetId,
+      deletedCount: deleteCount,
+      resolvedTransactionIds: rows
+        .filter((row) => !uncategorizedTransactionIds.has(row.transaction_id))
+        .map((row) => row.transaction_id),
+    });
+
+    return deleteCount;
+  }
+
+  /**
    * Map database row to Suggestion entity
    * Handles both new schema and legacy schema for backward compatibility
    * P2 (Zero duplication): Single mapping function

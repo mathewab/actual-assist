@@ -6,12 +6,14 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
-import Popover from '@mui/material/Popover';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { api, getJobEventsStreamUrl, type Job } from '../services/api';
 
 interface JobCenterProps {
@@ -100,13 +102,15 @@ function sortJobsByCreatedAt(items: Job[]): Job[] {
 }
 
 export function JobCenter({ budgetId }: JobCenterProps) {
-  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastRef = useRef<ToastState | null>(null);
   const lastActiveJobIdRef = useRef<string | null>(null);
   const toastHideTimeoutRef = useRef<number | null>(null);
   const completedToastUntilRef = useRef<number | null>(null);
   const hasBudget = Boolean(budgetId);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const setToastState = useCallback((next: ToastState | null) => {
     toastRef.current = next;
@@ -268,7 +272,7 @@ export function JobCenter({ budgetId }: JobCenterProps) {
   const runningCount = activeJobs.length;
   const historyJobs = jobs.slice(0, 10);
   const showToast = hasBudget && !isLoading && toast;
-  const isHistoryVisible = Boolean(anchorEl);
+  const isHistoryVisible = drawerOpen;
 
   const toastLabel = toast
     ? `${formatJobType(toast.job.type)} job ${
@@ -297,7 +301,8 @@ export function JobCenter({ budgetId }: JobCenterProps) {
         aria-expanded={isHistoryVisible}
         onClick={(event) => {
           if (!hasBudget) return;
-          setAnchorEl((prev) => (prev ? null : event.currentTarget));
+          event.stopPropagation();
+          setDrawerOpen((prev) => !prev);
         }}
         sx={{
           width: 40,
@@ -378,24 +383,20 @@ export function JobCenter({ budgetId }: JobCenterProps) {
         </Alert>
       </Snackbar>
 
-      <Popover
+      <Drawer
+        anchor={isMobile ? 'bottom' : 'right'}
         open={isHistoryVisible}
-        anchorEl={anchorEl}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        onClose={() => setDrawerOpen(false)}
         PaperProps={{
           sx: {
-            mt: 1.5,
-            width: 360,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
+            width: { xs: '100%', sm: 380 },
+            maxHeight: { xs: '85vh', sm: '100%' },
+            borderRadius: { xs: '16px 16px 0 0', sm: 0 },
             p: 2,
           },
         }}
       >
-        <Stack spacing={2}>
+        <Stack spacing={2} sx={{ height: '100%' }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Box>
               <Typography variant="subtitle2" fontWeight={600}>
@@ -405,7 +406,7 @@ export function JobCenter({ budgetId }: JobCenterProps) {
                 Latest activity
               </Typography>
             </Box>
-            <Button size="small" variant="outlined" onClick={() => setAnchorEl(null)}>
+            <Button size="small" variant="outlined" onClick={() => setDrawerOpen(false)}>
               Close
             </Button>
           </Stack>
@@ -427,7 +428,7 @@ export function JobCenter({ budgetId }: JobCenterProps) {
           )}
 
           {!isLoading && !error && historyJobs.length > 0 && (
-            <Stack spacing={1} sx={{ maxHeight: 360, overflowY: 'auto' }}>
+            <Stack spacing={1} sx={{ flex: 1, overflowY: 'auto', pr: 0.5 }}>
               {historyJobs.map((job) => (
                 <Paper
                   key={job.id}
@@ -470,7 +471,7 @@ export function JobCenter({ budgetId }: JobCenterProps) {
             </Stack>
           )}
         </Stack>
-      </Popover>
+      </Drawer>
     </Box>
   );
 }

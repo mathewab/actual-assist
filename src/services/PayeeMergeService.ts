@@ -90,14 +90,23 @@ export class PayeeMergeService {
     const aiMinClusterSize = Math.max(2, options.aiMinClusterSize ?? 5);
 
     try {
+      const payees = await this.actualBudget.getPayees();
+      const payeeHash = computePayeeHash(payees);
+
+      if (!options.force) {
+        const cachedMeta = this.clusterMetaRepo.getByBudgetId(options.budgetId);
+        const cachedClusters = this.clusterRepo.listByBudgetId(options.budgetId);
+        if (cachedMeta?.payeeHash === payeeHash && cachedClusters.length > 0) {
+          return cachedClusters;
+        }
+      }
+
       if (options.force) {
         this.clusterRepo.clearByBudgetId(options.budgetId);
         this.clusterMetaRepo.clearByBudgetId(options.budgetId);
         this.hiddenGroupRepo.clearByBudgetId(options.budgetId);
       }
 
-      const payees = await this.actualBudget.getPayees();
-      const payeeHash = computePayeeHash(payees);
       const unionFind = new UnionFind(payees.map((payee) => payee.id));
       const normalized = new Map<string, string>();
       const tokenSet = new Map<string, string>();

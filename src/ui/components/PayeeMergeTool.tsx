@@ -6,7 +6,10 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Checkbox from '@mui/material/Checkbox';
 import Drawer from '@mui/material/Drawer';
-import FormControlLabel from '@mui/material/FormControlLabel';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
@@ -18,7 +21,6 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import Switch from '@mui/material/Switch';
 import { api, type PayeeMergeCluster } from '../services/api';
 import { loadPayeeMergeSettings } from '../services/payeeMergeSettings';
 
@@ -29,7 +31,7 @@ interface PayeeMergeToolProps {
 export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   const queryClient = useQueryClient();
   const [settings] = useState(loadPayeeMergeSettings());
-  const [forceRegenerate, setForceRegenerate] = useState(false);
+  const [forceDialogOpen, setForceDialogOpen] = useState(false);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [pendingClusterId, setPendingClusterId] = useState<string | null>(null);
   const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
@@ -52,17 +54,16 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   });
 
   const generateMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (force: boolean) =>
       api.createPayeeMergeSuggestionsJob(
         budgetId,
         settings.minScore,
         settings.useAI,
-        forceRegenerate,
+        force,
         settings.aiMinClusterSize
       ),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
-      setForceRegenerate(false);
       if (result?.job?.id) {
         if (result.job.completedAt) {
           setPendingJobId(null);
@@ -90,6 +91,8 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
     },
     onError: () => {
       if (!pendingJobId) return;
+      setPendingJobId(null);
+      queryClient.invalidateQueries({ queryKey: ['payee-merge-suggestions'] });
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
   });
@@ -102,6 +105,12 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
     onSuccess: (response) => {
       if (!pendingJobId) return;
       const job = response.jobs.find((item) => item.id === pendingJobId);
+      if (!job) {
+        setPendingJobId(null);
+        queryClient.invalidateQueries({ queryKey: ['payee-merge-suggestions'] });
+        queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
+        return;
+      }
       if (job && (job.completedAt || job.status === 'succeeded' || job.status === 'failed')) {
         setPendingJobId(null);
         queryClient.invalidateQueries({ queryKey: ['payee-merge-suggestions'] });
@@ -201,17 +210,6 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
               Min score {settings.minScore} • AI {settings.useAI ? 'on' : 'off'} • AI min cluster{' '}
               {settings.aiMinClusterSize}
             </Typography>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={forceRegenerate}
-                  onChange={(event) => setForceRegenerate(event.target.checked)}
-                  size="small"
-                />
-              }
-              label="Force regenerate"
-              sx={{ m: 0 }}
-            />
             <Button
               variant="outlined"
               onClick={() =>
@@ -223,7 +221,13 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
             </Button>
             <Button
               variant="contained"
-              onClick={() => generateMutation.mutate()}
+              onClick={() => {
+                if (!isCacheStale && clusters.length > 0) {
+                  setForceDialogOpen(true);
+                  return;
+                }
+                generateMutation.mutate(false);
+              }}
               disabled={generateMutation.isPending}
               fullWidth={isSmall}
             >
@@ -461,6 +465,27 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
           </Paper>
         )}
       </Stack>
+      <Dialog open={forceDialogOpen} onClose={() => setForceDialogOpen(false)}>
+        <DialogTitle>Suggestions are already up to date</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Your payees have not changed since the last generate. Do you want to force regeneration
+            anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setForceDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setForceDialogOpen(false);
+              generateMutation.mutate(true);
+            }}
+          >
+            Force generate
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Drawer
         anchor="right"
         open={Boolean(activeClusterId)}

@@ -74,6 +74,11 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
               root: { textTransform: 'none', fontWeight: 600 },
             },
           },
+          MuiFormControlLabel: {
+            styleOverrides: {
+              label: { fontSize: '0.85rem', fontWeight: 'inherit' },
+            },
+          },
         },
       }),
     [activeTheme]

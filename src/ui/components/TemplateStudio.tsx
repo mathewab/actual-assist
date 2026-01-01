@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Alert from '@mui/material/Alert';
-import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -9,6 +8,8 @@ import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
+import ListSubheader from '@mui/material/ListSubheader';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
@@ -31,22 +32,15 @@ type TemplateType =
   | 'percentage'
   | 'periodic'
   | 'by'
-  | 'spend'
   | 'schedule'
   | 'average'
   | 'copy'
   | 'remainder'
-  | 'limit'
   | 'goal';
 
 type LimitPeriod = 'daily' | 'weekly' | 'monthly';
 type RepeatPeriod = 'day' | 'week' | 'month' | 'year';
 type RepeatUnit = 'month' | 'year' | '';
-
-interface AutocompleteOption {
-  value: string;
-  label: string;
-}
 
 const commentHasBlankLine = (comment: string) => {
   const lines = comment.split('\n');
@@ -92,6 +86,8 @@ interface TemplateDraft {
   id: string;
   type: TemplateType;
   sourceIndex: number | null;
+  isError: boolean;
+  errorLine: string;
   priority: string;
   monthly: string;
   amount: string;
@@ -119,6 +115,158 @@ interface TemplateDraft {
   comment: string;
 }
 
+type FieldKey =
+  | 'priority'
+  | 'comment'
+  | 'limit'
+  | 'repeat'
+  | 'from'
+  | 'previous'
+  | 'adjustment'
+  | 'full';
+
+type FieldVisibility = Record<FieldKey, boolean>;
+
+const emptyVisibility: FieldVisibility = {
+  priority: false,
+  comment: false,
+  limit: false,
+  repeat: false,
+  from: false,
+  previous: false,
+  adjustment: false,
+  full: false,
+};
+
+const templateTypeOptions: Array<{
+  value: TemplateType;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'simple',
+    label: 'Simple',
+    description: 'Budget a fixed amount; supports “up to” limits.',
+  },
+  {
+    value: 'percentage',
+    label: 'Percentage',
+    description: 'Budget a percent of another category.',
+  },
+  {
+    value: 'periodic',
+    label: 'Periodic',
+    description: 'Repeat every N day/week/month/year starting on a date.',
+  },
+  {
+    value: 'by',
+    label: 'By date',
+    description: 'Save up to a target by a specific month (YYYY-MM).',
+  },
+  {
+    value: 'schedule',
+    label: 'Schedule',
+    description: 'Fund scheduled transactions; full flag or % adjust.',
+  },
+  {
+    value: 'average',
+    label: 'Average',
+    description: 'Budget the average spend over the last N months.',
+  },
+  {
+    value: 'copy',
+    label: 'Copy',
+    description: 'Copy the budgeted amount from N months ago.',
+  },
+  {
+    value: 'remainder',
+    label: 'Remainder',
+    description: 'Distribute remaining funds, optional weight/limit.',
+  },
+  {
+    value: 'goal',
+    label: 'Goal',
+    description: 'Set a long-term goal indicator (no budgeting).',
+  },
+];
+
+const compactLabelSx = {
+  m: 0,
+  '.MuiFormControlLabel-label': { fontSize: '0.75rem' },
+};
+
+const groupBoxSx = {
+  display: 'grid',
+  gap: 1,
+  gridTemplateColumns: { xs: '1fr', md: 'repeat(auto-fit, minmax(140px, 1fr))' },
+  p: 1,
+  borderRadius: 1,
+  border: '1px solid',
+  borderColor: 'divider',
+  bgcolor: 'background.default',
+};
+
+const groupTitleSx = {
+  gridColumn: '1 / -1',
+  fontSize: '0.7rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  color: 'text.secondary',
+};
+
+const getOptionalFields = (type: TemplateType): FieldKey[] => {
+  switch (type) {
+    case 'simple':
+      return ['priority', 'comment', 'limit'];
+    case 'percentage':
+      return ['priority', 'comment', 'previous'];
+    case 'periodic':
+      return ['priority', 'comment', 'limit'];
+    case 'by':
+      return ['priority', 'comment', 'repeat', 'from'];
+    case 'schedule':
+      return ['priority', 'comment', 'adjustment', 'full'];
+    case 'average':
+    case 'copy':
+      return ['priority', 'comment'];
+    case 'remainder':
+      return ['comment', 'limit'];
+    case 'goal':
+      return ['comment'];
+    default:
+      return ['comment'];
+  }
+};
+
+const getInitialVisibility = (draft: TemplateDraft): FieldVisibility => {
+  const next: FieldVisibility = { ...emptyVisibility };
+  if (draft.comment.trim()) {
+    next.comment = true;
+  }
+  if (draft.priority.trim()) {
+    next.priority = true;
+  }
+  if (draft.limitEnabled || draft.limitAmount.trim() || draft.limitStart.trim()) {
+    next.limit = true;
+  }
+  if (draft.repeatUnit) {
+    next.repeat = true;
+  }
+  if (draft.from.trim()) {
+    next.from = true;
+  }
+  if (draft.previous) {
+    next.previous = true;
+  }
+  if (draft.adjustment.trim()) {
+    next.adjustment = true;
+  }
+  if (draft.full) {
+    next.full = true;
+  }
+  return next;
+};
+
 const makeId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -128,7 +276,9 @@ const createDraft = (type: TemplateType): TemplateDraft => ({
   id: makeId(),
   type,
   sourceIndex: null,
-  priority: '0',
+  isError: false,
+  errorLine: '',
+  priority: '',
   monthly: '',
   amount: '',
   percent: '',
@@ -155,11 +305,249 @@ const createDraft = (type: TemplateType): TemplateDraft => ({
   comment: '',
 });
 
+const buildTemplate = (draft: TemplateDraft, index: number) => {
+  const errors: string[] = [];
+  const label = `Template ${index + 1}`;
+  if (draft.isError) {
+    const line = draft.errorLine.trim();
+    errors.push(
+      line ? `${label}: failed to parse "${line}"` : `${label}: failed to parse template`
+    );
+    return { template: null, errors };
+  }
+  if (draft.comment && commentHasBlankLine(draft.comment)) {
+    errors.push(`${label}: label/comment cannot contain blank lines`);
+  }
+  const priority = draft.priority.trim();
+  const priorityValue = priority ? parseNumber(`${label}: priority`, priority, errors) : null;
+
+  const base: Record<string, unknown> = {
+    type: draft.type,
+    directive: draft.type === 'goal' ? 'goal' : 'template',
+  };
+
+  if (draft.type !== 'goal' && draft.type !== 'remainder') {
+    if (priority) {
+      base.priority = priorityValue;
+    }
+  }
+
+  const amount = draft.amount.trim();
+  const monthly = draft.monthly.trim();
+  const percent = draft.percent.trim();
+  const limitAmountValue = parseNumber(`${label}: limit amount`, draft.limitAmount, errors);
+  const limitStartValue = draft.limitStart.trim();
+  if (limitStartValue && !isValidDate(limitStartValue)) {
+    errors.push(`${label}: limit start must be YYYY-MM-DD`);
+  }
+
+  switch (draft.type) {
+    case 'simple':
+      if (!monthly) {
+        if (!(draft.limitEnabled && draft.limitAmount.trim())) {
+          errors.push(`${label}: monthly amount is required`);
+        }
+      } else {
+        const value = parseNumber(`${label}: monthly amount`, monthly, errors);
+        if (value !== null) {
+          base.monthly = value;
+        }
+      }
+      if (draft.limitEnabled && draft.limitAmount.trim()) {
+        if (limitAmountValue !== null) {
+          if (draft.limitPeriod === 'weekly' && !limitStartValue) {
+            errors.push(`${label}: weekly limit requires a start date`);
+          }
+          base.limit = {
+            amount: limitAmountValue,
+            hold: draft.limitHold,
+            period: draft.limitPeriod,
+            start: limitStartValue || undefined,
+          };
+        }
+      }
+      break;
+    case 'percentage':
+      if (!percent || !draft.category.trim()) {
+        errors.push(`${label}: percent and category are required`);
+      } else {
+        const value = parseNumber(`${label}: percent`, percent, errors);
+        if (value !== null) {
+          base.percent = value;
+        }
+        base.previous = draft.previous;
+        base.category = draft.category.trim();
+      }
+      break;
+    case 'periodic':
+      if (!amount || !draft.starting.trim()) {
+        errors.push(`${label}: amount and starting date are required`);
+      } else {
+        const amountValue = parseNumber(`${label}: amount`, amount, errors);
+        if (amountValue !== null) {
+          base.amount = amountValue;
+        }
+        const periodValue = parseNumber(`${label}: repeat amount`, draft.periodAmount, errors);
+        base.period = {
+          period: draft.periodUnit,
+          amount: periodValue ?? 1,
+        };
+        const startingValue = draft.starting.trim();
+        if (!isValidDate(startingValue)) {
+          errors.push(`${label}: starting date must be YYYY-MM-DD`);
+        } else {
+          base.starting = startingValue;
+        }
+        if (draft.limitEnabled && draft.limitAmount.trim()) {
+          if (limitAmountValue !== null) {
+            if (draft.limitPeriod === 'weekly' && !limitStartValue) {
+              errors.push(`${label}: weekly limit requires a start date`);
+            }
+            base.limit = {
+              amount: limitAmountValue,
+              hold: draft.limitHold,
+              period: draft.limitPeriod,
+              start: limitStartValue || undefined,
+            };
+          }
+        }
+      }
+      break;
+    case 'by':
+      if (!amount || !draft.month.trim()) {
+        errors.push(`${label}: amount and month are required`);
+      } else {
+        const amountValue = parseNumber(`${label}: amount`, amount, errors);
+        if (amountValue !== null) {
+          base.amount = amountValue;
+        }
+        const monthValue = draft.month.trim();
+        if (!isValidMonth(monthValue)) {
+          errors.push(`${label}: month must be YYYY-MM`);
+        } else {
+          base.month = monthValue;
+        }
+        if (draft.from.trim()) {
+          base.type = 'spend';
+          const fromValue = draft.from.trim();
+          if (!isValidMonth(fromValue)) {
+            errors.push(`${label}: spend-from must be YYYY-MM`);
+          } else {
+            base.from = fromValue;
+          }
+        }
+        if (draft.repeatUnit) {
+          base.annual = draft.repeatUnit === 'year';
+          if (draft.repeat.trim()) {
+            const repeatValue = parseNumber(`${label}: repeat`, draft.repeat, errors);
+            if (repeatValue !== null) {
+              base.repeat = repeatValue;
+            }
+          }
+        } else if (draft.repeat.trim()) {
+          errors.push(`${label}: repeat unit is required`);
+        }
+      }
+      break;
+    case 'schedule':
+      if (!draft.name.trim()) {
+        errors.push(`${label}: schedule name is required`);
+      } else {
+        base.name = draft.name.trim();
+        base.full = draft.full;
+        if (draft.adjustment.trim()) {
+          const adjustmentValue = parseNumber(`${label}: adjustment`, draft.adjustment, errors);
+          if (adjustmentValue !== null) {
+            base.adjustment = adjustmentValue;
+          }
+        }
+      }
+      break;
+    case 'average':
+      if (!draft.numMonths.trim()) {
+        errors.push(`${label}: number of months is required`);
+      } else {
+        const numMonthsValue = parseNumber(`${label}: number of months`, draft.numMonths, errors);
+        if (numMonthsValue !== null) {
+          base.numMonths = numMonthsValue;
+        }
+      }
+      break;
+    case 'copy':
+      if (!draft.lookBack.trim()) {
+        errors.push(`${label}: lookback months is required`);
+      } else {
+        const lookBackValue = parseNumber(`${label}: lookback months`, draft.lookBack, errors);
+        if (lookBackValue !== null) {
+          base.lookBack = lookBackValue;
+        }
+      }
+      break;
+    case 'remainder':
+      base.priority = null;
+      if (draft.weight.trim()) {
+        const weightValue = parseNumber(`${label}: weight`, draft.weight, errors);
+        base.weight = weightValue ?? 1;
+      } else {
+        base.weight = 1;
+      }
+      if (draft.limitEnabled && draft.limitAmount.trim()) {
+        if (limitAmountValue !== null) {
+          if (draft.limitPeriod === 'weekly' && !limitStartValue) {
+            errors.push(`${label}: weekly limit requires a start date`);
+          }
+          base.limit = {
+            amount: limitAmountValue,
+            hold: draft.limitHold,
+            period: draft.limitPeriod,
+            start: limitStartValue || undefined,
+          };
+        }
+      }
+      break;
+    case 'goal':
+      if (!amount) {
+        errors.push(`${label}: amount is required`);
+      } else {
+        const goalValue = parseNumber(`${label}: amount`, amount, errors);
+        if (goalValue !== null) {
+          base.amount = goalValue;
+        }
+      }
+      break;
+    default:
+      break;
+  }
+
+  return { template: base, errors };
+};
+
 const toDraft = (template: Record<string, unknown>): TemplateDraft => {
-  const type = (template.type as TemplateType) || 'simple';
-  const draft = createDraft(type);
+  const rawType = template.type as string | undefined;
+  const supportedTypes: TemplateType[] = [
+    'simple',
+    'percentage',
+    'periodic',
+    'by',
+    'schedule',
+    'average',
+    'copy',
+    'remainder',
+    'goal',
+  ];
+  let draftType: TemplateType = 'simple';
+  if (rawType === 'spend') {
+    draftType = 'by';
+  } else if (rawType === 'limit') {
+    draftType = 'simple';
+  } else if (rawType && supportedTypes.includes(rawType as TemplateType)) {
+    draftType = rawType as TemplateType;
+  }
+  const draft = createDraft(draftType);
   draft.priority =
-    template.priority === null || template.priority === undefined ? '' : String(template.priority);
+    template.priority === null || template.priority === undefined || Number(template.priority) === 0
+      ? ''
+      : String(template.priority);
   draft.amount = template.amount !== undefined ? String(template.amount) : '';
   draft.monthly = template.monthly !== undefined ? String(template.monthly) : '';
   draft.percent = template.percent !== undefined ? String(template.percent) : '';
@@ -203,7 +591,7 @@ const toDraft = (template: Record<string, unknown>): TemplateDraft => {
     draft.limitStart = limit.start ?? '';
     draft.limitEnabled = true;
   }
-  if (type === 'limit') {
+  if (rawType === 'limit') {
     draft.limitAmount = template.amount !== undefined ? String(template.amount) : '';
     draft.limitHold = Boolean(template.hold);
     draft.limitPeriod =
@@ -240,10 +628,13 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
   const [filterText, setFilterText] = useState('');
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<TemplateDraft[]>(emptyTemplates);
+  const [fieldVisibility, setFieldVisibility] = useState<Record<string, FieldVisibility>>({});
   const [renderedValue, setRenderedValue] = useState('');
-  const [editorError, setEditorError] = useState<string | null>(null);
+  const [, setEditorError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
   const [newTemplateType, setNewTemplateType] = useState<TemplateType>('simple');
+  const [fieldMenuAnchor, setFieldMenuAnchor] = useState<HTMLElement | null>(null);
+  const [fieldMenuDraftId, setFieldMenuDraftId] = useState<string | null>(null);
   const lastRenderedPayload = useRef<string>('');
   const renderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUserEditsRef = useRef(false);
@@ -253,11 +644,11 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
 
   const activeCategory = templates.find((item) => item.id === activeCategoryId) ?? null;
   const activeTemplateEntries = (activeCategory?.templates ?? []) as TemplateEntry[];
-  const managedTemplateEntries = activeTemplateEntries.filter((entry) => entry.type !== 'error');
 
   const loadCategory = (category: CategoryTemplateSummary | null) => {
     if (!category) {
       setDrafts(emptyTemplates);
+      setFieldVisibility({});
       setRenderedValue('');
       setEditorError(null);
       setApplyStatus(null);
@@ -265,26 +656,51 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     }
 
     const templateEntries = (category.templates ?? []) as TemplateEntry[];
-    const managedEntries = templateEntries.filter((entry) => entry.type !== 'error');
     const baseDrafts =
-      managedEntries.length > 0
-        ? managedEntries.map((template, index) => {
+      templateEntries.length > 0
+        ? templateEntries.map((template, index) => {
+            if (template.type === 'error') {
+              const draft = createDraft('simple');
+              draft.sourceIndex = index;
+              draft.isError = true;
+              draft.errorLine = template.line ?? '';
+              return draft;
+            }
             const draft = toDraft(template);
             draft.sourceIndex = index;
             return draft;
           })
         : emptyTemplates;
     const comments = extractTemplateComments(category.note ?? null, templateEntries);
-    const nextDrafts = baseDrafts.map((draft, index) => ({
-      ...draft,
-      comment: comments[index] ?? '',
-    }));
+    let commentIndex = 0;
+    const nextDrafts = baseDrafts.map((draft) => {
+      if (draft.isError) {
+        return draft;
+      }
+      const next = { ...draft, comment: comments[commentIndex] ?? '' };
+      commentIndex += 1;
+      return next;
+    });
     setDrafts(nextDrafts);
+    const nextVisibility = nextDrafts.reduce<Record<string, FieldVisibility>>((acc, draft) => {
+      acc[draft.id] = getInitialVisibility(draft);
+      return acc;
+    }, {});
+    setFieldVisibility(nextVisibility);
     hasUserEditsRef.current = false;
     lastRenderedPayload.current = '';
     setRenderedValue('');
     setEditorError(category.parseError);
     setApplyStatus(null);
+
+    if (nextDrafts.length > 0) {
+      const previews = nextDrafts.map((draft, index) => buildTemplate(draft, index));
+      const previewErrors = previews.flatMap((entry) => entry.errors);
+      if (previewErrors.length === 0) {
+        const output = previews.map((entry) => entry.template);
+        renderMutation.mutate(output);
+      }
+    }
   };
 
   const effectiveFilterText = window.innerWidth <= 960 ? '' : filterText;
@@ -347,241 +763,25 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     },
   });
 
+  const draftValidation = useMemo(
+    () => drafts.map((draft, index) => buildTemplate(draft, index)),
+    [drafts]
+  );
+
   const buildTemplates = useCallback(() => {
     const errors: string[] = [];
     const output: Record<string, unknown>[] = [];
-
-    drafts.forEach((draft, index) => {
-      const label = `Template ${index + 1}`;
-      if (draft.comment && commentHasBlankLine(draft.comment)) {
-        errors.push(`${label}: label/comment cannot contain blank lines`);
+    draftValidation.forEach(({ template, errors: draftErrors }) => {
+      if (draftErrors.length) {
+        errors.push(...draftErrors);
       }
-      const priority = draft.priority.trim();
-      const priorityValue = priority ? parseNumber(`${label}: priority`, priority, errors) : null;
-
-      const base: Record<string, unknown> = {
-        type: draft.type,
-        directive: draft.type === 'goal' ? 'goal' : 'template',
-      };
-
-      if (draft.type !== 'goal' && draft.type !== 'remainder' && draft.type !== 'limit') {
-        if (priority) {
-          base.priority = priorityValue;
-        }
+      if (template) {
+        output.push(template);
       }
-
-      const amount = draft.amount.trim();
-      const monthly = draft.monthly.trim();
-      const percent = draft.percent.trim();
-      const limitAmountValue = parseNumber(`${label}: limit amount`, draft.limitAmount, errors);
-      const limitStartValue = draft.limitStart.trim();
-      if (limitStartValue && !isValidDate(limitStartValue)) {
-        errors.push(`${label}: limit start must be YYYY-MM-DD`);
-      }
-
-      switch (draft.type) {
-        case 'simple':
-          if (!monthly) {
-            errors.push(`${label}: monthly amount is required`);
-          } else {
-            const value = parseNumber(`${label}: monthly amount`, monthly, errors);
-            if (value !== null) {
-              base.monthly = value;
-            }
-          }
-          if (draft.limitEnabled && draft.limitAmount.trim()) {
-            if (limitAmountValue !== null) {
-              if (draft.limitPeriod === 'weekly' && !limitStartValue) {
-                errors.push(`${label}: weekly limit requires a start date`);
-              }
-              base.limit = {
-                amount: limitAmountValue,
-                hold: draft.limitHold,
-                period: draft.limitPeriod,
-                start: limitStartValue || undefined,
-              };
-            }
-          }
-          break;
-        case 'percentage':
-          if (!percent || !draft.category.trim()) {
-            errors.push(`${label}: percent and category are required`);
-          } else {
-            const value = parseNumber(`${label}: percent`, percent, errors);
-            if (value !== null) {
-              base.percent = value;
-            }
-            base.previous = draft.previous;
-            base.category = draft.category.trim();
-          }
-          break;
-        case 'periodic':
-          if (!amount || !draft.starting.trim()) {
-            errors.push(`${label}: amount and starting date are required`);
-          } else {
-            const amountValue = parseNumber(`${label}: amount`, amount, errors);
-            if (amountValue !== null) {
-              base.amount = amountValue;
-            }
-            const periodValue = parseNumber(`${label}: repeat amount`, draft.periodAmount, errors);
-            base.period = {
-              period: draft.periodUnit,
-              amount: periodValue ?? 1,
-            };
-            const startingValue = draft.starting.trim();
-            if (!isValidDate(startingValue)) {
-              errors.push(`${label}: starting date must be YYYY-MM-DD`);
-            } else {
-              base.starting = startingValue;
-            }
-            if (draft.limitEnabled && draft.limitAmount.trim()) {
-              if (limitAmountValue !== null) {
-                if (draft.limitPeriod === 'weekly' && !limitStartValue) {
-                  errors.push(`${label}: weekly limit requires a start date`);
-                }
-                base.limit = {
-                  amount: limitAmountValue,
-                  hold: draft.limitHold,
-                  period: draft.limitPeriod,
-                  start: limitStartValue || undefined,
-                };
-              }
-            }
-          }
-          break;
-        case 'by':
-        case 'spend':
-          if (!amount || !draft.month.trim()) {
-            errors.push(`${label}: amount and month are required`);
-          } else {
-            const amountValue = parseNumber(`${label}: amount`, amount, errors);
-            if (amountValue !== null) {
-              base.amount = amountValue;
-            }
-            const monthValue = draft.month.trim();
-            if (!isValidMonth(monthValue)) {
-              errors.push(`${label}: month must be YYYY-MM`);
-            } else {
-              base.month = monthValue;
-            }
-            if (draft.type === 'spend' && draft.from.trim()) {
-              const fromValue = draft.from.trim();
-              if (!isValidMonth(fromValue)) {
-                errors.push(`${label}: spend-from must be YYYY-MM`);
-              } else {
-                base.from = fromValue;
-              }
-            }
-            if (draft.repeatUnit) {
-              base.annual = draft.repeatUnit === 'year';
-              if (draft.repeat.trim()) {
-                const repeatValue = parseNumber(`${label}: repeat`, draft.repeat, errors);
-                if (repeatValue !== null) {
-                  base.repeat = repeatValue;
-                }
-              }
-            } else if (draft.repeat.trim()) {
-              errors.push(`${label}: repeat unit is required`);
-            }
-          }
-          break;
-        case 'schedule':
-          if (!draft.name.trim()) {
-            errors.push(`${label}: schedule name is required`);
-          } else {
-            base.name = draft.name.trim();
-            base.full = draft.full;
-            if (draft.adjustment.trim()) {
-              const adjustmentValue = parseNumber(`${label}: adjustment`, draft.adjustment, errors);
-              if (adjustmentValue !== null) {
-                base.adjustment = adjustmentValue;
-              }
-            }
-          }
-          break;
-        case 'average':
-          if (!draft.numMonths.trim()) {
-            errors.push(`${label}: number of months is required`);
-          } else {
-            const numMonthsValue = parseNumber(
-              `${label}: number of months`,
-              draft.numMonths,
-              errors
-            );
-            if (numMonthsValue !== null) {
-              base.numMonths = numMonthsValue;
-            }
-          }
-          break;
-        case 'copy':
-          if (!draft.lookBack.trim()) {
-            errors.push(`${label}: lookback months is required`);
-          } else {
-            const lookBackValue = parseNumber(`${label}: lookback months`, draft.lookBack, errors);
-            if (lookBackValue !== null) {
-              base.lookBack = lookBackValue;
-            }
-          }
-          break;
-        case 'remainder':
-          base.priority = null;
-          if (draft.weight.trim()) {
-            const weightValue = parseNumber(`${label}: weight`, draft.weight, errors);
-            base.weight = weightValue ?? 1;
-          } else {
-            base.weight = 1;
-          }
-          if (draft.limitEnabled && draft.limitAmount.trim()) {
-            if (limitAmountValue !== null) {
-              if (draft.limitPeriod === 'weekly' && !limitStartValue) {
-                errors.push(`${label}: weekly limit requires a start date`);
-              }
-              base.limit = {
-                amount: limitAmountValue,
-                hold: draft.limitHold,
-                period: draft.limitPeriod,
-                start: limitStartValue || undefined,
-              };
-            }
-          }
-          break;
-        case 'limit':
-          if (!draft.limitAmount.trim()) {
-            errors.push(`${label}: limit amount is required`);
-          } else {
-            base.priority = null;
-            if (limitAmountValue !== null) {
-              base.amount = limitAmountValue;
-            }
-            base.hold = draft.limitHold;
-            base.period = draft.limitPeriod;
-            if (draft.limitPeriod === 'weekly' && !limitStartValue) {
-              errors.push(`${label}: weekly limit requires a start date`);
-            }
-            if (limitStartValue) {
-              base.start = limitStartValue;
-            }
-          }
-          break;
-        case 'goal':
-          if (!amount) {
-            errors.push(`${label}: amount is required`);
-          } else {
-            const goalValue = parseNumber(`${label}: amount`, amount, errors);
-            if (goalValue !== null) {
-              base.amount = goalValue;
-            }
-          }
-          break;
-        default:
-          break;
-      }
-
-      output.push(base);
     });
 
     return { output, errors };
-  }, [drafts]);
+  }, [draftValidation]);
 
   const handleRender = () => {
     setEditorError(null);
@@ -669,26 +869,78 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     setCopyStatus('idle');
   };
 
-  const categoryOptions = useMemo(() => {
-    return (categoriesData?.categories ?? []).map((category) => ({
-      id: category.id,
-      name: category.name,
-      label: category.groupName ? `${category.groupName} • ${category.name}` : category.name,
-    }));
-  }, [categoriesData?.categories]);
-
-  const scheduleOptions = useMemo<AutocompleteOption[]>(
-    () =>
-      (schedulesData?.schedules ?? []).map((schedule) => ({
-        value: schedule.name,
-        label: schedule.name,
-      })),
+  const scheduleOptions = useMemo(
+    () => (schedulesData?.schedules ?? []).map((schedule) => schedule.name),
     [schedulesData?.schedules]
   );
+
+  const groupedCategoryOptions = useMemo(() => {
+    const categories = categoriesData?.categories ?? [];
+    const groups = new Map<string, { name: string; label: string }[]>();
+    categories.forEach((category) => {
+      const groupName = category.groupName || 'Uncategorized';
+      const list = groups.get(groupName) ?? [];
+      list.push({ name: category.name, label: category.name });
+      groups.set(groupName, list);
+    });
+    return Array.from(groups.entries()).map(([groupName, options]) => ({
+      groupName,
+      options,
+    }));
+  }, [categoriesData?.categories]);
 
   const updateDraft = (id: string, updates: Partial<TemplateDraft>) => {
     hasUserEditsRef.current = true;
     setDrafts((prev) => prev.map((draft) => (draft.id === id ? { ...draft, ...updates } : draft)));
+  };
+
+  const updateVisibility = (id: string, updates: Partial<FieldVisibility>) => {
+    setFieldVisibility((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? emptyVisibility), ...updates },
+    }));
+  };
+
+  const handleFieldToggle = (draft: TemplateDraft, field: FieldKey, enabled: boolean) => {
+    updateVisibility(draft.id, { [field]: enabled });
+    if (enabled) {
+      if (field === 'limit') {
+        updateDraft(draft.id, { limitEnabled: true });
+      }
+      if (field === 'repeat' && !draft.repeatUnit) {
+        updateDraft(draft.id, { repeatUnit: 'month' });
+      }
+      return;
+    }
+
+    switch (field) {
+      case 'priority':
+        updateDraft(draft.id, { priority: '' });
+        break;
+      case 'comment':
+        updateDraft(draft.id, { comment: '' });
+        break;
+      case 'limit':
+        toggleLimit(draft.id, false);
+        break;
+      case 'repeat':
+        updateDraft(draft.id, { repeatUnit: '', repeat: '' });
+        break;
+      case 'from':
+        updateDraft(draft.id, { from: '' });
+        break;
+      case 'previous':
+        updateDraft(draft.id, { previous: false });
+        break;
+      case 'adjustment':
+        updateDraft(draft.id, { adjustment: '' });
+        break;
+      case 'full':
+        updateDraft(draft.id, { full: false });
+        break;
+      default:
+        break;
+    }
   };
 
   const toggleLimit = (id: string, enabled: boolean) => {
@@ -706,14 +958,36 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     setEditorError(null);
   };
 
+  const updateLimitPeriod = (id: string, period: LimitPeriod) => {
+    hasUserEditsRef.current = true;
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === id
+          ? {
+              ...draft,
+              limitPeriod: period,
+              limitStart: period === 'weekly' ? draft.limitStart : '',
+            }
+          : draft
+      )
+    );
+  };
+
   const removeDraft = (id: string) => {
     hasUserEditsRef.current = true;
     setDrafts((prev) => prev.filter((draft) => draft.id !== id));
+    setFieldVisibility((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const addDraft = () => {
+    const draft = createDraft(newTemplateType);
     hasUserEditsRef.current = true;
-    setDrafts((prev) => [...prev, createDraft(newTemplateType)]);
+    setDrafts((prev) => [...prev, draft]);
+    setFieldVisibility((prev) => ({ ...prev, [draft.id]: getInitialVisibility(draft) }));
   };
 
   const draftRenderLines = renderedValue ? renderedValue.split('\n') : [];
@@ -724,10 +998,12 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     }
 
     const draftLineMap = new Map<string, string>();
-    drafts.forEach((draft, index) => {
-      const line = draftRenderLines[index] ?? '';
-      draftLineMap.set(draft.id, line);
-    });
+    drafts
+      .filter((draft) => !draft.isError)
+      .forEach((draft, index) => {
+        const line = draftRenderLines[index] ?? '';
+        draftLineMap.set(draft.id, line);
+      });
 
     const appendedBlocks = drafts
       .filter((draft) => draft.sourceIndex === null)
@@ -739,19 +1015,23 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
 
     if (activeCategory?.note) {
       const commentsByManagedIndex: string[] = [];
-      managedTemplateEntries.forEach((_, index) => {
-        const draft = drafts.find((item) => item.sourceIndex === index);
+      activeTemplateEntries.forEach((entry, entryIndex) => {
+        if (entry.type === 'error') {
+          return;
+        }
+        const draft = drafts.find((item) => item.sourceIndex === entryIndex);
         commentsByManagedIndex.push(draft?.comment ?? '');
       });
 
       const hasRenderedLines = renderedValue.trim().length > 0;
-      let managedIndex = 0;
-      const replacements = activeTemplateEntries.map((entry) => {
+      const replacements = activeTemplateEntries.map((entry, entryIndex) => {
+        const draft = drafts.find((item) => item.sourceIndex === entryIndex) ?? null;
         if (entry.type === 'error') {
-          return undefined;
+          if (!draft) {
+            return null;
+          }
+          return entry.line ?? '';
         }
-        const draft = drafts.find((item) => item.sourceIndex === managedIndex) ?? null;
-        managedIndex += 1;
         if (!draft) {
           return null;
         }
@@ -782,7 +1062,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
   })();
 
   return (
-    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box
         sx={{
           display: 'flex',
@@ -822,14 +1102,14 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
       <Box
         sx={{
           display: 'grid',
-          gap: 3,
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(280px,1fr) minmax(340px,1.2fr)' },
+          gap: 2,
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(260px,1fr) minmax(360px,1.3fr)' },
         }}
       >
         <Paper
           variant="outlined"
           sx={{
-            p: 2,
+            p: 1.5,
             bgcolor: 'background.default',
             display: 'flex',
             flexDirection: 'column',
@@ -918,7 +1198,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
           )}
 
           <Stack
-            spacing={2}
+            spacing={1.5}
             sx={{ display: { xs: 'none', lg: 'flex' }, maxHeight: 520, overflow: 'auto', pr: 1 }}
           >
             {filteredTemplates.map((item) => {
@@ -929,7 +1209,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   variant="outlined"
                   onClick={() => handleUseCategory(item)}
                   sx={{
-                    p: 2,
+                    p: 1.5,
                     textAlign: 'left',
                     cursor: 'pointer',
                     borderColor: isActive ? 'primary.main' : 'divider',
@@ -973,7 +1253,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                         mt: 1,
                         whiteSpace: 'pre-wrap',
                         bgcolor: 'background.default',
-                        p: 1.5,
+                        p: 1,
                         borderRadius: 1,
                         border: '1px solid',
                         borderColor: 'divider',
@@ -993,7 +1273,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
         <Paper
           variant="outlined"
           sx={{
-            p: 2,
+            p: 1.5,
             bgcolor: 'background.default',
             display: 'flex',
             flexDirection: 'column',
@@ -1022,45 +1302,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             )}
           </Box>
 
-          <Stack spacing={2}>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={2}
-              alignItems={{ sm: 'center' }}
-              justifyContent="space-between"
-            >
-              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-                <FormControl size="small" sx={{ minWidth: 160 }}>
-                  <InputLabel id="template-type-select-label">Add template</InputLabel>
-                  <Select
-                    labelId="template-type-select-label"
-                    id="template-type-select"
-                    value={newTemplateType}
-                    label="Add template"
-                    onChange={(event) => setNewTemplateType(event.target.value as TemplateType)}
-                  >
-                    <MenuItem value="simple">Simple</MenuItem>
-                    <MenuItem value="percentage">Percentage</MenuItem>
-                    <MenuItem value="periodic">Periodic</MenuItem>
-                    <MenuItem value="by">By date</MenuItem>
-                    <MenuItem value="spend">Spend</MenuItem>
-                    <MenuItem value="schedule">Schedule</MenuItem>
-                    <MenuItem value="average">Average</MenuItem>
-                    <MenuItem value="copy">Copy</MenuItem>
-                    <MenuItem value="remainder">Remainder</MenuItem>
-                    <MenuItem value="limit">Limit</MenuItem>
-                    <MenuItem value="goal">Goal</MenuItem>
-                  </Select>
-                </FormControl>
-                <Button variant="outlined" size="small" onClick={addDraft}>
-                  Add
-                </Button>
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                Set priority to control order; leave blank for default.
-              </Typography>
-            </Stack>
-
+          <Stack spacing={1.5}>
             {drafts.length === 0 && (
               <Box
                 sx={{
@@ -1078,35 +1320,175 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
               </Box>
             )}
 
-            <Stack spacing={2}>
-              {drafts.map((draft, index) => (
-                <Paper
-                  key={draft.id}
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    bgcolor: 'background.paper',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                  }}
-                >
-                  <Box
+            <Stack spacing={1.5}>
+              {drafts.map((draft, index) => {
+                const nonErrorIndex = drafts
+                  .slice(0, index)
+                  .filter((entry) => !entry.isError).length;
+                const previewLine = draft.isError
+                  ? draft.errorLine
+                  : (draftRenderLines[nonErrorIndex] ?? '');
+                const draftErrors = draftValidation[index]?.errors ?? [];
+                return (
+                  <Paper
+                    key={draft.id}
+                    variant="outlined"
                     sx={{
+                      p: 1.5,
+                      bgcolor: 'background.paper',
                       display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: 2,
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
+                      flexDirection: 'column',
+                      gap: 1.5,
                     }}
                   >
-                    <Box>
-                      <Typography variant="subtitle2" fontWeight={600}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 1.5,
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Typography variant="subtitle2" fontWeight={700}>
                         {index + 1}. {draft.type.toUpperCase()}
                       </Typography>
-                      {draft.type !== 'goal' &&
-                        draft.type !== 'remainder' &&
-                        draft.type !== 'limit' && (
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        {getOptionalFields(draft.type).length > 0 && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={(event) => {
+                              setFieldMenuAnchor(event.currentTarget);
+                              setFieldMenuDraftId(draft.id);
+                            }}
+                          >
+                            Fields
+                          </Button>
+                        )}
+                        <Menu
+                          anchorEl={fieldMenuAnchor}
+                          open={fieldMenuDraftId === draft.id}
+                          onClose={() => {
+                            setFieldMenuAnchor(null);
+                            setFieldMenuDraftId(null);
+                          }}
+                          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                        >
+                          {getOptionalFields(draft.type).map((field) => {
+                            const visibility =
+                              fieldVisibility[draft.id] ?? getInitialVisibility(draft);
+                            const checked = visibility[field] ?? false;
+                            const label = (() => {
+                              switch (field) {
+                                case 'priority':
+                                  return 'Priority';
+                                case 'comment':
+                                  return 'Label / comment';
+                                case 'limit':
+                                  return 'Limit';
+                                case 'repeat':
+                                  return 'Repeat';
+                                case 'from':
+                                  return 'Spend from';
+                                case 'previous':
+                                  return 'Use previous month';
+                                case 'adjustment':
+                                  return 'Adjustment';
+                                case 'full':
+                                  return 'Use full scheduled amount';
+                                default:
+                                  return field;
+                              }
+                            })();
+                            return (
+                              <MenuItem
+                                key={`${draft.id}-${field}`}
+                                onClick={() => handleFieldToggle(draft, field, !checked)}
+                              >
+                                <Checkbox checked={checked} size="small" />
+                                <Typography variant="body2">{label}</Typography>
+                              </MenuItem>
+                            );
+                          })}
+                        </Menu>
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          size="small"
+                          onClick={() => removeDraft(draft.id)}
+                        >
+                          Remove
+                        </Button>
+                      </Stack>
+                    </Box>
+
+                    {draftErrors.length === 0 && previewLine && (
+                      <Box
+                        component="pre"
+                        sx={{
+                          m: 0,
+                          px: 1,
+                          py: 0.75,
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          bgcolor: 'background.default',
+                          fontFamily: 'monospace',
+                          fontSize: '0.75rem',
+                          whiteSpace: 'pre-wrap',
+                          color: 'text.primary',
+                        }}
+                      >
+                        {previewLine}
+                      </Box>
+                    )}
+                    {draftErrors.length > 0 && (
+                      <Alert
+                        severity="error"
+                        variant="outlined"
+                        sx={{
+                          py: 0.25,
+                          '& .MuiAlert-message': { whiteSpace: 'pre-wrap' },
+                        }}
+                      >
+                        {draftErrors.join('\n')}
+                      </Alert>
+                    )}
+
+                    {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).comment && (
+                      <TextField
+                        label="Label / comment"
+                        size="small"
+                        multiline
+                        minRows={1}
+                        value={draft.comment}
+                        onChange={(event) => updateDraft(draft.id, { comment: event.target.value })}
+                        placeholder="Example: Disney"
+                      />
+                    )}
+
+                    {draft.type === 'simple' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Monthly amount"
+                          type="number"
+                          value={draft.monthly}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { monthly: event.target.value })
+                          }
+                        />
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
                           <TextField
                             size="small"
                             label="Priority"
@@ -1115,572 +1497,649 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                             onChange={(event) =>
                               updateDraft(draft.id, { priority: event.target.value })
                             }
-                            sx={{ mt: 1, width: 120 }}
                           />
                         )}
-                    </Box>
-                    <Button
-                      color="error"
-                      variant="outlined"
-                      size="small"
-                      onClick={() => removeDraft(draft.id)}
-                    >
-                      Remove
-                    </Button>
-                  </Box>
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).limit &&
+                          draft.limitEnabled && (
+                            <Box sx={{ gridColumn: '1 / -1' }}>
+                              <Box sx={groupBoxSx}>
+                                <Typography variant="caption" sx={groupTitleSx}>
+                                  Limit
+                                </Typography>
+                                <TextField
+                                  size="small"
+                                  label="Amount"
+                                  type="number"
+                                  value={draft.limitAmount}
+                                  onChange={(event) =>
+                                    updateDraft(draft.id, { limitAmount: event.target.value })
+                                  }
+                                />
+                                <FormControl size="small">
+                                  <InputLabel id={`limit-period-${draft.id}`}>Period</InputLabel>
+                                  <Select
+                                    labelId={`limit-period-${draft.id}`}
+                                    label="Period"
+                                    value={draft.limitPeriod}
+                                    onChange={(event) =>
+                                      updateLimitPeriod(draft.id, event.target.value as LimitPeriod)
+                                    }
+                                  >
+                                    <MenuItem value="daily">Daily</MenuItem>
+                                    <MenuItem value="weekly">Weekly</MenuItem>
+                                    <MenuItem value="monthly">Monthly</MenuItem>
+                                  </Select>
+                                </FormControl>
+                                <TextField
+                                  size="small"
+                                  label="Start"
+                                  type="date"
+                                  InputLabelProps={{ shrink: true }}
+                                  value={draft.limitStart}
+                                  disabled={draft.limitPeriod !== 'weekly'}
+                                  onChange={(event) =>
+                                    updateDraft(draft.id, { limitStart: event.target.value })
+                                  }
+                                />
+                              </Box>
+                            </Box>
+                          )}
+                      </Box>
+                    )}
 
-                  <TextField
-                    label="Label / comment (optional)"
-                    size="small"
-                    multiline
-                    minRows={2}
-                    value={draft.comment}
-                    onChange={(event) => updateDraft(draft.id, { comment: event.target.value })}
-                    placeholder="Example: Disney"
-                  />
-
-                  {draft.type === 'simple' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Monthly amount"
-                        type="number"
-                        value={draft.monthly}
-                        onChange={(event) => updateDraft(draft.id, { monthly: event.target.value })}
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.limitEnabled}
-                            onChange={(event) => toggleLimit(draft.id, event.target.checked)}
-                          />
-                        }
-                        label="Add limit"
-                      />
-                      {draft.limitEnabled && (
-                        <>
-                          <TextField
-                            size="small"
-                            label="Limit amount"
-                            type="number"
-                            value={draft.limitAmount}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { limitAmount: event.target.value })
-                            }
-                          />
-                          <FormControl size="small">
-                            <InputLabel id={`limit-period-${draft.id}`}>Limit period</InputLabel>
-                            <Select
-                              labelId={`limit-period-${draft.id}`}
-                              label="Limit period"
-                              value={draft.limitPeriod}
-                              onChange={(event) =>
-                                updateDraft(draft.id, {
-                                  limitPeriod: event.target.value as LimitPeriod,
-                                })
-                              }
-                            >
-                              <MenuItem value="daily">Daily</MenuItem>
-                              <MenuItem value="weekly">Weekly</MenuItem>
-                              <MenuItem value="monthly">Monthly</MenuItem>
-                            </Select>
-                          </FormControl>
-                          <TextField
-                            size="small"
-                            label="Limit start"
-                            type="date"
-                            InputLabelProps={{ shrink: true }}
-                            value={draft.limitStart}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { limitStart: event.target.value })
-                            }
-                          />
-                        </>
-                      )}
-                    </Box>
-                  )}
-
-                  {draft.type === 'percentage' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Percent"
-                        type="number"
-                        value={draft.percent}
-                        onChange={(event) => updateDraft(draft.id, { percent: event.target.value })}
-                      />
-                      <AutocompleteInput
-                        value={draft.category}
-                        onChange={(value) => updateDraft(draft.id, { category: value })}
-                        label="Category"
-                        placeholder="Start typing a category"
-                        options={categoryOptions.map((category) => ({
-                          value: category.name,
-                          label: category.label,
-                        }))}
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.previous}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { previous: event.target.checked })
-                            }
-                          />
-                        }
-                        label="Use previous month"
-                      />
-                    </Box>
-                  )}
-
-                  {draft.type === 'periodic' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Amount"
-                        type="number"
-                        value={draft.amount}
-                        onChange={(event) => updateDraft(draft.id, { amount: event.target.value })}
-                      />
-                      <TextField
-                        size="small"
-                        label="Repeat amount"
-                        type="number"
-                        value={draft.periodAmount}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { periodAmount: event.target.value })
-                        }
-                      />
-                      <FormControl size="small">
-                        <InputLabel id={`period-unit-${draft.id}`}>Repeat unit</InputLabel>
-                        <Select
-                          labelId={`period-unit-${draft.id}`}
-                          label="Repeat unit"
-                          value={draft.periodUnit}
-                          onChange={(event) =>
-                            updateDraft(draft.id, {
-                              periodUnit: event.target.value as RepeatPeriod,
-                            })
-                          }
-                        >
-                          <MenuItem value="day">Day</MenuItem>
-                          <MenuItem value="week">Week</MenuItem>
-                          <MenuItem value="month">Month</MenuItem>
-                          <MenuItem value="year">Year</MenuItem>
-                        </Select>
-                      </FormControl>
-                      <TextField
-                        size="small"
-                        label="Starting date"
-                        type="date"
-                        InputLabelProps={{ shrink: true }}
-                        value={draft.starting}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { starting: event.target.value })
-                        }
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.limitEnabled}
-                            onChange={(event) => toggleLimit(draft.id, event.target.checked)}
-                          />
-                        }
-                        label="Add limit"
-                      />
-                      {draft.limitEnabled && (
-                        <>
-                          <TextField
-                            size="small"
-                            label="Limit amount"
-                            type="number"
-                            value={draft.limitAmount}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { limitAmount: event.target.value })
-                            }
-                          />
-                          <FormControl size="small">
-                            <InputLabel id={`period-limit-${draft.id}`}>Limit period</InputLabel>
-                            <Select
-                              labelId={`period-limit-${draft.id}`}
-                              label="Limit period"
-                              value={draft.limitPeriod}
-                              onChange={(event) =>
-                                updateDraft(draft.id, {
-                                  limitPeriod: event.target.value as LimitPeriod,
-                                })
-                              }
-                            >
-                              <MenuItem value="daily">Daily</MenuItem>
-                              <MenuItem value="weekly">Weekly</MenuItem>
-                              <MenuItem value="monthly">Monthly</MenuItem>
-                            </Select>
-                          </FormControl>
-                          <TextField
-                            size="small"
-                            label="Limit start"
-                            type="date"
-                            InputLabelProps={{ shrink: true }}
-                            value={draft.limitStart}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { limitStart: event.target.value })
-                            }
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                size="small"
-                                checked={draft.limitHold}
-                                onChange={(event) =>
-                                  updateDraft(draft.id, { limitHold: event.target.checked })
-                                }
-                              />
-                            }
-                            label="Hold leftover"
-                          />
-                        </>
-                      )}
-                    </Box>
-                  )}
-
-                  {(draft.type === 'by' || draft.type === 'spend') && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Amount"
-                        type="number"
-                        value={draft.amount}
-                        onChange={(event) => updateDraft(draft.id, { amount: event.target.value })}
-                      />
-                      <TextField
-                        size="small"
-                        label="Month (YYYY-MM)"
-                        placeholder="2026-01"
-                        value={draft.month}
-                        onChange={(event) => updateDraft(draft.id, { month: event.target.value })}
-                      />
-                      {draft.type === 'spend' && (
+                    {draft.type === 'percentage' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
                         <TextField
                           size="small"
-                          label="Spend from (YYYY-MM)"
-                          placeholder="2025-10"
-                          value={draft.from}
-                          onChange={(event) => updateDraft(draft.id, { from: event.target.value })}
+                          label="Percent"
+                          type="number"
+                          value={draft.percent}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { percent: event.target.value })
+                          }
                         />
-                      )}
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.repeatUnit !== ''}
+                        <FormControl size="small">
+                          <InputLabel id={`category-select-${draft.id}`}>Category</InputLabel>
+                          <Select
+                            labelId={`category-select-${draft.id}`}
+                            label="Category"
+                            value={draft.category}
                             onChange={(event) =>
-                              updateDraft(draft.id, {
-                                repeatUnit: event.target.checked ? 'month' : '',
-                              })
+                              updateDraft(draft.id, { category: event.target.value })
                             }
-                          />
-                        }
-                        label="Repeat"
-                      />
-                      {draft.repeatUnit && (
-                        <>
+                          >
+                            {groupedCategoryOptions.flatMap((group) => [
+                              <ListSubheader key={`${draft.id}-${group.groupName}`}>
+                                {group.groupName}
+                              </ListSubheader>,
+                              ...group.options.map((option) => (
+                                <MenuItem
+                                  key={`${draft.id}-${group.groupName}-${option.name}`}
+                                  value={option.name}
+                                >
+                                  {option.label}
+                                </MenuItem>
+                              )),
+                            ])}
+                          </Select>
+                        </FormControl>
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
                           <TextField
                             size="small"
-                            label="Repeat amount"
+                            label="Priority"
                             type="number"
-                            placeholder="1"
-                            value={draft.repeat}
+                            value={draft.priority}
                             onChange={(event) =>
-                              updateDraft(draft.id, { repeat: event.target.value })
+                              updateDraft(draft.id, { priority: event.target.value })
                             }
                           />
-                          <FormControl size="small">
-                            <InputLabel id={`repeat-unit-${draft.id}`}>Repeat unit</InputLabel>
-                            <Select
-                              labelId={`repeat-unit-${draft.id}`}
-                              label="Repeat unit"
-                              value={draft.repeatUnit}
-                              onChange={(event) =>
-                                updateDraft(draft.id, {
-                                  repeatUnit: event.target.value as RepeatUnit,
-                                })
-                              }
-                            >
-                              <MenuItem value="month">Month(s)</MenuItem>
-                              <MenuItem value="year">Year(s)</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </>
-                      )}
-                    </Box>
-                  )}
-
-                  {draft.type === 'schedule' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <AutocompleteInput
-                        value={draft.name}
-                        onChange={(value) => updateDraft(draft.id, { name: value })}
-                        label="Schedule name"
-                        placeholder="Start typing a schedule"
-                        options={scheduleOptions}
-                      />
-                      <TextField
-                        size="small"
-                        label="Adjustment (%)"
-                        type="number"
-                        value={draft.adjustment}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { adjustment: event.target.value })
-                        }
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.full}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { full: event.target.checked })
-                            }
-                          />
-                        }
-                        label="Use full scheduled amount"
-                      />
-                    </Box>
-                  )}
-
-                  {draft.type === 'average' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Number of months"
-                        type="number"
-                        value={draft.numMonths}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { numMonths: event.target.value })
-                        }
-                      />
-                    </Box>
-                  )}
-
-                  {draft.type === 'copy' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Copy from months ago"
-                        type="number"
-                        value={draft.lookBack}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { lookBack: event.target.value })
-                        }
-                      />
-                    </Box>
-                  )}
-
-                  {draft.type === 'remainder' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Weight (default 1)"
-                        type="number"
-                        value={draft.weight}
-                        onChange={(event) => updateDraft(draft.id, { weight: event.target.value })}
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.limitEnabled}
-                            onChange={(event) => toggleLimit(draft.id, event.target.checked)}
-                          />
-                        }
-                        label="Add limit"
-                      />
-                      {draft.limitEnabled && (
-                        <>
-                          <TextField
-                            size="small"
-                            label="Limit amount"
-                            type="number"
-                            value={draft.limitAmount}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { limitAmount: event.target.value })
-                            }
-                          />
-                          <FormControl size="small">
-                            <InputLabel id={`remainder-limit-${draft.id}`}>Limit period</InputLabel>
-                            <Select
-                              labelId={`remainder-limit-${draft.id}`}
-                              label="Limit period"
-                              value={draft.limitPeriod}
-                              onChange={(event) =>
-                                updateDraft(draft.id, {
-                                  limitPeriod: event.target.value as LimitPeriod,
-                                })
-                              }
-                            >
-                              <MenuItem value="daily">Daily</MenuItem>
-                              <MenuItem value="weekly">Weekly</MenuItem>
-                              <MenuItem value="monthly">Monthly</MenuItem>
-                            </Select>
-                          </FormControl>
-                          <TextField
-                            size="small"
-                            label="Limit start"
-                            type="date"
-                            InputLabelProps={{ shrink: true }}
-                            value={draft.limitStart}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { limitStart: event.target.value })
-                            }
-                          />
+                        )}
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).previous && (
                           <FormControlLabel
                             control={
                               <Checkbox
                                 size="small"
-                                checked={draft.limitHold}
+                                checked={draft.previous}
                                 onChange={(event) =>
-                                  updateDraft(draft.id, { limitHold: event.target.checked })
+                                  updateDraft(draft.id, { previous: event.target.checked })
                                 }
                               />
                             }
-                            label="Hold leftover"
+                            label="Use previous month"
+                            sx={compactLabelSx}
                           />
-                        </>
-                      )}
-                    </Box>
-                  )}
+                        )}
+                      </Box>
+                    )}
 
-                  {draft.type === 'limit' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Limit amount"
-                        type="number"
-                        value={draft.limitAmount}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { limitAmount: event.target.value })
-                        }
-                      />
-                      <FormControl size="small">
-                        <InputLabel id={`limit-period-select-${draft.id}`}>Period</InputLabel>
-                        <Select
-                          labelId={`limit-period-select-${draft.id}`}
-                          label="Period"
-                          value={draft.limitPeriod}
+                    {draft.type === 'periodic' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Amount"
+                          type="number"
+                          value={draft.amount}
                           onChange={(event) =>
-                            updateDraft(draft.id, {
-                              limitPeriod: event.target.value as LimitPeriod,
-                            })
+                            updateDraft(draft.id, { amount: event.target.value })
                           }
-                        >
-                          <MenuItem value="daily">Daily</MenuItem>
-                          <MenuItem value="weekly">Weekly</MenuItem>
-                          <MenuItem value="monthly">Monthly</MenuItem>
-                        </Select>
-                      </FormControl>
-                      <TextField
-                        size="small"
-                        label="Start date"
-                        type="date"
-                        InputLabelProps={{ shrink: true }}
-                        value={draft.limitStart}
-                        onChange={(event) =>
-                          updateDraft(draft.id, { limitStart: event.target.value })
-                        }
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={draft.limitHold}
+                        />
+                        <TextField
+                          size="small"
+                          label="Repeat amount"
+                          type="number"
+                          value={draft.periodAmount}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { periodAmount: event.target.value })
+                          }
+                        />
+                        <FormControl size="small">
+                          <InputLabel id={`period-unit-${draft.id}`}>Repeat unit</InputLabel>
+                          <Select
+                            labelId={`period-unit-${draft.id}`}
+                            label="Repeat unit"
+                            value={draft.periodUnit}
                             onChange={(event) =>
-                              updateDraft(draft.id, { limitHold: event.target.checked })
+                              updateDraft(draft.id, {
+                                periodUnit: event.target.value as RepeatPeriod,
+                              })
+                            }
+                          >
+                            <MenuItem value="day">Day</MenuItem>
+                            <MenuItem value="week">Week</MenuItem>
+                            <MenuItem value="month">Month</MenuItem>
+                            <MenuItem value="year">Year</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <TextField
+                          size="small"
+                          label="Starting date"
+                          type="date"
+                          InputLabelProps={{ shrink: true }}
+                          value={draft.starting}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { starting: event.target.value })
+                          }
+                        />
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
+                          <TextField
+                            size="small"
+                            label="Priority"
+                            type="number"
+                            value={draft.priority}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { priority: event.target.value })
                             }
                           />
-                        }
-                        label="Hold leftover"
-                      />
-                    </Box>
-                  )}
+                        )}
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).limit &&
+                          draft.limitEnabled && (
+                            <Box sx={{ gridColumn: '1 / -1' }}>
+                              <Box sx={groupBoxSx}>
+                                <Typography variant="caption" sx={groupTitleSx}>
+                                  Limit
+                                </Typography>
+                                <TextField
+                                  size="small"
+                                  label="Amount"
+                                  type="number"
+                                  value={draft.limitAmount}
+                                  onChange={(event) =>
+                                    updateDraft(draft.id, { limitAmount: event.target.value })
+                                  }
+                                />
+                                <FormControl size="small">
+                                  <InputLabel id={`period-limit-${draft.id}`}>Period</InputLabel>
+                                  <Select
+                                    labelId={`period-limit-${draft.id}`}
+                                    label="Period"
+                                    value={draft.limitPeriod}
+                                    onChange={(event) =>
+                                      updateLimitPeriod(draft.id, event.target.value as LimitPeriod)
+                                    }
+                                  >
+                                    <MenuItem value="daily">Daily</MenuItem>
+                                    <MenuItem value="weekly">Weekly</MenuItem>
+                                    <MenuItem value="monthly">Monthly</MenuItem>
+                                  </Select>
+                                </FormControl>
+                                <TextField
+                                  size="small"
+                                  label="Start"
+                                  type="date"
+                                  InputLabelProps={{ shrink: true }}
+                                  value={draft.limitStart}
+                                  disabled={draft.limitPeriod !== 'weekly'}
+                                  onChange={(event) =>
+                                    updateDraft(draft.id, { limitStart: event.target.value })
+                                  }
+                                />
+                                <FormControlLabel
+                                  control={
+                                    <Checkbox
+                                      size="small"
+                                      checked={draft.limitHold}
+                                      onChange={(event) =>
+                                        updateDraft(draft.id, { limitHold: event.target.checked })
+                                      }
+                                    />
+                                  }
+                                  label="Hold leftover"
+                                  sx={compactLabelSx}
+                                />
+                              </Box>
+                            </Box>
+                          )}
+                      </Box>
+                    )}
 
-                  {draft.type === 'goal' && (
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 2,
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      }}
-                    >
-                      <TextField
-                        size="small"
-                        label="Goal amount"
-                        type="number"
-                        value={draft.amount}
-                        onChange={(event) => updateDraft(draft.id, { amount: event.target.value })}
-                      />
-                    </Box>
-                  )}
-                </Paper>
-              ))}
+                    {draft.type === 'by' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Amount"
+                          type="number"
+                          value={draft.amount}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { amount: event.target.value })
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="By (YYYY-MM)"
+                          placeholder="2026-01"
+                          value={draft.month}
+                          onChange={(event) => updateDraft(draft.id, { month: event.target.value })}
+                        />
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
+                          <TextField
+                            size="small"
+                            label="Priority"
+                            type="number"
+                            value={draft.priority}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { priority: event.target.value })
+                            }
+                          />
+                        )}
+                        {draft.type === 'by' &&
+                          (fieldVisibility[draft.id] ?? getInitialVisibility(draft)).from && (
+                            <TextField
+                              size="small"
+                              label="Spend from (YYYY-MM)"
+                              placeholder="2025-10"
+                              value={draft.from}
+                              onChange={(event) =>
+                                updateDraft(draft.id, { from: event.target.value })
+                              }
+                            />
+                          )}
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).repeat &&
+                          draft.repeatUnit && (
+                            <Box sx={{ gridColumn: '1 / -1' }}>
+                              <Box sx={groupBoxSx}>
+                                <Typography variant="caption" sx={groupTitleSx}>
+                                  Repeat
+                                </Typography>
+                                <TextField
+                                  size="small"
+                                  label="Every"
+                                  type="number"
+                                  placeholder="1"
+                                  value={draft.repeat}
+                                  onChange={(event) =>
+                                    updateDraft(draft.id, { repeat: event.target.value })
+                                  }
+                                />
+                                <FormControl size="small">
+                                  <InputLabel id={`repeat-unit-${draft.id}`}>Unit</InputLabel>
+                                  <Select
+                                    labelId={`repeat-unit-${draft.id}`}
+                                    label="Unit"
+                                    value={draft.repeatUnit}
+                                    onChange={(event) =>
+                                      updateDraft(draft.id, {
+                                        repeatUnit: event.target.value as RepeatUnit,
+                                      })
+                                    }
+                                  >
+                                    <MenuItem value="month">Month(s)</MenuItem>
+                                    <MenuItem value="year">Year(s)</MenuItem>
+                                  </Select>
+                                </FormControl>
+                              </Box>
+                            </Box>
+                          )}
+                      </Box>
+                    )}
+
+                    {draft.type === 'schedule' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <FormControl size="small">
+                          <InputLabel id={`schedule-select-${draft.id}`}>Schedule</InputLabel>
+                          <Select
+                            labelId={`schedule-select-${draft.id}`}
+                            label="Schedule"
+                            value={draft.name}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { name: event.target.value })
+                            }
+                          >
+                            {scheduleOptions.map((option) => (
+                              <MenuItem key={`${draft.id}-${option}`} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
+                          <TextField
+                            size="small"
+                            label="Priority"
+                            type="number"
+                            value={draft.priority}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { priority: event.target.value })
+                            }
+                          />
+                        )}
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).adjustment && (
+                          <TextField
+                            size="small"
+                            label="Adjustment (%)"
+                            type="number"
+                            value={draft.adjustment}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { adjustment: event.target.value })
+                            }
+                          />
+                        )}
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).full && (
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={draft.full}
+                                onChange={(event) =>
+                                  updateDraft(draft.id, { full: event.target.checked })
+                                }
+                              />
+                            }
+                            label="Use full scheduled amount"
+                            sx={compactLabelSx}
+                          />
+                        )}
+                      </Box>
+                    )}
+
+                    {draft.type === 'average' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Number of months"
+                          type="number"
+                          value={draft.numMonths}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { numMonths: event.target.value })
+                          }
+                        />
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
+                          <TextField
+                            size="small"
+                            label="Priority"
+                            type="number"
+                            value={draft.priority}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { priority: event.target.value })
+                            }
+                          />
+                        )}
+                      </Box>
+                    )}
+
+                    {draft.type === 'copy' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Copy from months ago"
+                          type="number"
+                          value={draft.lookBack}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { lookBack: event.target.value })
+                          }
+                        />
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).priority && (
+                          <TextField
+                            size="small"
+                            label="Priority"
+                            type="number"
+                            value={draft.priority}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { priority: event.target.value })
+                            }
+                          />
+                        )}
+                      </Box>
+                    )}
+
+                    {draft.type === 'remainder' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Weight (default 1)"
+                          type="number"
+                          value={draft.weight}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { weight: event.target.value })
+                          }
+                        />
+                        {(fieldVisibility[draft.id] ?? getInitialVisibility(draft)).limit &&
+                          draft.limitEnabled && (
+                            <Box sx={groupBoxSx}>
+                              <Typography variant="caption" sx={groupTitleSx}>
+                                Limit
+                              </Typography>
+                              <TextField
+                                size="small"
+                                label="Amount"
+                                type="number"
+                                value={draft.limitAmount}
+                                onChange={(event) =>
+                                  updateDraft(draft.id, { limitAmount: event.target.value })
+                                }
+                              />
+                              <FormControl size="small">
+                                <InputLabel id={`remainder-limit-${draft.id}`}>Period</InputLabel>
+                                <Select
+                                  labelId={`remainder-limit-${draft.id}`}
+                                  label="Period"
+                                  value={draft.limitPeriod}
+                                  onChange={(event) =>
+                                    updateLimitPeriod(draft.id, event.target.value as LimitPeriod)
+                                  }
+                                >
+                                  <MenuItem value="daily">Daily</MenuItem>
+                                  <MenuItem value="weekly">Weekly</MenuItem>
+                                  <MenuItem value="monthly">Monthly</MenuItem>
+                                </Select>
+                              </FormControl>
+                              <TextField
+                                size="small"
+                                label="Start"
+                                type="date"
+                                InputLabelProps={{ shrink: true }}
+                                value={draft.limitStart}
+                                disabled={draft.limitPeriod !== 'weekly'}
+                                onChange={(event) =>
+                                  updateDraft(draft.id, { limitStart: event.target.value })
+                                }
+                              />
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    size="small"
+                                    checked={draft.limitHold}
+                                    onChange={(event) =>
+                                      updateDraft(draft.id, { limitHold: event.target.checked })
+                                    }
+                                  />
+                                }
+                                label="Hold leftover"
+                                sx={compactLabelSx}
+                              />
+                            </Box>
+                          )}
+                      </Box>
+                    )}
+
+                    {draft.type === 'goal' && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1.5,
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'repeat(4, minmax(140px, 1fr))',
+                          },
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Goal amount"
+                          type="number"
+                          value={draft.amount}
+                          onChange={(event) =>
+                            updateDraft(draft.id, { amount: event.target.value })
+                          }
+                        />
+                        {getOptionalFields(draft.type).length > 0 && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={(event) => {
+                              setFieldMenuAnchor(event.currentTarget);
+                              setFieldMenuDraftId(draft.id);
+                            }}
+                          >
+                            Fields
+                          </Button>
+                        )}
+                      </Box>
+                    )}
+                  </Paper>
+                );
+              })}
             </Stack>
           </Stack>
+
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              bgcolor: 'background.paper',
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 2,
+            }}
+          >
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel id="template-type-select-label">Add template</InputLabel>
+                <Select
+                  labelId="template-type-select-label"
+                  id="template-type-select"
+                  value={newTemplateType}
+                  label="Add template"
+                  onChange={(event) => setNewTemplateType(event.target.value as TemplateType)}
+                  renderValue={(selected) =>
+                    templateTypeOptions.find((option) => option.value === selected)?.label ??
+                    String(selected)
+                  }
+                >
+                  {templateTypeOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="body2">{option.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.description}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button variant="outlined" size="small" onClick={addDraft}>
+                Add
+              </Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              Priority controls order; add it from Fields when needed.
+            </Typography>
+          </Paper>
 
           <Stack direction="row" spacing={2} flexWrap="wrap">
             <Button variant="contained" onClick={handleRender} disabled={renderMutation.isPending}>
@@ -1704,11 +2163,6 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             </Button>
           </Stack>
 
-          {editorError && (
-            <Alert severity="error" variant="outlined">
-              {editorError}
-            </Alert>
-          )}
           {applyStatus && (
             <Alert severity={applyStatus.isError ? 'error' : 'success'} variant="outlined">
               {applyStatus.message}
@@ -1740,7 +2194,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
             id="template-rendered-full"
             value={renderedWithComments}
             multiline
-            minRows={6}
+            minRows={4}
             fullWidth
             InputProps={{
               readOnly: true,
@@ -1752,43 +2206,5 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
         </Paper>
       </Box>
     </Box>
-  );
-}
-
-interface AutocompleteInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  options: AutocompleteOption[];
-  placeholder?: string;
-  label?: string;
-}
-
-function AutocompleteInput({
-  value,
-  onChange,
-  options,
-  placeholder,
-  label,
-}: AutocompleteInputProps) {
-  return (
-    <Autocomplete<AutocompleteOption, false, false, true>
-      freeSolo
-      options={options}
-      getOptionLabel={(option) => (typeof option === 'string' ? option : option.label)}
-      inputValue={value}
-      onInputChange={(_, newValue) => onChange(newValue)}
-      onChange={(_, newValue) => {
-        if (typeof newValue === 'string') {
-          onChange(newValue);
-        } else if (newValue) {
-          onChange(newValue.value);
-        } else {
-          onChange('');
-        }
-      }}
-      renderInput={(params) => (
-        <TextField {...params} size="small" placeholder={placeholder} label={label ?? 'Select'} />
-      )}
-    />
   );
 }

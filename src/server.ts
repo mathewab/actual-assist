@@ -128,6 +128,7 @@ const apiRouter = createApiRouter({
   jobOrchestrator,
   auditRepo,
   actualBudget,
+  defaultBudgetId: env.ACTUAL_SYNC_ID || env.ACTUAL_BUDGET_ID || null,
 });
 app.use('/api', apiRouter);
 

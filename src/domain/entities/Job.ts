@@ -8,6 +8,7 @@ export type JobType =
   | 'sync_and_suggest'
   | 'suggestions_retry_payee'
   | 'suggestions_apply'
+  | 'templates_apply'
   | 'snapshot_create'
   | 'snapshot_redownload'
   | 'scheduled_sync_and_suggest';

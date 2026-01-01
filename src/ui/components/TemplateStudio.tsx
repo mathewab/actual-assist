@@ -731,7 +731,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
 
   const applyMutation = useMutation({
     mutationFn: (payload: { categoryId: string; note: string | null }) =>
-      api.applyCategoryNote(payload.categoryId, payload.note, true),
+      api.applyCategoryNote(payload.categoryId, payload.note, true, budgetId),
     onSuccess: (response) => {
       if (response.check.pre) {
         setApplyStatus({

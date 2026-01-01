@@ -1,13 +1,21 @@
 import { Router } from 'express';
-import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { Request, Response, NextFunction } from 'express';
+import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
+import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
+import type { JobService } from '../services/JobService.js';
 
 /**
  * Budget route handler
  * T071: GET /api/budgets - list available budgets
  * P5 (Separation of concerns): HTTP layer delegates to adapter
  */
-export function createBudgetRouter(actualBudget: ActualBudgetAdapter): Router {
+export function createBudgetRouter(deps: {
+  actualBudget: ActualBudgetAdapter;
+  auditRepo: AuditRepository;
+  jobService: JobService;
+  defaultBudgetId: string | null;
+}): Router {
+  const { actualBudget, auditRepo, jobService, defaultBudgetId } = deps;
   const router = Router();
 
   /**
@@ -111,8 +119,9 @@ export function createBudgetRouter(actualBudget: ActualBudgetAdapter): Router {
    * POST /api/budgets/templates/apply - Update category notes and optionally sync
    */
   router.post('/templates/apply', async (req: Request, res: Response, next: NextFunction) => {
+    let jobId: string | null = null;
     try {
-      const { categoryId, note, sync } = req.body ?? {};
+      const { categoryId, note, sync, budgetId } = req.body ?? {};
       if (typeof categoryId !== 'string' || !categoryId) {
         res.status(400).json({ error: 'categoryId is required' });
         return;
@@ -121,6 +130,22 @@ export function createBudgetRouter(actualBudget: ActualBudgetAdapter): Router {
       if (note !== null && note !== undefined && typeof note !== 'string') {
         res.status(400).json({ error: 'note must be a string or null' });
         return;
+      }
+
+      const resolvedBudgetId =
+        typeof budgetId === 'string' && budgetId.length > 0 ? budgetId : defaultBudgetId;
+
+      const job = resolvedBudgetId
+        ? jobService.createJob({
+            budgetId: resolvedBudgetId,
+            type: 'templates_apply',
+            metadata: { categoryId, sync: Boolean(sync) },
+          })
+        : null;
+
+      if (job) {
+        jobId = job.id;
+        jobService.markJobRunning(job.id);
       }
 
       const previousNote = await actualBudget.getCategoryNote(categoryId);
@@ -133,13 +158,67 @@ export function createBudgetRouter(actualBudget: ActualBudgetAdapter): Router {
       if (check.pre) {
         await actualBudget.updateCategoryNote(categoryId, previousNote);
         rolledBack = true;
+        auditRepo.log({
+          eventType: 'templates_apply_rolled_back',
+          entityType: 'BudgetTemplates',
+          entityId: categoryId,
+          metadata: {
+            budgetId: resolvedBudgetId,
+            message: check.message,
+            pre: check.pre,
+          },
+        });
       } else if (sync) {
         await actualBudget.sync();
         synced = true;
       }
 
+      if (!rolledBack) {
+        auditRepo.log({
+          eventType: 'templates_applied',
+          entityType: 'BudgetTemplates',
+          entityId: categoryId,
+          metadata: {
+            budgetId: resolvedBudgetId,
+            synced,
+          },
+        });
+      }
+
+      if (jobId) {
+        if (rolledBack) {
+          jobService.markJobFailed(jobId, check.message || 'Template check failed');
+        } else {
+          jobService.markJobSucceeded(jobId);
+        }
+      }
+
       res.json({ check, synced, rolledBack });
     } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      if (jobId) {
+        try {
+          jobService.markJobFailed(jobId, reason);
+        } catch {
+          // ignore job status update errors
+        }
+      }
+      try {
+        auditRepo.log({
+          eventType: 'templates_apply_failed',
+          entityType: 'BudgetTemplates',
+          entityId: typeof req.body?.categoryId === 'string' ? req.body.categoryId : 'unknown',
+          metadata: {
+            budgetId:
+              typeof req.body?.budgetId === 'string' && req.body.budgetId.length > 0
+                ? req.body.budgetId
+                : defaultBudgetId,
+            error: reason,
+          },
+        });
+      } catch {
+        // ignore audit logging errors
+      }
       next(error);
     }
   });

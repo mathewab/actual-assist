@@ -141,6 +141,7 @@ export type JobType =
   | 'sync_and_suggest'
   | 'suggestions_retry_payee'
   | 'suggestions_apply'
+  | 'templates_apply'
   | 'snapshot_create'
   | 'snapshot_redownload'
   | 'scheduled_sync_and_suggest';
@@ -248,7 +249,8 @@ export const api = {
   async applyCategoryNote(
     categoryId: string,
     note: string | null,
-    sync: boolean
+    sync: boolean,
+    budgetId?: string
   ): Promise<{
     check: { message: string; pre?: string | null };
     synced: boolean;
@@ -257,7 +259,7 @@ export const api = {
     const response = await fetch(`${API_BASE}/budgets/templates/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoryId, note, sync }),
+      body: JSON.stringify({ categoryId, note, sync, budgetId }),
     });
 
     if (!response.ok) {

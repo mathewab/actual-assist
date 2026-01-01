@@ -21,6 +21,9 @@ export type AuditEventType =
   | 'suggestion_retried'
   | 'sync_executed'
   | 'sync_failed'
+  | 'templates_applied'
+  | 'templates_apply_failed'
+  | 'templates_apply_rolled_back'
   | 'scheduled_sync_started'
   | 'scheduled_sync_completed'
   | 'scheduled_sync_failed';

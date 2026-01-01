@@ -24,11 +24,20 @@ export function createApiRouter(deps: {
   jobOrchestrator: JobOrchestrator;
   auditRepo: AuditRepository;
   actualBudget: ActualBudgetAdapter;
+  defaultBudgetId: string | null;
 }): Router {
   const router = Router();
 
   // Mount sub-routers
-  router.use('/budgets', createBudgetRouter(deps.actualBudget));
+  router.use(
+    '/budgets',
+    createBudgetRouter({
+      actualBudget: deps.actualBudget,
+      auditRepo: deps.auditRepo,
+      jobService: deps.jobService,
+      defaultBudgetId: deps.defaultBudgetId,
+    })
+  );
   router.use('/snapshots', createSnapshotRouter(deps.jobOrchestrator));
   router.use('/suggestions', createSuggestionRouter(deps.suggestionService, deps.jobOrchestrator));
   router.use('/sync', createSyncRouter(deps.syncService, deps.jobOrchestrator));

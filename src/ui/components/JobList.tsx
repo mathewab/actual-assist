@@ -54,6 +54,8 @@ function formatJobType(type: Job['type']): string {
       return 'Retry Suggestions';
     case 'suggestions_apply':
       return 'Apply Suggestions';
+    case 'templates_apply':
+      return 'Apply Templates';
     case 'snapshot_create':
       return 'Create Snapshot';
     case 'snapshot_redownload':

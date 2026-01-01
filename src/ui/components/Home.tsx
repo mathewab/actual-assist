@@ -13,12 +13,6 @@ export function Home() {
           <Typography variant="overline" color="text.secondary">
             Dashboard
           </Typography>
-          <Typography variant="h5" fontWeight={700} color="text.primary" sx={{ mt: 0.5 }}>
-            Welcome back
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Choose a tool to continue. More tools will appear here as they ship.
-          </Typography>
         </Box>
 
         <Stack

@@ -191,7 +191,12 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
               Configure min score and AI refinement in Settings.
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={1}
+            alignItems={{ xs: 'stretch', md: 'center' }}
+            sx={{ width: { xs: '100%', md: 'auto' } }}
+          >
             <Typography variant="body2" color="text.secondary">
               Min score {settings.minScore} • AI {settings.useAI ? 'on' : 'off'} • AI min cluster{' '}
               {settings.aiMinClusterSize}
@@ -205,12 +210,14 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                 />
               }
               label="Force regenerate"
+              sx={{ m: 0 }}
             />
             <Button
               variant="outlined"
               onClick={() =>
                 queryClient.invalidateQueries({ queryKey: ['payee-merge-suggestions'] })
               }
+              fullWidth={isSmall}
             >
               Refresh
             </Button>
@@ -218,6 +225,7 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
               variant="contained"
               onClick={() => generateMutation.mutate()}
               disabled={generateMutation.isPending}
+              fullWidth={isSmall}
             >
               {generateMutation.isPending ? 'Generating...' : 'Generate suggestions'}
             </Button>
@@ -288,22 +296,28 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
               <Paper key={cluster.clusterId} variant="outlined" sx={{ borderRadius: 3, p: 2 }}>
                 <Stack spacing={2}>
                   <Stack
-                    direction="row"
+                    direction={{ xs: 'column', md: 'row' }}
                     spacing={1}
-                    alignItems="center"
+                    alignItems={{ xs: 'flex-start', md: 'center' }}
                     justifyContent="space-between"
                   >
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography variant="subtitle1" fontWeight={600}>
                         Duplicate group ({cluster.payees.length})
                       </Typography>
                       <Chip label={`${includedPayees.length} selected`} size="small" />
                     </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={1}
+                      alignItems={{ xs: 'stretch', md: 'center' }}
+                      sx={{ width: { xs: '100%', md: 'auto' } }}
+                    >
                       <Button
                         size="small"
                         variant="text"
                         onClick={() => setActiveClusterId(cluster.clusterId)}
+                        fullWidth={isSmall}
                       >
                         Customize
                       </Button>
@@ -312,6 +326,7 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                         variant="text"
                         color="inherit"
                         onClick={() => hideClusterMutation.mutate(cluster.groupHash)}
+                        fullWidth={isSmall}
                       >
                         Hide
                       </Button>
@@ -332,6 +347,8 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                               mb: 1,
                               borderRadius: 1,
                               bgcolor: 'transparent',
+                              maxWidth: '100%',
+                              minWidth: 0,
                               borderColor: (theme) =>
                                 isExcluded ? theme.palette.divider : theme.palette.success.main,
                               '& .MuiChip-label': {
@@ -340,6 +357,9 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                                     ? theme.palette.text.secondary
                                     : theme.palette.text.primary,
                                 fontWeight: isExcluded ? 400 : 600,
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
                               },
                             }}
                           />
@@ -355,7 +375,11 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                     </Alert>
                   )}
 
-                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+                  <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={2}
+                    alignItems={{ xs: 'stretch', md: 'center' }}
+                  >
                     <TextField
                       select
                       label="Merge into"
@@ -369,7 +393,8 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                           [cluster.clusterId]: event.target.value,
                         }));
                       }}
-                      sx={{ minWidth: 240 }}
+                      sx={{ minWidth: { md: 240 } }}
+                      fullWidth={isSmall}
                       SelectProps={{ native: true }}
                     >
                       {includedPayees.map((payee) => (
@@ -393,6 +418,7 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                         mergeMutation.isPending ||
                         clusterHasStalePayee
                       }
+                      fullWidth={isSmall}
                     >
                       Merge payees
                     </Button>

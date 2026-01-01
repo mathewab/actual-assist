@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
@@ -19,6 +18,7 @@ export function Settings() {
   const { themeId, setThemeId, options } = useAppTheme();
   const [payeeMergeSettings, setPayeeMergeSettings] = useState(loadPayeeMergeSettings());
   const defaultPayeeMergeSettings = getDefaultPayeeMergeSettings();
+  const activeTheme = options.find((theme) => theme.id === themeId) ?? options[0];
 
   const updatePayeeMergeSettings = (
     updater: (prev: typeof payeeMergeSettings) => typeof payeeMergeSettings
@@ -51,62 +51,43 @@ export function Settings() {
       </Box>
 
       <Stack spacing={2}>
-        {options.map((theme) => {
-          const isSelected = theme.id === themeId;
-
-          return (
-            <Paper
-              key={theme.id}
-              variant="outlined"
-              onClick={() => setThemeId(theme.id)}
-              sx={{
-                p: 2,
-                cursor: 'pointer',
-                borderColor: isSelected ? 'primary.main' : 'divider',
-                boxShadow: isSelected ? '0 0 0 1px' : 'none',
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Radio
-                  checked={isSelected}
-                  onChange={() => setThemeId(theme.id)}
-                  value={theme.id}
-                  inputProps={{ 'aria-label': theme.label }}
-                />
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                    <Typography variant="subtitle1" fontWeight={600}>
-                      {theme.label}
-                    </Typography>
-                    <Chip
-                      label={theme.mode === 'dark' ? 'Dark' : 'Light'}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {theme.description}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {theme.swatches.map((color) => (
-                    <Box
-                      key={color}
-                      sx={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        bgcolor: color,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      }}
-                    />
-                  ))}
-                </Box>
-              </Box>
-            </Paper>
-          );
-        })}
+        <TextField
+          select
+          label="Theme"
+          size="small"
+          value={themeId}
+          onChange={(event) => setThemeId(event.target.value as typeof themeId)}
+          helperText="Switch the color palette used across the workspace."
+        >
+          {options.map((theme) => (
+            <MenuItem key={theme.id} value={theme.id}>
+              {theme.label} · {theme.mode === 'dark' ? 'Dark' : 'Light'}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="subtitle1" fontWeight={600}>
+            {activeTheme.label}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {activeTheme.description}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
+            {activeTheme.swatches.map((color) => (
+              <Box
+                key={color}
+                sx={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  bgcolor: color,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              />
+            ))}
+          </Box>
+        </Paper>
       </Stack>
 
       <Box sx={{ mt: 5, mb: 2 }}>
@@ -135,7 +116,7 @@ export function Settings() {
                 }));
               }}
               inputProps={{ min: 0, max: 100, step: 1 }}
-              helperText={`Default: ${defaultPayeeMergeSettings.minScore}`}
+              helperText={`Similarity threshold for grouping payees. Default: ${defaultPayeeMergeSettings.minScore}`}
             />
             <TextField
               label="AI min cluster size"
@@ -151,23 +132,28 @@ export function Settings() {
                 }));
               }}
               inputProps={{ min: 2, step: 1 }}
-              helperText={`Default: ${defaultPayeeMergeSettings.aiMinClusterSize}`}
+              helperText={`Minimum payees before AI refinement runs. Default: ${defaultPayeeMergeSettings.aiMinClusterSize}`}
             />
           </Stack>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={payeeMergeSettings.useAI}
-                onChange={(event) =>
-                  updatePayeeMergeSettings((prev) => ({
-                    ...prev,
-                    useAI: event.target.checked,
-                  }))
-                }
-              />
-            }
-            label="Use AI to refine clusters"
-          />
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={payeeMergeSettings.useAI}
+                  onChange={(event) =>
+                    updatePayeeMergeSettings((prev) => ({
+                      ...prev,
+                      useAI: event.target.checked,
+                    }))
+                  }
+                />
+              }
+              label="Use AI to refine clusters"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
+              Lets the AI re-check duplicate groups and suggest cleaner merges.
+            </Typography>
+          </Box>
         </Stack>
       </Paper>
     </Box>

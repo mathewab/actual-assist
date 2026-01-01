@@ -25,6 +25,8 @@ interface ToastState {
   phase: ToastPhase;
 }
 
+const COMPLETED_TOAST_MS = 60_000;
+
 const statusColor = (status: string): 'default' | 'info' | 'success' | 'error' | 'warning' => {
   switch (status) {
     case 'queued':
@@ -96,48 +98,94 @@ function sortJobsByCreatedAt(items: Job[]): Job[] {
 export function JobCenter({ budgetId }: JobCenterProps) {
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const toastRef = useRef<ToastState | null>(null);
   const lastActiveJobIdRef = useRef<string | null>(null);
   const toastHideTimeoutRef = useRef<number | null>(null);
+  const completedToastUntilRef = useRef<number | null>(null);
   const hasBudget = Boolean(budgetId);
 
-  const updateToastForJobs = useCallback((items: Job[]) => {
-    const clearToastTimeout = () => {
-      if (toastHideTimeoutRef.current) {
-        window.clearTimeout(toastHideTimeoutRef.current);
-        toastHideTimeoutRef.current = null;
-      }
-    };
-
-    const active = items.filter((job) => job.status === 'running' || job.status === 'queued');
-    if (active.length > 0) {
-      const latestActive = active[0];
-      clearToastTimeout();
-      lastActiveJobIdRef.current = latestActive.id;
-      setToast({ job: latestActive, phase: 'running' });
-      return;
-    }
-
-    const lastActiveId = lastActiveJobIdRef.current;
-    if (!lastActiveId) {
-      clearToastTimeout();
-      setToast(null);
-      return;
-    }
-
-    const finishedJob = items.find((job) => job.id === lastActiveId && job.completedAt);
-    if (!finishedJob) {
-      clearToastTimeout();
-      setToast(null);
-      return;
-    }
-
-    clearToastTimeout();
-    setToast({ job: finishedJob, phase: 'completed' });
-    lastActiveJobIdRef.current = null;
-    toastHideTimeoutRef.current = window.setTimeout(() => {
-      setToast(null);
-    }, 2400);
+  const setToastState = useCallback((next: ToastState | null) => {
+    toastRef.current = next;
+    setToast(next);
   }, []);
+
+  const clearToastTimeout = useCallback(() => {
+    if (toastHideTimeoutRef.current) {
+      window.clearTimeout(toastHideTimeoutRef.current);
+      toastHideTimeoutRef.current = null;
+    }
+  }, []);
+
+  const showToastForJob = useCallback(
+    (job: Job) => {
+      clearToastTimeout();
+
+      if (job.status === 'running' || job.status === 'queued') {
+        completedToastUntilRef.current = null;
+        lastActiveJobIdRef.current = job.id;
+        setToastState({ job, phase: 'running' });
+        return;
+      }
+
+      completedToastUntilRef.current = Date.now() + COMPLETED_TOAST_MS;
+      lastActiveJobIdRef.current = null;
+      setToastState({ job, phase: 'completed' });
+      toastHideTimeoutRef.current = window.setTimeout(() => {
+        completedToastUntilRef.current = null;
+        setToastState(null);
+      }, COMPLETED_TOAST_MS);
+    },
+    [clearToastTimeout, setToastState]
+  );
+
+  const updateToastForJobs = useCallback(
+    (items: Job[]) => {
+      const active = items.filter((job) => job.status === 'running' || job.status === 'queued');
+      if (active.length > 0) {
+        const latestActive = active[0];
+        clearToastTimeout();
+        completedToastUntilRef.current = null;
+        lastActiveJobIdRef.current = latestActive.id;
+        setToastState({ job: latestActive, phase: 'running' });
+        return;
+      }
+
+      const lastActiveId = lastActiveJobIdRef.current;
+      if (!lastActiveId) {
+        if (
+          toastRef.current?.phase === 'completed' &&
+          completedToastUntilRef.current &&
+          Date.now() < completedToastUntilRef.current
+        ) {
+          return;
+        }
+        clearToastTimeout();
+        completedToastUntilRef.current = null;
+        setToastState(null);
+        return;
+      }
+
+      const finishedJob = items.find((job) => job.id === lastActiveId && job.completedAt);
+      if (!finishedJob) {
+        clearToastTimeout();
+        completedToastUntilRef.current = null;
+        setToastState(null);
+        return;
+      }
+
+      if (toastRef.current?.job.id !== finishedJob.id || toastRef.current?.phase !== 'completed') {
+        clearToastTimeout();
+        completedToastUntilRef.current = Date.now() + COMPLETED_TOAST_MS;
+        toastHideTimeoutRef.current = window.setTimeout(() => {
+          completedToastUntilRef.current = null;
+          setToastState(null);
+        }, COMPLETED_TOAST_MS);
+      }
+      setToastState({ job: finishedJob, phase: 'completed' });
+      lastActiveJobIdRef.current = null;
+    },
+    [clearToastTimeout, setToastState]
+  );
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['jobs', budgetId],
@@ -163,8 +211,22 @@ export function JobCenter({ budgetId }: JobCenterProps) {
       window.clearTimeout(toastHideTimeoutRef.current);
       toastHideTimeoutRef.current = null;
       lastActiveJobIdRef.current = null;
+      completedToastUntilRef.current = null;
+      toastRef.current = null;
     }
   }, [hasBudget]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<Job>).detail;
+      if (detail) {
+        showToastForJob(detail);
+      }
+    };
+
+    window.addEventListener('job-toast', handler);
+    return () => window.removeEventListener('job-toast', handler);
+  }, [showToastForJob]);
 
   useEffect(() => {
     return () => {
@@ -244,14 +306,40 @@ export function JobCenter({ budgetId }: JobCenterProps) {
       <Snackbar
         open={Boolean(showToast)}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        onClose={() => setToast(null)}
-        autoHideDuration={toast?.phase === 'completed' ? 2400 : null}
+        onClose={(_event, reason) => {
+          if (reason === 'clickaway') return;
+          if (toastHideTimeoutRef.current) {
+            window.clearTimeout(toastHideTimeoutRef.current);
+            toastHideTimeoutRef.current = null;
+          }
+          completedToastUntilRef.current = null;
+          toastRef.current = null;
+          setToast(null);
+        }}
+        autoHideDuration={toast?.phase === 'completed' ? COMPLETED_TOAST_MS : null}
       >
         <Alert
           severity={toast ? statusColor(toast.job.status) : 'info'}
           variant="filled"
           icon={
             toast?.phase === 'running' ? <CircularProgress size={14} color="inherit" /> : undefined
+          }
+          action={
+            <Button
+              size="small"
+              color="inherit"
+              onClick={() => {
+                if (toastHideTimeoutRef.current) {
+                  window.clearTimeout(toastHideTimeoutRef.current);
+                  toastHideTimeoutRef.current = null;
+                }
+                completedToastUntilRef.current = null;
+                toastRef.current = null;
+                setToast(null);
+              }}
+            >
+              Dismiss
+            </Button>
           }
         >
           <Typography variant="subtitle2" fontWeight={600}>

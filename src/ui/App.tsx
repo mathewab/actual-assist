@@ -72,7 +72,7 @@ export function App() {
   return (
     <BrowserRouter>
       <div className="flex min-h-screen flex-col bg-[var(--theme-bg)]">
-        <Header budgetName={selectedBudget?.name} />
+        <Header budgetName={selectedBudget?.name} budgetId={selectedBudget?.id} />
 
         <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-5 py-5">
           <main className="min-h-[400px] rounded-lg bg-[var(--theme-surface)] shadow-sm">

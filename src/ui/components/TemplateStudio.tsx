@@ -16,7 +16,7 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { api, type CategoryTemplateSummary } from '../services/api';
+import { api, type CategoryTemplateSummary, type Job } from '../services/api';
 import {
   buildNoteFromExisting,
   extractTemplateComments,
@@ -733,6 +733,9 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     mutationFn: (payload: { categoryId: string; note: string | null }) =>
       api.applyCategoryNote(payload.categoryId, payload.note, true, budgetId),
     onSuccess: (response) => {
+      if (response.job) {
+        window.dispatchEvent(new CustomEvent<Job>('job-toast', { detail: response.job }));
+      }
       if (response.check.pre) {
         setApplyStatus({
           message: `${response.check.message}\n${response.check.pre}\nRolled back changes.`,

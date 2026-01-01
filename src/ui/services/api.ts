@@ -255,6 +255,7 @@ export const api = {
     check: { message: string; pre?: string | null };
     synced: boolean;
     rolledBack: boolean;
+    job: Job | null;
   }> {
     const response = await fetch(`${API_BASE}/budgets/templates/apply`, {
       method: 'POST',

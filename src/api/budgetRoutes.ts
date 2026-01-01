@@ -185,15 +185,17 @@ export function createBudgetRouter(deps: {
         });
       }
 
+      let responseJob = null;
       if (jobId) {
         if (rolledBack) {
           jobService.markJobFailed(jobId, check.message || 'Template check failed');
         } else {
           jobService.markJobSucceeded(jobId);
         }
+        responseJob = jobService.getJob(jobId);
       }
 
-      res.json({ check, synced, rolledBack });
+      res.json({ check, synced, rolledBack, job: responseJob });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown error';
       if (jobId) {

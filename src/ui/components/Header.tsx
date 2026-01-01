@@ -15,12 +15,14 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
+import { JobCenter } from './JobCenter';
 
 interface HeaderProps {
   budgetName?: string;
+  budgetId?: string;
 }
 
-export function Header({ budgetName }: HeaderProps) {
+export function Header({ budgetName, budgetId }: HeaderProps) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toolsAnchor, setToolsAnchor] = useState<null | HTMLElement>(null);
@@ -85,6 +87,8 @@ export function Header({ budgetName }: HeaderProps) {
         )}
 
         <Box sx={{ flex: 1 }} />
+
+        <JobCenter budgetId={budgetId} />
 
         <Stack
           direction="row"

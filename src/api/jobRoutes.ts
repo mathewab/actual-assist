@@ -253,7 +253,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
    */
   router.post('/payees-merge-suggestions', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId, minScore, useAI, force } = req.body;
+      const { budgetId, minScore, useAI, force, aiMinClusterSize } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
@@ -268,12 +268,25 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
       if (parsedMinScore !== undefined && (Number.isNaN(parsedMinScore) || parsedMinScore < 0)) {
         throw new ValidationError('minScore must be a number >= 0');
       }
+      const parsedMinClusterSize =
+        typeof aiMinClusterSize === 'number'
+          ? aiMinClusterSize
+          : typeof aiMinClusterSize === 'string'
+            ? Number(aiMinClusterSize)
+            : undefined;
+      if (
+        parsedMinClusterSize !== undefined &&
+        (Number.isNaN(parsedMinClusterSize) || parsedMinClusterSize < 2)
+      ) {
+        throw new ValidationError('aiMinClusterSize must be a number >= 2');
+      }
 
       const result = jobOrchestrator.startPayeeMergeSuggestionsJob({
         budgetId,
         minScore: parsedMinScore,
         useAI: useAI === true,
         force: force === true,
+        aiMinClusterSize: parsedMinClusterSize,
       });
       res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {

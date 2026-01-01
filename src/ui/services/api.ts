@@ -57,6 +57,7 @@ export interface PayeeMergeClusterCache {
   payeeHash: string | null;
   currentPayeeHash: string;
   stale: boolean;
+  stalePayeeIds: string[];
 }
 
 export interface UncategorizedTransaction {
@@ -280,12 +281,13 @@ export const api = {
     budgetId: string,
     minScore?: number,
     useAI?: boolean,
-    force?: boolean
+    force?: boolean,
+    aiMinClusterSize?: number
   ): Promise<{ job: Job }> {
     const response = await fetch(`${API_BASE}/jobs/payees-merge-suggestions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, minScore, useAI, force }),
+      body: JSON.stringify({ budgetId, minScore, useAI, force, aiMinClusterSize }),
     });
 
     if (!response.ok) {

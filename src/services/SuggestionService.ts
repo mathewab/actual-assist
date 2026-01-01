@@ -16,6 +16,79 @@ import { payeeMatcher, type FuzzyMatchResult, type PayeeCandidate } from '../inf
 /** Threshold for caching high-confidence AI suggestions */
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;
 
+const PAYEE_IDENTIFICATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['canonicalPayeeName', 'confidence', 'reasoning'],
+  properties: {
+    canonicalPayeeName: { type: 'string' },
+    confidence: { type: 'number' },
+    reasoning: { type: 'string' },
+  },
+} as const;
+
+const CATEGORY_SUGGESTION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['categoryId', 'categoryName', 'confidence', 'reasoning'],
+  properties: {
+    categoryId: { type: ['string', 'null'] },
+    categoryName: { type: ['string', 'null'] },
+    confidence: { type: 'number' },
+    reasoning: { type: 'string' },
+  },
+} as const;
+
+const FUZZY_MATCH_VERIFICATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'isSameMerchant',
+    'canonicalPayeeName',
+    'payeeConfidence',
+    'payeeReasoning',
+    'categoryId',
+    'categoryName',
+    'categoryConfidence',
+    'categoryReasoning',
+  ],
+  properties: {
+    isSameMerchant: { type: 'boolean' },
+    canonicalPayeeName: { type: ['string', 'null'] },
+    payeeConfidence: { type: 'number' },
+    payeeReasoning: { type: 'string' },
+    categoryId: { type: ['string', 'null'] },
+    categoryName: { type: ['string', 'null'] },
+    categoryConfidence: { type: 'number' },
+    categoryReasoning: { type: 'string' },
+  },
+} as const;
+
+const FUZZY_MATCH_DISAMBIGUATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'matchIndex',
+    'canonicalPayeeName',
+    'payeeConfidence',
+    'payeeReasoning',
+    'categoryId',
+    'categoryName',
+    'categoryConfidence',
+    'categoryReasoning',
+  ],
+  properties: {
+    matchIndex: { type: ['integer', 'null'] },
+    canonicalPayeeName: { type: ['string', 'null'] },
+    payeeConfidence: { type: 'number' },
+    payeeReasoning: { type: 'string' },
+    categoryId: { type: ['string', 'null'] },
+    categoryName: { type: ['string', 'null'] },
+    categoryConfidence: { type: 'number' },
+    categoryReasoning: { type: 'string' },
+  },
+} as const;
+
 /** Result of payee suggestion for a transaction */
 interface PayeeSuggestionResult {
   payeeName: string;
@@ -375,6 +448,10 @@ ${categoryList}`;
         instructions: this.PAYEE_IDENTIFICATION_INSTRUCTIONS,
         input,
         webSearch: true,
+        jsonSchema: {
+          name: 'payee_identification',
+          schema: PAYEE_IDENTIFICATION_SCHEMA,
+        },
       });
       const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
 
@@ -430,6 +507,10 @@ ${categoryList}`;
         instructions: this.CATEGORY_SUGGESTION_INSTRUCTIONS,
         input,
         webSearch: true,
+        jsonSchema: {
+          name: 'category_suggestion',
+          schema: CATEGORY_SUGGESTION_SCHEMA,
+        },
       });
 
       const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
@@ -556,6 +637,10 @@ ${categoryList}`;
         instructions: this.FUZZY_MATCH_INSTRUCTIONS,
         input,
         webSearch: false,
+        jsonSchema: {
+          name: 'fuzzy_match_verification',
+          schema: FUZZY_MATCH_VERIFICATION_SCHEMA,
+        },
       });
 
       logger.info('OpenAI response for fuzzy match verification', {
@@ -708,6 +793,10 @@ ${categoryList}`;
         instructions,
         input,
         webSearch: false,
+        jsonSchema: {
+          name: 'fuzzy_match_disambiguation',
+          schema: FUZZY_MATCH_DISAMBIGUATION_SCHEMA,
+        },
       });
 
       logger.info('OpenAI response for fuzzy match disambiguation', {

@@ -175,6 +175,18 @@ CREATE TABLE IF NOT EXISTS payee_merge_cluster_meta (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Payee merge payee snapshot (for stale detection)
+CREATE TABLE IF NOT EXISTS payee_merge_payee_snapshot (
+  budget_id TEXT NOT NULL,
+  payee_id TEXT NOT NULL,
+  payee_name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (budget_id, payee_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payee_merge_payee_snapshot_budget
+  ON payee_merge_payee_snapshot(budget_id);
+
 -- Payee merge hidden groups
 CREATE TABLE IF NOT EXISTS payee_merge_hidden_groups (
   budget_id TEXT NOT NULL,

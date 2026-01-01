@@ -129,7 +129,6 @@ export function createPayeeRouter(deps: {
 
       await payeeMergeService.mergePayees(targetPayeeId, uniqueMergeIds);
       await payeeMergeService.sync();
-      payeeMergeService.clearCachedSuggestions(resolvedBudgetId);
 
       auditRepo.log({
         eventType: 'payees_merged',

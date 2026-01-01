@@ -15,6 +15,7 @@ type ActualAccount = {
 type ActualPayee = {
   id: string;
   name?: string | null;
+  transfer_acct?: string | null;
 };
 
 type ActualCategory = {
@@ -544,7 +545,8 @@ export class ActualBudgetAdapter {
       const payees = (await api.getPayees()) as ActualPayee[];
       return payees
         .filter(
-          (p): p is ActualPayee & { name: string } => typeof p.id === 'string' && isNamedPayee(p)
+          (p): p is ActualPayee & { name: string } =>
+            typeof p.id === 'string' && isNamedPayee(p) && !p.transfer_acct
         )
         .map((p) => ({ id: p.id, name: p.name }));
     } catch (error) {

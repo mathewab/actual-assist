@@ -17,6 +17,7 @@ import { PayeeCacheRepository } from './infra/repositories/PayeeCacheRepository.
 import { PayeeMergeClusterRepository } from './infra/repositories/PayeeMergeClusterRepository.js';
 import { PayeeMergeClusterMetaRepository } from './infra/repositories/PayeeMergeClusterMetaRepository.js';
 import { PayeeMergeHiddenGroupRepository } from './infra/repositories/PayeeMergeHiddenGroupRepository.js';
+import { PayeeMergePayeeSnapshotRepository } from './infra/repositories/PayeeMergePayeeSnapshotRepository.js';
 import { JobRepository } from './infra/repositories/JobRepository.js';
 import { JobStepRepository } from './infra/repositories/JobStepRepository.js';
 import { JobEventRepository } from './infra/repositories/JobEventRepository.js';
@@ -57,6 +58,7 @@ const auditRepo = new AuditRepository(db);
 const payeeCache = new PayeeCacheRepository(db);
 const payeeMergeClusterRepo = new PayeeMergeClusterRepository(db);
 const payeeMergeClusterMetaRepo = new PayeeMergeClusterMetaRepository(db);
+const payeeMergePayeeSnapshotRepo = new PayeeMergePayeeSnapshotRepository(db);
 const payeeMergeHiddenGroupRepo = new PayeeMergeHiddenGroupRepository(db);
 const jobRepo = new JobRepository(db);
 const jobStepRepo = new JobStepRepository(db);
@@ -77,6 +79,7 @@ const payeeMergeService = new PayeeMergeService(
   actualBudget,
   payeeMergeClusterRepo,
   payeeMergeClusterMetaRepo,
+  payeeMergePayeeSnapshotRepo,
   payeeMergeHiddenGroupRepo,
   openai,
   auditRepo
@@ -106,7 +109,8 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(apiLimiter);
+// Only rate-limit API traffic so Vite dev asset requests don't get throttled.
+app.use('/api', apiLimiter);
 
 // Request logging middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {

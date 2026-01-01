@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import JSON5 from 'json5';
 import { OpenAIError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
@@ -11,6 +12,12 @@ export interface CompletionOptions {
   input: string;
   /** Enable web search tool for up-to-date information */
   webSearch?: boolean;
+  /** Structured output schema for JSON responses */
+  jsonSchema?: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
 }
 
 /**
@@ -45,19 +52,51 @@ export class OpenAIAdapter {
         ? [{ type: 'web_search_preview' }]
         : [];
 
-      logger.info('Calling OpenAI Responses API', {
+      logger.info('OpenAI request payload', {
         model: this.model,
-        webSearch: options.webSearch ?? false,
+        instructions: options.instructions ?? null,
+        input: options.input,
         inputLength: options.input.length,
         hasInstructions: !!options.instructions,
+        webSearch: options.webSearch ?? false,
+        responseSchemaName: options.jsonSchema?.name ?? null,
       });
 
-      const response = await this.client.responses.create({
+      const text =
+        options.jsonSchema && options.jsonSchema.schema
+          ? {
+              format: {
+                type: 'json_schema' as const,
+                name: options.jsonSchema.name,
+                schema: options.jsonSchema.schema,
+                strict: options.jsonSchema.strict ?? true,
+              },
+            }
+          : undefined;
+
+      const responseStream = this.client.responses.stream({
         model: this.model,
         instructions: options.instructions,
         input: options.input,
         tools: tools.length > 0 ? tools : undefined,
+        text,
       });
+      let chunkBuffer = '';
+      responseStream.on('response.output_text.delta', (event) => {
+        chunkBuffer += event.delta;
+        if (chunkBuffer.length >= 100) {
+          logger.info('OpenAI response chunk', {
+            delta: chunkBuffer,
+          });
+          chunkBuffer = '';
+        }
+      });
+      const response = await responseStream.finalResponse();
+      if (chunkBuffer.length > 0) {
+        logger.info('OpenAI response chunk', {
+          delta: chunkBuffer,
+        });
+      }
 
       // Log response structure for debugging
       logger.debug('OpenAI Responses API response', {
@@ -128,6 +167,58 @@ export class OpenAIAdapter {
     const fencedMatch = trimmed.match(/```[^\n]*\n([\s\S]*?)```/i);
     const candidate = fencedMatch && fencedMatch[1] ? fencedMatch[1].trim() : trimmed;
 
-    return JSON.parse(candidate);
+    const tryParse = (value: string): T | null => {
+      try {
+        return JSON.parse(value) as T;
+      } catch {
+        return null;
+      }
+    };
+    const tryParseJson5 = (value: string): T | null => {
+      try {
+        return JSON5.parse(value) as T;
+      } catch {
+        return null;
+      }
+    };
+
+    const removeTrailingCommas = (value: string): string => value.replace(/,\s*([}\]])/g, '$1');
+
+    const attemptParse = (value: string): T | null => {
+      return (
+        tryParse(value) ??
+        tryParse(removeTrailingCommas(value)) ??
+        tryParse(removeTrailingCommas(value.trim())) ??
+        tryParseJson5(value) ??
+        tryParseJson5(removeTrailingCommas(value)) ??
+        tryParseJson5(removeTrailingCommas(value.trim()))
+      );
+    };
+
+    const firstPass = attemptParse(candidate);
+    if (firstPass) return firstPass;
+
+    // Best-effort recovery for incomplete fences or extra text
+    const withoutLeadingFence = candidate.replace(/^```[^\n]*\n?/i, '').replace(/```$/i, '');
+    const secondPass = attemptParse(withoutLeadingFence);
+    if (secondPass) return secondPass;
+
+    const jsonObjectStart = withoutLeadingFence.indexOf('{');
+    const jsonObjectEnd = withoutLeadingFence.lastIndexOf('}');
+    if (jsonObjectStart !== -1 && jsonObjectEnd !== -1 && jsonObjectEnd > jsonObjectStart) {
+      const sliced = withoutLeadingFence.slice(jsonObjectStart, jsonObjectEnd + 1);
+      const parsed = attemptParse(sliced);
+      if (parsed) return parsed;
+    }
+
+    const jsonArrayStart = withoutLeadingFence.indexOf('[');
+    const jsonArrayEnd = withoutLeadingFence.lastIndexOf(']');
+    if (jsonArrayStart !== -1 && jsonArrayEnd !== -1 && jsonArrayEnd > jsonArrayStart) {
+      const sliced = withoutLeadingFence.slice(jsonArrayStart, jsonArrayEnd + 1);
+      const parsed = attemptParse(sliced);
+      if (parsed) return parsed;
+    }
+
+    throw new Error('Failed to parse JSON response');
   }
 }

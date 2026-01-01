@@ -86,6 +86,7 @@ export class JobOrchestrator {
     minScore?: number;
     useAI?: boolean;
     force?: boolean;
+    aiMinClusterSize?: number;
   }): { job: Job } {
     const job = this.jobService.createJob({
       budgetId: params.budgetId,
@@ -94,6 +95,7 @@ export class JobOrchestrator {
         minScore: params.minScore,
         useAI: params.useAI === true,
         force: params.force === true,
+        aiMinClusterSize: params.aiMinClusterSize,
       },
     });
 
@@ -103,6 +105,7 @@ export class JobOrchestrator {
         minScore: params.minScore,
         useAI: params.useAI === true,
         force: params.force === true,
+        aiMinClusterSize: params.aiMinClusterSize,
       });
     });
 

@@ -12,12 +12,14 @@ import type {
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { PayeeMergeClusterMetaRepository } from '../infra/repositories/PayeeMergeClusterMetaRepository.js';
 import type { PayeeMergeHiddenGroupRepository } from '../infra/repositories/PayeeMergeHiddenGroupRepository.js';
+import type { PayeeMergePayeeSnapshotRepository } from '../infra/repositories/PayeeMergePayeeSnapshotRepository.js';
 
 export class PayeeMergeService {
   constructor(
     private actualBudget: ActualBudgetAdapter,
     private clusterRepo: PayeeMergeClusterRepository,
     private clusterMetaRepo: PayeeMergeClusterMetaRepository,
+    private payeeSnapshotRepo: PayeeMergePayeeSnapshotRepository,
     private hiddenGroupRepo: PayeeMergeHiddenGroupRepository,
     private openai: OpenAIAdapter,
     private auditRepo: AuditRepository
@@ -25,28 +27,53 @@ export class PayeeMergeService {
 
   async getCachedClusters(options: { budgetId: string }): Promise<{
     clusters: Array<PayeeMergeCluster & { hidden: boolean }>;
-    cache: { payeeHash: string | null; currentPayeeHash: string; stale: boolean };
+    cache: {
+      payeeHash: string | null;
+      currentPayeeHash: string;
+      stale: boolean;
+      stalePayeeIds: string[];
+    };
   }> {
     const clusters = this.clusterRepo.listByBudgetId(options.budgetId);
     const hiddenGroups = this.hiddenGroupRepo.listByBudgetId(options.budgetId);
     const hiddenHashes = new Set(hiddenGroups.map((group) => group.groupHash));
     const cachedMeta = this.clusterMetaRepo.getByBudgetId(options.budgetId);
+    const cachedSnapshot = this.payeeSnapshotRepo.listByBudgetId(options.budgetId);
     const currentPayees = await this.actualBudget.getPayees();
+    const currentPayeeMap = new Map(currentPayees.map((payee) => [payee.id, payee.name]));
+    const currentPayeeIds = new Set(currentPayees.map((payee) => payee.id));
     const currentHash = computePayeeHash(currentPayees);
     const cachedHash = cachedMeta?.payeeHash ?? null;
+    const isStale = !cachedHash || cachedHash !== currentHash;
+    const stalePayeeIds = isStale
+      ? computeStalePayeeIds(cachedSnapshot, currentPayees, clusters)
+      : [];
     return {
-      clusters: clusters.map((cluster) => {
-        const groupHash = cluster.groupHash || computeGroupHash(cluster.payees);
-        return {
-          ...cluster,
-          groupHash,
-          hidden: hiddenHashes.has(groupHash),
-        };
+      clusters: clusters.flatMap((cluster) => {
+        const payees = cluster.payees
+          .filter((payee) => currentPayeeIds.has(payee.id))
+          .map((payee) => ({
+            ...payee,
+            name: currentPayeeMap.get(payee.id) ?? payee.name,
+          }));
+        if (payees.length < 2) {
+          return [];
+        }
+        const groupHash = computeGroupHash(payees);
+        return [
+          {
+            ...cluster,
+            payees,
+            groupHash,
+            hidden: hiddenHashes.has(groupHash),
+          },
+        ];
       }),
       cache: {
         payeeHash: cachedHash,
         currentPayeeHash: currentHash,
-        stale: !cachedHash || cachedHash !== currentHash,
+        stale: isStale,
+        stalePayeeIds,
       },
     };
   }
@@ -56,8 +83,11 @@ export class PayeeMergeService {
     minScore?: number;
     useAI?: boolean;
     force?: boolean;
+    aiMinClusterSize?: number;
   }): Promise<PayeeMergeCluster[]> {
     const minScore = options.minScore ?? 92;
+    const effectiveMinScore = options.useAI ? Math.min(minScore, 80) : minScore;
+    const aiMinClusterSize = Math.max(2, options.aiMinClusterSize ?? 5);
 
     try {
       if (options.force) {
@@ -77,22 +107,26 @@ export class PayeeMergeService {
 
       for (const payee of payees) {
         const clean = payeeMatcher.normalize(payee.name);
-        const tokens = toTokens(clean);
+        const rawTokens = toTokens(clean);
+        const tokens = selectClusterTokens(rawTokens);
         normalized.set(payee.id, clean);
-        tokenSet.set(payee.id, toTokenSet(clean));
+        tokenSet.set(payee.id, toTokenSet(tokens));
         tokenList.set(payee.id, tokens);
         for (const token of tokens) {
           tokenFrequency.set(token, (tokenFrequency.get(token) ?? 0) + 1);
         }
       }
 
-      const exactBuckets = new Map<string, string[]>();
       const tokenBuckets = new Map<string, string[]>();
       for (const payee of payees) {
-        const clean = normalized.get(payee.id) || '';
         const tokens = tokenSet.get(payee.id) || '';
-        addToBucket(exactBuckets, clean, payee.id);
         addToBucket(tokenBuckets, tokens, payee.id);
+      }
+
+      const exactBuckets = new Map<string, string[]>();
+      for (const payee of payees) {
+        const clean = normalized.get(payee.id) || '';
+        addToBucket(exactBuckets, clean, payee.id);
       }
 
       for (const ids of exactBuckets.values()) {
@@ -111,7 +145,6 @@ export class PayeeMergeService {
         }
       }
 
-      const flaggedIds = new Set<string>();
       const weights = buildTokenWeights(tokenFrequency);
 
       for (const ids of rareTokenBuckets.values()) {
@@ -121,26 +154,22 @@ export class PayeeMergeService {
             const rightTokens = tokenList.get(ids[j]) ?? [];
             if (leftTokens.length === 0 || rightTokens.length === 0) continue;
 
-            const weightedScore = weightedTokenSimilarity(leftTokens, rightTokens, weights);
-            if (weightedScore < minScore) continue;
-
             const left = normalized.get(ids[i]) || '';
             const right = normalized.get(ids[j]) || '';
             const rawScore = left && right ? fuzz.token_set_ratio(left, right) : 0;
-            if (rawScore < minScore) {
-              flaggedIds.add(ids[i]);
-              flaggedIds.add(ids[j]);
-            }
+            const weightedScore = weightedTokenSimilarity(leftTokens, rightTokens, weights);
+            if (weightedScore < effectiveMinScore && rawScore < effectiveMinScore) continue;
             unionFind.union(ids[i], ids[j]);
           }
         }
       }
 
       let clusters = buildClusters(options.budgetId, payees, unionFind, normalized, tokenSet);
-      if (options.useAI && clusters.length > 0 && flaggedIds.size > 0) {
-        clusters = await this.refineClustersWithAI(clusters, flaggedIds);
+      if (options.useAI && clusters.length > 0) {
+        clusters = await this.refineClustersWithAIAll(clusters, aiMinClusterSize);
       }
       this.clusterRepo.replaceForBudget(options.budgetId, clusters);
+      this.payeeSnapshotRepo.replaceForBudget(options.budgetId, payees);
       this.clusterMetaRepo.upsert({
         budgetId: options.budgetId,
         payeeHash,
@@ -183,6 +212,7 @@ export class PayeeMergeService {
   clearCachedSuggestions(budgetId: string): void {
     this.clusterRepo.clearByBudgetId(budgetId);
     this.clusterMetaRepo.clearByBudgetId(budgetId);
+    this.payeeSnapshotRepo.clearByBudgetId(budgetId);
   }
 
   hideCluster(params: { budgetId: string; groupHash: string }): void {
@@ -193,25 +223,22 @@ export class PayeeMergeService {
     this.hiddenGroupRepo.unhideGroup(params);
   }
 
-  private async refineClustersWithAI(
+  private async refineClustersWithAIAll(
     clusters: PayeeMergeCluster[],
-    flaggedIds: Set<string>
+    minClusterSize: number
   ): Promise<PayeeMergeCluster[]> {
     const refined: PayeeMergeCluster[] = [];
 
     for (const cluster of clusters) {
-      const hasFlagged = cluster.payees.some((payee) => flaggedIds.has(payee.id));
-      if (!hasFlagged || cluster.payees.length < 2) {
+      if (cluster.payees.length < minClusterSize) {
         refined.push(cluster);
         continue;
       }
-
       const aiResult = await this.splitClusterWithAI(cluster);
       if (!aiResult) {
         refined.push(cluster);
         continue;
       }
-
       refined.push(...aiResult);
     }
 
@@ -226,13 +253,46 @@ Return JSON with a single key "groups" that is an array of arrays of integers.
 Each integer is the 0-based index of a payee in the list.
 All indexes must appear exactly once across all groups.
 Be conservative: only split when you are confident the names refer to different entities.
+Do NOT group items just because they share a city/region/descriptor or a suffix like a phone number.
+Only group when the merchant/entity name is the same; a location suffix is allowed ONLY for the same brand.
+
+Good groupings (same entity):
+- "Starbucks Seattle", "Starbucks #1234", "Starbucks Cafe"
+- "Amazon Mktp", "AMZN Mktp", "Amazon Marketplace"
+- "Costco Gas", "Costco Wholesale", "Costco #102"
+
+Bad groupings (different entities despite shared words/location):
+- "Springfield Public Library" vs "Springfield Bakery"
+- "Downtown Parking" vs "Downtown Cafe"
+- "Main Street Dental" vs "Main Street Books"
+
 If they are all the same entity, return one group with all indexes.`;
 
     const lines = cluster.payees.map((payee, index) => `${index}. ${payee.name}`).join('\n');
     const input = `Payee list:\n${lines}`;
 
     try {
-      const response = await this.openai.completion({ instructions, input });
+      const response = await this.openai.completion({
+        instructions,
+        input,
+        jsonSchema: {
+          name: 'payee_cluster_split',
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['groups'],
+            properties: {
+              groups: {
+                type: 'array',
+                items: {
+                  type: 'array',
+                  items: { type: 'integer', minimum: 0 },
+                },
+              },
+            },
+          },
+        },
+      });
       const parsed = OpenAIAdapter.parseJsonResponse<{ groups: number[][] }>(response);
       if (!parsed?.groups || !Array.isArray(parsed.groups)) {
         return null;
@@ -263,6 +323,8 @@ If they are all the same entity, return one group with all indexes.`;
       return null;
     }
   }
+
+  // buildClustersWithAI removed; AI now refines heuristic clusters
 }
 
 function addToBucket(map: Map<string, string[]>, key: string, id: string) {
@@ -283,8 +345,7 @@ function unionAll(unionFind: UnionFind, ids: string[]): void {
   }
 }
 
-function toTokenSet(value: string): string {
-  const tokens = value.split(' ').filter(Boolean);
+function toTokenSet(tokens: string[]): string {
   const unique = Array.from(new Set(tokens));
   unique.sort();
   return unique.join(' ');
@@ -295,18 +356,35 @@ function toTokens(value: string): string[] {
   return Array.from(new Set(tokens));
 }
 
+function selectClusterTokens(tokens: string[]): string[] {
+  const filtered = tokens.filter((token) => !isNoiseToken(token));
+  return filtered.length > 0 ? filtered : tokens;
+}
+
+function isNoiseToken(token: string): boolean {
+  if (!token) return true;
+  const hasLetter = /[a-z]/i.test(token);
+  const hasDigit = /\d/.test(token);
+  if (hasLetter && hasDigit) return true;
+  if (!hasLetter && hasDigit && token.length >= 5) return true;
+  return false;
+}
+
 function getRarestToken(tokens: string[], frequency: Map<string, number>): string | null {
   if (tokens.length === 0) return null;
-  let best = tokens[0];
-  let bestCount = frequency.get(best) ?? Number.MAX_SAFE_INTEGER;
-  for (const token of tokens) {
-    const count = frequency.get(token) ?? Number.MAX_SAFE_INTEGER;
-    if (count < bestCount) {
-      best = token;
-      bestCount = count;
+  const withCounts = tokens.map((token) => ({
+    token,
+    count: frequency.get(token) ?? Number.MAX_SAFE_INTEGER,
+  }));
+  const shared = withCounts.filter((entry) => entry.count > 1);
+  const candidates = shared.length > 0 ? shared : withCounts;
+  let best = candidates[0];
+  for (const entry of candidates) {
+    if (entry.count < best.count) {
+      best = entry;
     }
   }
-  return best;
+  return best.token;
 }
 
 function buildTokenWeights(frequency: Map<string, number>): Map<string, number> {
@@ -437,4 +515,29 @@ function computeGroupHash(payees: PayeeMergeClusterPayee[]): string {
   const sorted = [...payees].sort((a, b) => a.id.localeCompare(b.id));
   const payload = sorted.map((payee) => `${payee.id}:${payee.name}`).join('|');
   return createHash('sha256').update(payload).digest('hex');
+}
+
+function computeStalePayeeIds(
+  cachedSnapshot: Array<{ payeeId: string; payeeName: string }>,
+  currentPayees: Array<{ id: string; name: string }>,
+  clusters: PayeeMergeCluster[]
+): string[] {
+  if (cachedSnapshot.length === 0) {
+    return Array.from(
+      new Set(clusters.flatMap((cluster) => cluster.payees.map((payee) => payee.id)))
+    );
+  }
+
+  const cachedById = new Map(cachedSnapshot.map((payee) => [payee.payeeId, payee.payeeName]));
+  const currentById = new Map(currentPayees.map((payee) => [payee.id, payee.name]));
+  const staleIds = new Set<string>();
+
+  for (const [payeeId, cachedName] of cachedById.entries()) {
+    const currentName = currentById.get(payeeId);
+    if (!currentName || currentName !== cachedName) {
+      staleIds.add(payeeId);
+    }
+  }
+
+  return Array.from(staleIds);
 }

@@ -20,6 +20,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
 import { api, type PayeeMergeCluster } from '../services/api';
+import { loadPayeeMergeSettings } from '../services/payeeMergeSettings';
 
 interface PayeeMergeToolProps {
   budgetId: string;
@@ -27,8 +28,7 @@ interface PayeeMergeToolProps {
 
 export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   const queryClient = useQueryClient();
-  const [minScore, setMinScore] = useState(92);
-  const [useAI, setUseAI] = useState(false);
+  const [settings] = useState(loadPayeeMergeSettings());
   const [forceRegenerate, setForceRegenerate] = useState(false);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [pendingClusterId, setPendingClusterId] = useState<string | null>(null);
@@ -40,8 +40,8 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['payee-merge-suggestions', budgetId, minScore],
-    queryFn: () => api.getPayeeMergeSuggestions(budgetId, minScore),
+    queryKey: ['payee-merge-suggestions', budgetId, settings.minScore],
+    queryFn: () => api.getPayeeMergeSuggestions(budgetId, settings.minScore),
     enabled: !!budgetId,
     onSuccess: (response) => {
       if (!pendingJobId) return;
@@ -53,7 +53,13 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
 
   const generateMutation = useMutation({
     mutationFn: () =>
-      api.createPayeeMergeSuggestionsJob(budgetId, minScore, useAI, forceRegenerate),
+      api.createPayeeMergeSuggestionsJob(
+        budgetId,
+        settings.minScore,
+        settings.useAI,
+        forceRegenerate,
+        settings.aiMinClusterSize
+      ),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
       setForceRegenerate(false);
@@ -134,6 +140,7 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   const hiddenClusters = clusters.filter((cluster) => cluster.hidden);
   const cache = data?.cache;
   const isCacheStale = Boolean(cache?.stale);
+  const stalePayeeIds = useMemo(() => new Set(cache?.stalePayeeIds ?? []), [cache]);
   const showPendingBanner = Boolean(pendingJobId && (isCacheStale || clusters.length === 0));
 
   const toggleExcluded = (clusterId: string, payeeId: string) => {
@@ -146,12 +153,6 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
       }
       return { ...prev, [clusterId]: Array.from(current) };
     });
-  };
-
-  const handleMinScoreChange = (value: string) => {
-    const parsed = Number(value);
-    if (Number.isNaN(parsed)) return;
-    setMinScore(Math.max(0, Math.min(100, parsed)));
   };
 
   return (
@@ -184,31 +185,17 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
         >
           <Stack spacing={0.5}>
             <Typography variant="subtitle2" fontWeight={600}>
-              Similarity threshold
+              Duplicate detection settings
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Higher scores require closer matches (0-100).
+              Configure min score and AI refinement in Settings.
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <TextField
-              label="Min score"
-              type="number"
-              size="small"
-              value={minScore}
-              onChange={(event) => handleMinScoreChange(event.target.value)}
-              inputProps={{ min: 0, max: 100, step: 1 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={useAI}
-                  onChange={(event) => setUseAI(event.target.checked)}
-                  size="small"
-                />
-              }
-              label="Use AI"
-            />
+            <Typography variant="body2" color="text.secondary">
+              Min score {settings.minScore} • AI {settings.useAI ? 'on' : 'off'} • AI min cluster{' '}
+              {settings.aiMinClusterSize}
+            </Typography>
             <FormControlLabel
               control={
                 <Switch
@@ -282,6 +269,9 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
           {visibleClusters.map((cluster) => {
             const excluded = new Set(excludedByCluster[cluster.clusterId] ?? []);
             const includedPayees = cluster.payees.filter((payee) => !excluded.has(payee.id));
+            const clusterHasStalePayee = cluster.payees.some((payee) =>
+              stalePayeeIds.has(payee.id)
+            );
             const selectedTargetId =
               pendingClusterId === cluster.clusterId
                 ? pendingTargetId
@@ -358,6 +348,13 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                     )}
                   </Stack>
 
+                  {clusterHasStalePayee && (
+                    <Alert severity="warning" sx={{ py: 0.5 }}>
+                      This group includes payees that changed since the last generate. Regenerate
+                      suggestions before merging.
+                    </Alert>
+                  )}
+
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
                     <TextField
                       select
@@ -391,7 +388,10 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                         })
                       }
                       disabled={
-                        !effectiveTargetId || mergeIds.length === 0 || mergeMutation.isPending
+                        !effectiveTargetId ||
+                        mergeIds.length === 0 ||
+                        mergeMutation.isPending ||
+                        clusterHasStalePayee
                       }
                     >
                       Merge payees

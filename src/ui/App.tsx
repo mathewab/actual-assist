@@ -9,6 +9,7 @@ import { History } from './components/History';
 import { Audit } from './components/Audit';
 import { JobList } from './components/JobList';
 import { TemplateStudio } from './components/TemplateStudio';
+import { PayeeMergeTool } from './components/PayeeMergeTool';
 import { Settings } from './components/Settings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { api, type Budget } from './services/api';
@@ -112,6 +113,12 @@ export function App() {
                   path="/templates"
                   element={renderBudgetRoute((budgetId) => (
                     <TemplateStudio budgetId={budgetId} />
+                  ))}
+                />
+                <Route
+                  path="/payees/merge"
+                  element={renderBudgetRoute((budgetId) => (
+                    <PayeeMergeTool budgetId={budgetId} />
                   ))}
                 />
                 <Route

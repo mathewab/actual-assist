@@ -1,5 +1,6 @@
 import { logger } from '../infra/logger.js';
 import type { SuggestionService } from './SuggestionService.js';
+import type { PayeeMergeService } from './PayeeMergeService.js';
 import type { JobService } from './JobService.js';
 import type { SyncService } from './SyncService.js';
 import type { SnapshotService } from './SnapshotService.js';
@@ -17,7 +18,8 @@ export class JobOrchestrator {
     private jobService: JobService,
     private syncService: SyncService,
     private suggestionService: SuggestionService,
-    private snapshotService: SnapshotService
+    private snapshotService: SnapshotService,
+    private payeeMergeService: PayeeMergeService
   ) {}
 
   startBudgetSyncJob(budgetId: string): { job: Job } {
@@ -76,6 +78,34 @@ export class JobOrchestrator {
     this.runSingleJob(job, async () => {
       await this.syncService.applySpecificSuggestions(budgetId, suggestionIds);
     });
+    return { job };
+  }
+
+  startPayeeMergeSuggestionsJob(params: {
+    budgetId: string;
+    minScore?: number;
+    useAI?: boolean;
+    force?: boolean;
+  }): { job: Job } {
+    const job = this.jobService.createJob({
+      budgetId: params.budgetId,
+      type: 'payees_merge_suggestions_generate',
+      metadata: {
+        minScore: params.minScore,
+        useAI: params.useAI === true,
+        force: params.force === true,
+      },
+    });
+
+    this.runSingleJob(job, async () => {
+      await this.payeeMergeService.generateMergeClusters({
+        budgetId: params.budgetId,
+        minScore: params.minScore,
+        useAI: params.useAI === true,
+        force: params.force === true,
+      });
+    });
+
     return { job };
   }
 

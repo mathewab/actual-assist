@@ -21,11 +21,16 @@ export function Home() {
           </Typography>
         </Box>
 
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={3}
+          sx={{ flexWrap: { md: 'wrap' } }}
+        >
           <Paper
             variant="outlined"
             sx={{
               flex: 1,
+              minWidth: { md: 260 },
               p: 3,
               borderRadius: 3,
               bgcolor: 'background.default',
@@ -51,6 +56,33 @@ export function Home() {
             variant="outlined"
             sx={{
               flex: 1,
+              minWidth: { md: 260 },
+              p: 3,
+              borderRadius: 3,
+              bgcolor: 'background.default',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Duplicate payee suggestions
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Review duplicate payee clusters and merge them into a single clean payee name.
+            </Typography>
+            <Box sx={{ mt: 'auto' }}>
+              <Button component={NavLink} to="/payees/merge" variant="contained" size="small">
+                Open Duplicate payee suggestions
+              </Button>
+            </Box>
+          </Paper>
+
+          <Paper
+            variant="outlined"
+            sx={{
+              flex: 1,
+              minWidth: { md: 260 },
               p: 3,
               borderRadius: 3,
               bgcolor: 'background.default',

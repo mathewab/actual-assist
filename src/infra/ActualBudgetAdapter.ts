@@ -598,6 +598,28 @@ export class ActualBudgetAdapter {
   }
 
   /**
+   * Merge multiple payees into a target payee
+   */
+  async mergePayees(targetPayeeId: string, mergePayeeIds: string[]): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      await api.mergePayees(targetPayeeId, mergePayeeIds);
+      logger.info('Merged payees', {
+        targetPayeeId,
+        mergePayeeIds,
+        mergeCount: mergePayeeIds.length,
+      });
+    } catch (error) {
+      throw new ActualBudgetError('Failed to merge payees', {
+        targetPayeeId,
+        mergePayeeIds,
+        error,
+      });
+    }
+  }
+
+  /**
    * Find or create a payee by name
    */
   async findOrCreatePayee(name: string): Promise<string> {

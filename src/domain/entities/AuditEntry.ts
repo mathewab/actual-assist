@@ -24,6 +24,10 @@ export type AuditEventType =
   | 'templates_applied'
   | 'templates_apply_failed'
   | 'templates_apply_rolled_back'
+  | 'payees_merged'
+  | 'payees_merge_failed'
+  | 'payees_merge_suggestions_generated'
+  | 'payees_merge_suggestions_failed'
   | 'scheduled_sync_started'
   | 'scheduled_sync_completed'
   | 'scheduled_sync_failed';

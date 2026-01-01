@@ -9,6 +9,8 @@ export type JobType =
   | 'suggestions_retry_payee'
   | 'suggestions_apply'
   | 'templates_apply'
+  | 'payees_merge'
+  | 'payees_merge_suggestions_generate'
   | 'snapshot_create'
   | 'snapshot_redownload'
   | 'scheduled_sync_and_suggest';

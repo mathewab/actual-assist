@@ -37,6 +37,28 @@ export interface Payee {
   name: string;
 }
 
+export interface PayeeMergeClusterPayee {
+  id: string;
+  name: string;
+  normalizedName: string;
+  tokenSet: string;
+}
+
+export interface PayeeMergeCluster {
+  clusterId: string;
+  groupHash: string;
+  budgetId: string;
+  payees: PayeeMergeClusterPayee[];
+  createdAt: string;
+  hidden?: boolean;
+}
+
+export interface PayeeMergeClusterCache {
+  payeeHash: string | null;
+  currentPayeeHash: string;
+  stale: boolean;
+}
+
 export interface UncategorizedTransaction {
   id: string;
   accountId: string;
@@ -144,6 +166,8 @@ export type JobType =
   | 'templates_apply'
   | 'snapshot_create'
   | 'snapshot_redownload'
+  | 'payees_merge'
+  | 'payees_merge_suggestions_generate'
   | 'scheduled_sync_and_suggest';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
@@ -195,6 +219,101 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to get categories');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get merge suggestions for duplicate payees
+   */
+  async getPayeeMergeSuggestions(
+    budgetId: string,
+    minScore?: number
+  ): Promise<{ clusters: PayeeMergeCluster[]; cache: PayeeMergeClusterCache }> {
+    const params = new URLSearchParams({ budgetId });
+    if (minScore !== undefined) {
+      params.set('minScore', String(minScore));
+    }
+    const query = `?${params.toString()}`;
+    const response = await fetch(`${API_BASE}/payees/merge-suggestions${query}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch payee merge suggestions');
+    }
+
+    return response.json();
+  },
+
+  async hidePayeeMergeCluster(budgetId: string, groupHash: string): Promise<{ hidden: boolean }> {
+    const response = await fetch(`${API_BASE}/payees/merge-clusters/hide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, groupHash }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to hide merge cluster');
+    }
+
+    return response.json();
+  },
+
+  async unhidePayeeMergeCluster(budgetId: string, groupHash: string): Promise<{ hidden: boolean }> {
+    const response = await fetch(`${API_BASE}/payees/merge-clusters/unhide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, groupHash }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to unhide merge cluster');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Create a payee merge suggestion generation job
+   */
+  async createPayeeMergeSuggestionsJob(
+    budgetId: string,
+    minScore?: number,
+    useAI?: boolean,
+    force?: boolean
+  ): Promise<{ job: Job }> {
+    const response = await fetch(`${API_BASE}/jobs/payees-merge-suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgetId, minScore, useAI, force }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create payee merge suggestions job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Merge payees into a target payee
+   */
+  async mergePayees(
+    targetPayeeId: string,
+    mergePayeeIds: string[],
+    budgetId: string
+  ): Promise<{
+    merged: { targetPayeeId: string; mergePayeeIds: string[]; mergeCount: number };
+    job: Job;
+  }> {
+    const response = await fetch(`${API_BASE}/payees/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetPayeeId, mergePayeeIds, budgetId }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to merge payees');
     }
 
     return response.json();
@@ -392,6 +511,19 @@ export const api = {
   },
 
   /**
+   * Get a job by ID with steps
+   */
+  async getJob(jobId: string): Promise<{ job: Job; steps: JobStep[] }> {
+    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch job');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Create a sync job
    */
   async createSyncJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
@@ -440,19 +572,6 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to create sync and generate job');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Get job details with steps
-   */
-  async getJob(jobId: string): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch job detail');
     }
 
     return response.json();

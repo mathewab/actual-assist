@@ -33,7 +33,8 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
     location.pathname.startsWith('/suggestions') ||
     location.pathname.startsWith('/templates') ||
     location.pathname.startsWith('/history') ||
-    location.pathname.startsWith('/apply');
+    location.pathname.startsWith('/apply') ||
+    location.pathname.startsWith('/payees/merge');
   const isSystemSection =
     location.pathname.startsWith('/audit') ||
     location.pathname.startsWith('/settings') ||
@@ -49,6 +50,7 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
         label: 'Tools',
         items: [
           { label: 'Category suggestions', path: '/suggestions' },
+          { label: 'Duplicate payee suggestions', path: '/payees/merge' },
           { label: 'Budget Template Studio', path: '/templates' },
         ],
       },

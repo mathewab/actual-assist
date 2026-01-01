@@ -5,12 +5,14 @@ import { createSyncRouter } from './syncRoutes.js';
 import { createAuditRouter } from './auditRoutes.js';
 import { createBudgetRouter } from './budgetRoutes.js';
 import { createJobRouter } from './jobRoutes.js';
+import { createPayeeRouter } from './payeeRoutes.js';
 import type { SuggestionService } from '../services/SuggestionService.js';
 import type { SyncService } from '../services/SyncService.js';
 import type { JobService } from '../services/JobService.js';
 import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
+import type { PayeeMergeService } from '../services/PayeeMergeService.js';
 
 /**
  * Main API router - composes all route handlers
@@ -24,6 +26,7 @@ export function createApiRouter(deps: {
   jobOrchestrator: JobOrchestrator;
   auditRepo: AuditRepository;
   actualBudget: ActualBudgetAdapter;
+  payeeMergeService: PayeeMergeService;
   defaultBudgetId: string | null;
 }): Router {
   const router = Router();
@@ -42,6 +45,15 @@ export function createApiRouter(deps: {
   router.use('/suggestions', createSuggestionRouter(deps.suggestionService, deps.jobOrchestrator));
   router.use('/sync', createSyncRouter(deps.syncService, deps.jobOrchestrator));
   router.use('/jobs', createJobRouter(deps.jobService, deps.jobOrchestrator));
+  router.use(
+    '/payees',
+    createPayeeRouter({
+      payeeMergeService: deps.payeeMergeService,
+      auditRepo: deps.auditRepo,
+      jobService: deps.jobService,
+      defaultBudgetId: deps.defaultBudgetId,
+    })
+  );
   router.use('/audit', createAuditRouter(deps.auditRepo));
 
   return router;

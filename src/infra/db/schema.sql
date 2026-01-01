@@ -151,3 +151,34 @@ CREATE TABLE IF NOT EXISTS payee_match_cache (
 
 CREATE INDEX IF NOT EXISTS idx_payee_match_cache_budget ON payee_match_cache(budget_id);
 CREATE INDEX IF NOT EXISTS idx_payee_match_cache_payee ON payee_match_cache(raw_payee_name);
+
+-- Payee merge clusters cache
+CREATE TABLE IF NOT EXISTS payee_merge_clusters (
+  id TEXT PRIMARY KEY,
+  cluster_id TEXT NOT NULL,
+  group_hash TEXT NOT NULL,
+  budget_id TEXT NOT NULL,
+  payee_id TEXT NOT NULL,
+  payee_name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  token_set TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_payee_merge_clusters_budget ON payee_merge_clusters(budget_id);
+CREATE INDEX IF NOT EXISTS idx_payee_merge_clusters_cluster ON payee_merge_clusters(cluster_id);
+
+-- Payee merge clusters metadata
+CREATE TABLE IF NOT EXISTS payee_merge_cluster_meta (
+  budget_id TEXT PRIMARY KEY,
+  payee_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Payee merge hidden groups
+CREATE TABLE IF NOT EXISTS payee_merge_hidden_groups (
+  budget_id TEXT NOT NULL,
+  group_hash TEXT NOT NULL,
+  hidden_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (budget_id, group_hash)
+);

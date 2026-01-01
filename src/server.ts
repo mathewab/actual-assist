@@ -14,6 +14,9 @@ import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
 import { SuggestionRepository } from './infra/repositories/SuggestionRepository.js';
 import { AuditRepository } from './infra/repositories/AuditRepository.js';
 import { PayeeCacheRepository } from './infra/repositories/PayeeCacheRepository.js';
+import { PayeeMergeClusterRepository } from './infra/repositories/PayeeMergeClusterRepository.js';
+import { PayeeMergeClusterMetaRepository } from './infra/repositories/PayeeMergeClusterMetaRepository.js';
+import { PayeeMergeHiddenGroupRepository } from './infra/repositories/PayeeMergeHiddenGroupRepository.js';
 import { JobRepository } from './infra/repositories/JobRepository.js';
 import { JobStepRepository } from './infra/repositories/JobStepRepository.js';
 import { JobEventRepository } from './infra/repositories/JobEventRepository.js';
@@ -23,6 +26,7 @@ import { SyncService } from './services/SyncService.js';
 import { JobService } from './services/JobService.js';
 import { JobOrchestrator } from './services/JobOrchestrator.js';
 import { JobTimeoutService } from './services/JobTimeoutService.js';
+import { PayeeMergeService } from './services/PayeeMergeService.js';
 import { createApiRouter } from './api/index.js';
 import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
 import { startScheduler } from './scheduler/SyncScheduler.js';
@@ -51,6 +55,9 @@ const openai = new OpenAIAdapter(env);
 const suggestionRepo = new SuggestionRepository(db);
 const auditRepo = new AuditRepository(db);
 const payeeCache = new PayeeCacheRepository(db);
+const payeeMergeClusterRepo = new PayeeMergeClusterRepository(db);
+const payeeMergeClusterMetaRepo = new PayeeMergeClusterMetaRepository(db);
+const payeeMergeHiddenGroupRepo = new PayeeMergeHiddenGroupRepository(db);
 const jobRepo = new JobRepository(db);
 const jobStepRepo = new JobStepRepository(db);
 const jobEventRepo = new JobEventRepository(db);
@@ -66,11 +73,20 @@ const suggestionService = new SuggestionService(
 );
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
 const jobService = new JobService(jobRepo, jobStepRepo, jobEventRepo);
+const payeeMergeService = new PayeeMergeService(
+  actualBudget,
+  payeeMergeClusterRepo,
+  payeeMergeClusterMetaRepo,
+  payeeMergeHiddenGroupRepo,
+  openai,
+  auditRepo
+);
 const jobOrchestrator = new JobOrchestrator(
   jobService,
   syncService,
   suggestionService,
-  snapshotService
+  snapshotService,
+  payeeMergeService
 );
 const jobTimeoutService = new JobTimeoutService(jobRepo, jobStepRepo, jobService);
 
@@ -128,6 +144,7 @@ const apiRouter = createApiRouter({
   jobOrchestrator,
   auditRepo,
   actualBudget,
+  payeeMergeService,
   defaultBudgetId: env.ACTUAL_SYNC_ID || env.ACTUAL_BUDGET_ID || null,
 });
 app.use('/api', apiRouter);

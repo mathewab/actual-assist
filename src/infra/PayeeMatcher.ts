@@ -4,6 +4,7 @@ import * as fuzz from 'fuzzball';
  * Fuzzy match result with combined scoring
  */
 export interface FuzzyMatchResult {
+  payeeId?: string;
   payeeName: string;
   categoryId: string;
   categoryName: string;
@@ -19,6 +20,7 @@ export interface FuzzyMatchResult {
  * Candidate payee for matching
  */
 export interface PayeeCandidate {
+  payeeId?: string;
   payeeName: string;
   payeeNameOriginal: string;
   categoryId: string;
@@ -262,6 +264,7 @@ export class PayeeMatcher {
 
       if (finalScore >= minScore) {
         results.push({
+          payeeId: candidate.payeeId,
           payeeName: candidate.payeeNameOriginal,
           categoryId: candidate.categoryId,
           categoryName: candidate.categoryName,

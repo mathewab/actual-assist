@@ -78,6 +78,10 @@ function formatJobType(type: Job['type']): string {
       return 'Apply Suggestions';
     case 'templates_apply':
       return 'Apply Templates';
+    case 'payees_merge':
+      return 'Merge Payees';
+    case 'payees_merge_suggestions_generate':
+      return 'Generate Payee Merges';
     case 'snapshot_create':
       return 'Create Snapshot';
     case 'snapshot_redownload':

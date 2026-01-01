@@ -249,6 +249,39 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
   });
 
   /**
+   * POST /api/jobs/payees-merge-suggestions
+   */
+  router.post('/payees-merge-suggestions', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { budgetId, minScore, useAI, force } = req.body;
+
+      if (!budgetId || typeof budgetId !== 'string') {
+        throw new ValidationError('budgetId is required in request body');
+      }
+
+      const parsedMinScore =
+        typeof minScore === 'number'
+          ? minScore
+          : typeof minScore === 'string'
+            ? Number(minScore)
+            : undefined;
+      if (parsedMinScore !== undefined && (Number.isNaN(parsedMinScore) || parsedMinScore < 0)) {
+        throw new ValidationError('minScore must be a number >= 0');
+      }
+
+      const result = jobOrchestrator.startPayeeMergeSuggestionsJob({
+        budgetId,
+        minScore: parsedMinScore,
+        useAI: useAI === true,
+        force: force === true,
+      });
+      res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * POST /api/jobs/snapshot-create
    */
   router.post('/snapshot-create', (req: Request, res: Response, next: NextFunction) => {

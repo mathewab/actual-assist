@@ -81,8 +81,8 @@ export function App() {
               <Routes>
                 <Route
                   path="/"
-                  element={renderBudgetRoute(() => (
-                    <Home />
+                  element={renderBudgetRoute((budgetId) => (
+                    <Home budgetId={budgetId} />
                   ))}
                 />
                 <Route

@@ -15,45 +15,48 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
-import { JobCenter } from './JobCenter';
 
 interface HeaderProps {
   budgetName?: string;
-  budgetId?: string;
 }
 
-export function Header({ budgetName, budgetId }: HeaderProps) {
+export function Header({ budgetName }: HeaderProps) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [suggestionsAnchor, setSuggestionsAnchor] = useState<null | HTMLElement>(null);
+  const [toolsAnchor, setToolsAnchor] = useState<null | HTMLElement>(null);
   const [systemAnchor, setSystemAnchor] = useState<null | HTMLElement>(null);
-  const [budgetAnchor, setBudgetAnchor] = useState<null | HTMLElement>(null);
 
-  const isSuggestionsSection =
-    location.pathname === '/' || location.pathname.startsWith('/history');
+  const isHomeSection = location.pathname === '/';
+  const isToolsSection =
+    location.pathname.startsWith('/suggestions') ||
+    location.pathname.startsWith('/templates') ||
+    location.pathname.startsWith('/history') ||
+    location.pathname.startsWith('/apply');
   const isSystemSection =
-    location.pathname.startsWith('/audit') || location.pathname.startsWith('/settings');
-  const isBudgetSection = location.pathname.startsWith('/templates');
+    location.pathname.startsWith('/audit') ||
+    location.pathname.startsWith('/settings') ||
+    location.pathname.startsWith('/jobs');
 
   const navSections = useMemo(
     () => [
       {
-        label: 'Suggestions',
+        label: 'Home',
+        items: [{ label: 'Home', path: '/' }],
+      },
+      {
+        label: 'Tools',
         items: [
-          { label: 'Review', path: '/' },
-          { label: 'History', path: '/history' },
+          { label: 'Category suggestions', path: '/suggestions' },
+          { label: 'Budget Template Studio', path: '/templates' },
         ],
       },
       {
         label: 'System',
         items: [
+          { label: 'Jobs history', path: '/jobs' },
           { label: 'Audit Log', path: '/audit' },
           { label: 'Settings', path: '/settings' },
         ],
-      },
-      {
-        label: 'Budget',
-        items: [{ label: 'Templates', path: '/templates' }],
       },
     ],
     []
@@ -91,13 +94,24 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
         >
           <Button
             color="inherit"
-            onClick={(event) => setSuggestionsAnchor(event.currentTarget)}
+            component={NavLink}
+            to="/"
             sx={{
               fontWeight: 600,
-              bgcolor: isSuggestionsSection ? 'rgba(255,255,255,0.2)' : 'transparent',
+              bgcolor: isHomeSection ? 'rgba(255,255,255,0.2)' : 'transparent',
             }}
           >
-            Suggestions ▾
+            Home
+          </Button>
+          <Button
+            color="inherit"
+            onClick={(event) => setToolsAnchor(event.currentTarget)}
+            sx={{
+              fontWeight: 600,
+              bgcolor: isToolsSection ? 'rgba(255,255,255,0.2)' : 'transparent',
+            }}
+          >
+            Tools ▾
           </Button>
           <Button
             color="inherit"
@@ -109,21 +123,7 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
           >
             System ▾
           </Button>
-          <Button
-            color="inherit"
-            onClick={(event) => setBudgetAnchor(event.currentTarget)}
-            sx={{
-              fontWeight: 600,
-              bgcolor: isBudgetSection ? 'rgba(255,255,255,0.2)' : 'transparent',
-            }}
-          >
-            Budget ▾
-          </Button>
         </Stack>
-
-        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-          <JobCenter budgetId={budgetId} />
-        </Box>
 
         <IconButton
           color="inherit"
@@ -146,19 +146,19 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
         </IconButton>
 
         <Menu
-          anchorEl={suggestionsAnchor}
-          open={Boolean(suggestionsAnchor)}
-          onClose={() => setSuggestionsAnchor(null)}
+          anchorEl={toolsAnchor}
+          open={Boolean(toolsAnchor)}
+          onClose={() => setToolsAnchor(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
           transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         >
-          {navSections[0].items.map((item) => (
+          {navSections[1].items.map((item) => (
             <MenuItem
               key={item.path}
               component={NavLink}
               to={item.path}
-              selected={location.pathname === item.path}
-              onClick={() => setSuggestionsAnchor(null)}
+              selected={location.pathname.startsWith(item.path)}
+              onClick={() => setToolsAnchor(null)}
             >
               {item.label}
             </MenuItem>
@@ -171,32 +171,13 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
           transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         >
-          {navSections[1].items.map((item) => (
-            <MenuItem
-              key={item.path}
-              component={NavLink}
-              to={item.path}
-              selected={location.pathname.startsWith(item.path)}
-              onClick={() => setSystemAnchor(null)}
-            >
-              {item.label}
-            </MenuItem>
-          ))}
-        </Menu>
-        <Menu
-          anchorEl={budgetAnchor}
-          open={Boolean(budgetAnchor)}
-          onClose={() => setBudgetAnchor(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        >
           {navSections[2].items.map((item) => (
             <MenuItem
               key={item.path}
               component={NavLink}
               to={item.path}
               selected={location.pathname.startsWith(item.path)}
-              onClick={() => setBudgetAnchor(null)}
+              onClick={() => setSystemAnchor(null)}
             >
               {item.label}
             </MenuItem>
@@ -245,15 +226,6 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
               <Divider />
             </Box>
           ))}
-
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="overline" color="text.secondary">
-              Jobs
-            </Typography>
-            <Box sx={{ mt: 1 }}>
-              <JobCenter budgetId={budgetId} />
-            </Box>
-          </Box>
         </Box>
       </Drawer>
     </AppBar>

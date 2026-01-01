@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from './components/Header';
+import { Home } from './components/Home';
 import { SuggestionList } from './components/SuggestionList';
 import { ApplyChanges } from './components/ApplyChanges';
 import { History } from './components/History';
 import { Audit } from './components/Audit';
+import { JobList } from './components/JobList';
 import { TemplateStudio } from './components/TemplateStudio';
 import { Settings } from './components/Settings';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -70,7 +72,7 @@ export function App() {
   return (
     <BrowserRouter>
       <div className="flex min-h-screen flex-col bg-[var(--theme-bg)]">
-        <Header budgetName={selectedBudget?.name} budgetId={selectedBudget?.id} />
+        <Header budgetName={selectedBudget?.name} />
 
         <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-5 py-5">
           <main className="min-h-[400px] rounded-lg bg-[var(--theme-surface)] shadow-sm">
@@ -78,6 +80,12 @@ export function App() {
               <Routes>
                 <Route
                   path="/"
+                  element={renderBudgetRoute(() => (
+                    <Home />
+                  ))}
+                />
+                <Route
+                  path="/suggestions"
                   element={renderBudgetRoute((budgetId) => (
                     <SuggestionList budgetId={budgetId} />
                   ))}
@@ -104,6 +112,12 @@ export function App() {
                   path="/templates"
                   element={renderBudgetRoute((budgetId) => (
                     <TemplateStudio budgetId={budgetId} />
+                  ))}
+                />
+                <Route
+                  path="/jobs"
+                  element={renderBudgetRoute((budgetId) => (
+                    <JobList budgetId={budgetId} />
                   ))}
                 />
                 <Route path="/settings" element={<Settings />} />

@@ -308,9 +308,24 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           pb: 2,
         }}
       >
-        <Typography variant="h6" fontWeight={600} color="text.primary">
-          Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)
-        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="h6" fontWeight={600} color="text.primary">
+            Category suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)
+          </Typography>
+          <Typography
+            component={NavLink}
+            to="/history"
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              textDecoration: 'none',
+              alignSelf: 'flex-start',
+              '&:hover': { color: 'text.primary' },
+            }}
+          >
+            View applied history
+          </Typography>
+        </Box>
         <Stack direction="row" spacing={2} flexWrap="wrap">
           {hasApprovedChanges && (
             <Button

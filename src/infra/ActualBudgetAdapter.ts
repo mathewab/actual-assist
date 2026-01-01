@@ -1,4 +1,5 @@
 import api from '@actual-app/api';
+import type { Query as AqlQuery } from '@actual-app/api/@types/loot-core/src/shared/query';
 import { ActualBudgetError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
@@ -70,6 +71,8 @@ function isNamedPayee(payee: ActualPayee): payee is ActualPayee & { name: string
 
 type TemplateRecord = Record<string, unknown>;
 
+type AqlResult<T> = { data: T[] };
+
 export interface CategoryTemplateSummary {
   id: string;
   name: string;
@@ -132,6 +135,10 @@ function parseGoalDef(goalDef: unknown): {
   }
 
   return { templates: [], parseError: 'Unsupported goal_def format' };
+}
+
+function toAqlQuery(query: ReturnType<typeof api.q>): AqlQuery {
+  return query as unknown as AqlQuery;
 }
 
 /**
@@ -291,28 +298,27 @@ export class ActualBudgetAdapter {
       await api.internal.send('budget/store-note-templates', null);
 
       const [categoryResult, groupResult] = await Promise.all([
-        api.aqlQuery(api.q('categories').select('*')),
-        api.aqlQuery(api.q('category_groups').select('*')),
+        api.aqlQuery(toAqlQuery(api.q('categories').select(['*']))),
+        api.aqlQuery(toAqlQuery(api.q('category_groups').select(['*']))),
       ]);
 
-      const categories = (categoryResult.data as ActualCategoryRow[]).filter(
+      const categories = (categoryResult as AqlResult<ActualCategoryRow>).data.filter(
         (category) => !category.hidden && category.name
       );
-      const categoryGroups = groupResult.data as ActualCategoryGroupRow[];
+      const categoryGroups = (groupResult as AqlResult<ActualCategoryGroupRow>).data;
       const categoryIds = categories.map((category) => category.id);
       const notesResult = categoryIds.length
-        ? await api.aqlQuery(
-            api
-              .q('notes')
-              .filter({ id: { $oneof: categoryIds } })
-              .select('*')
-          )
+        ? ((await api.aqlQuery(
+            toAqlQuery(
+              api
+                .q('notes')
+                .filter({ id: { $oneof: categoryIds } })
+                .select(['*'])
+            )
+          )) as AqlResult<{ id: string; note?: string | null }>)
         : { data: [] as Array<{ id: string; note?: string | null }> };
       const notesMap = new Map<string, string | null>(
-        (notesResult.data as Array<{ id: string; note?: string | null }>).map((note) => [
-          note.id,
-          note.note ?? null,
-        ])
+        notesResult.data.map((note) => [note.id, note.note ?? null])
       );
       const groupMap = new Map(categoryGroups.map((group) => [group.id, group.name || 'Unknown']));
       const categoryGroupNameMap = new Map<string, string>();
@@ -390,7 +396,9 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      const result = await api.aqlQuery(api.q('notes').filter({ id: categoryId }).select('*'));
+      const result = (await api.aqlQuery(
+        toAqlQuery(api.q('notes').filter({ id: categoryId }).select(['*']))
+      )) as AqlResult<{ note?: string | null }>;
       const note = result.data?.[0]?.note;
       return typeof note === 'string' ? note : null;
     } catch (error) {

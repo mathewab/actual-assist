@@ -5,6 +5,14 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+export function getJobEventsStreamUrl(budgetId: string): string {
+  const base = API_BASE.startsWith('http') ? API_BASE : window.location.origin + API_BASE;
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  const url = new URL('job-events/stream', normalizedBase);
+  url.searchParams.set('budgetId', budgetId);
+  return url.toString();
+}
+
 export interface Budget {
   id: string;
   name: string;

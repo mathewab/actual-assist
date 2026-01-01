@@ -8,6 +8,7 @@ import type { JobStepRepository } from '../infra/repositories/JobStepRepository.
 import type { JobEventRepository } from '../infra/repositories/JobEventRepository.js';
 import { ValidationError, NotFoundError } from '../domain/errors.js';
 import { logger } from '../infra/logger.js';
+import type { JobEventBus } from './JobEventBus.js';
 
 const jobTransitions: Record<JobStatus, JobStatus[]> = {
   queued: ['running', 'failed', 'canceled'],
@@ -33,7 +34,8 @@ export class JobService {
   constructor(
     private jobRepo: JobRepository,
     private stepRepo: JobStepRepository,
-    private eventRepo: JobEventRepository
+    private eventRepo: JobEventRepository,
+    private jobEventBus?: JobEventBus
   ) {}
 
   createJob(params: {
@@ -53,6 +55,7 @@ export class JobService {
     this.jobRepo.create(job);
     this.recordEvent(job.id, null, job.status, 'Job created');
     logger.info('Job created', { jobId: job.id, type: job.type, status: job.status });
+    this.emitJobEvent('created', job);
     return job;
   }
 
@@ -102,6 +105,7 @@ export class JobService {
     this.jobRepo.updateStatus({ jobId, status: 'running', startedAt });
     this.recordEvent(jobId, null, 'running', 'Job started');
     logger.info('Job running', { jobId });
+    this.emitJobEvent('status', this.getJob(jobId));
   }
 
   markJobSucceeded(jobId: string): void {
@@ -111,6 +115,7 @@ export class JobService {
     this.jobRepo.updateStatus({ jobId, status: 'succeeded', completedAt });
     this.recordEvent(jobId, null, 'succeeded', 'Job succeeded');
     logger.info('Job succeeded', { jobId });
+    this.emitJobEvent('status', this.getJob(jobId));
   }
 
   markJobFailed(jobId: string, reason: string): void {
@@ -125,6 +130,7 @@ export class JobService {
     });
     this.recordEvent(jobId, null, 'failed', reason);
     logger.info('Job failed', { jobId, reason });
+    this.emitJobEvent('status', this.getJob(jobId));
   }
 
   markJobFailedIfActive(jobId: string, reason: string): boolean {
@@ -141,6 +147,7 @@ export class JobService {
     });
     this.recordEvent(jobId, null, 'failed', reason);
     logger.info('Job failed', { jobId, reason });
+    this.emitJobEvent('status', this.getJob(jobId));
     return true;
   }
 
@@ -156,6 +163,7 @@ export class JobService {
     });
     this.recordEvent(jobId, null, 'canceled', reason ?? 'Job canceled');
     logger.info('Job canceled', { jobId });
+    this.emitJobEvent('status', this.getJob(jobId));
   }
 
   markStepRunning(stepId: string): void {
@@ -241,6 +249,15 @@ export class JobService {
       jobStepId,
       status,
       message: message ?? null,
+    });
+  }
+
+  private emitJobEvent(event: 'created' | 'status', job: Job): void {
+    this.jobEventBus?.emitJob({
+      event,
+      job,
+      status: job.status,
+      timestamp: new Date().toISOString(),
     });
   }
 }

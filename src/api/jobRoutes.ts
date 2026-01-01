@@ -3,37 +3,8 @@ import type { Request, Response, NextFunction } from 'express';
 import type { JobService } from '../services/JobService.js';
 import type { JobOrchestrator } from '../services/JobOrchestrator.js';
 import type { Job } from '../domain/entities/Job.js';
-import type { JobStep } from '../domain/entities/JobStep.js';
 import { ValidationError } from '../domain/errors.js';
-
-function mapJobToResponse(job: Job) {
-  return {
-    id: job.id,
-    budgetId: job.budgetId,
-    type: job.type,
-    status: job.status,
-    createdAt: job.createdAt,
-    startedAt: job.startedAt,
-    completedAt: job.completedAt,
-    failureReason: job.failureReason,
-    parentJobId: job.parentJobId,
-    metadata: job.metadata,
-  };
-}
-
-function mapStepToResponse(step: JobStep) {
-  return {
-    id: step.id,
-    jobId: step.jobId,
-    stepType: step.stepType,
-    status: step.status,
-    position: step.position,
-    createdAt: step.createdAt,
-    startedAt: step.startedAt,
-    completedAt: step.completedAt,
-    failureReason: step.failureReason,
-  };
-}
+import { mapJobToResponse, mapStepToResponse } from './jobMapper.js';
 
 /**
  * Jobs route handler

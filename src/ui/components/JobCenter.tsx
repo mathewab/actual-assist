@@ -12,7 +12,7 @@ import Popover from '@mui/material/Popover';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { api, type Job } from '../services/api';
+import { api, getJobEventsStreamUrl, type Job } from '../services/api';
 
 interface JobCenterProps {
   budgetId?: string;
@@ -231,6 +231,31 @@ export function JobCenter({ budgetId }: JobCenterProps) {
     window.addEventListener('job-toast', handler);
     return () => window.removeEventListener('job-toast', handler);
   }, [showToastForJob]);
+
+  useEffect(() => {
+    if (!hasBudget || !budgetId) return;
+
+    const source = new EventSource(getJobEventsStreamUrl(budgetId));
+    const handler = (event: MessageEvent<string>) => {
+      try {
+        const payload = JSON.parse(event.data) as { job?: Job };
+        const job = payload.job;
+        if (!job) return;
+        if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'canceled') {
+          window.dispatchEvent(new CustomEvent<Job>('job-toast', { detail: job }));
+        }
+      } catch {
+        // ignore malformed event payloads
+      }
+    };
+
+    source.addEventListener('job', handler);
+
+    return () => {
+      source.removeEventListener('job', handler);
+      source.close();
+    };
+  }, [budgetId, hasBudget]);
 
   useEffect(() => {
     return () => {

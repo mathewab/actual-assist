@@ -25,6 +25,7 @@ import { SnapshotService } from './services/SnapshotService.js';
 import { SuggestionService } from './services/SuggestionService.js';
 import { SyncService } from './services/SyncService.js';
 import { JobService } from './services/JobService.js';
+import { JobEventBus } from './services/JobEventBus.js';
 import { JobOrchestrator } from './services/JobOrchestrator.js';
 import { JobTimeoutService } from './services/JobTimeoutService.js';
 import { PayeeMergeService } from './services/PayeeMergeService.js';
@@ -63,6 +64,7 @@ const payeeMergeHiddenGroupRepo = new PayeeMergeHiddenGroupRepository(db);
 const jobRepo = new JobRepository(db);
 const jobStepRepo = new JobStepRepository(db);
 const jobEventRepo = new JobEventRepository(db);
+const jobEventBus = new JobEventBus();
 
 // Initialize services
 const snapshotService = new SnapshotService(actualBudget, auditRepo, suggestionRepo);
@@ -74,7 +76,7 @@ const suggestionService = new SuggestionService(
   payeeCache
 );
 const syncService = new SyncService(actualBudget, suggestionRepo, auditRepo);
-const jobService = new JobService(jobRepo, jobStepRepo, jobEventRepo);
+const jobService = new JobService(jobRepo, jobStepRepo, jobEventRepo, jobEventBus);
 const payeeMergeService = new PayeeMergeService(
   actualBudget,
   payeeMergeClusterRepo,
@@ -146,6 +148,7 @@ const apiRouter = createApiRouter({
   syncService,
   jobService,
   jobOrchestrator,
+  jobEventBus,
   auditRepo,
   actualBudget,
   payeeMergeService,

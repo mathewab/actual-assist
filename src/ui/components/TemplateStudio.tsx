@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, type CategoryTemplateSummary } from '../services/api';
@@ -59,6 +59,19 @@ const isValidMonth = (value: string) => {
   }
   const [year, month] = value.split('-').map((part) => Number(part));
   return Boolean(year) && month >= 1 && month <= 12;
+};
+
+const parseNumber = (label: string, value: string, errors: string[]) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed)) {
+    errors.push(`${label} must be a number`);
+    return null;
+  }
+  return parsed;
 };
 
 interface TemplateDraft {
@@ -320,20 +333,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     },
   });
 
-  const parseNumber = (label: string, value: string, errors: string[]) => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-    const parsed = Number(trimmed);
-    if (Number.isNaN(parsed)) {
-      errors.push(`${label} must be a number`);
-      return null;
-    }
-    return parsed;
-  };
-
-  const buildTemplates = () => {
+  const buildTemplates = useCallback(() => {
     const errors: string[] = [];
     const output: Record<string, unknown>[] = [];
 
@@ -567,7 +567,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
     });
 
     return { output, errors };
-  };
+  }, [drafts]);
 
   const handleRender = () => {
     setEditorError(null);
@@ -630,7 +630,7 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
         clearTimeout(renderTimeoutRef.current);
       }
     };
-  }, [drafts]);
+  }, [buildTemplates, drafts, renderMutation]);
 
   const handleCopy = async () => {
     if (!renderedWithComments) {

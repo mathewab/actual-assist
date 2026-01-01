@@ -51,3 +51,4 @@ temp/
 
 # Codex files
 .codex/
+.npm-cache/

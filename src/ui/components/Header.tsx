@@ -1,5 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import Drawer from '@mui/material/Drawer';
+import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
 import { JobCenter } from './JobCenter';
 
 interface HeaderProps {
@@ -7,180 +22,240 @@ interface HeaderProps {
   budgetId?: string;
 }
 
-const navLinkClass = (isActive: boolean) =>
-  [
-    'block rounded-md px-3 py-2 text-sm font-medium transition',
-    'text-white hover:bg-white/15',
-    'md:text-slate-700 md:hover:bg-blue-50 md:hover:text-blue-700',
-    isActive ? 'bg-white/25 text-white md:bg-blue-100 md:text-blue-800' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-const navTriggerClass = (isActive: boolean) =>
-  [
-    'flex w-full items-center justify-between rounded-md border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold transition',
-    'text-white/85 hover:bg-white/20 hover:text-white',
-    'md:w-auto md:border-transparent md:bg-transparent md:text-white',
-    isActive ? 'bg-white/25 text-white' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
 export function Header({ budgetName, budgetId }: HeaderProps) {
   const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [suggestionsAnchor, setSuggestionsAnchor] = useState<null | HTMLElement>(null);
+  const [systemAnchor, setSystemAnchor] = useState<null | HTMLElement>(null);
+  const [budgetAnchor, setBudgetAnchor] = useState<null | HTMLElement>(null);
+
   const isSuggestionsSection =
     location.pathname === '/' || location.pathname.startsWith('/history');
-  const isSystemSection = location.pathname.startsWith('/audit');
-  const isTemplatesSection = location.pathname.startsWith('/templates');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const headerRef = useRef<HTMLElement | null>(null);
+  const isSystemSection =
+    location.pathname.startsWith('/audit') || location.pathname.startsWith('/settings');
+  const isBudgetSection = location.pathname.startsWith('/templates');
 
-  useEffect(() => {
-    if (!isMobileMenuOpen) {
-      return;
-    }
-
-    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
-      if (!headerRef.current) {
-        return;
-      }
-
-      if (headerRef.current.contains(event.target as Node)) {
-        return;
-      }
-
-      setIsMobileMenuOpen(false);
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
-    };
-  }, [isMobileMenuOpen]);
+  const navSections = useMemo(
+    () => [
+      {
+        label: 'Suggestions',
+        items: [
+          { label: 'Review', path: '/' },
+          { label: 'History', path: '/history' },
+        ],
+      },
+      {
+        label: 'System',
+        items: [
+          { label: 'Audit Log', path: '/audit' },
+          { label: 'Settings', path: '/settings' },
+        ],
+      },
+      {
+        label: 'Budget',
+        items: [{ label: 'Templates', path: '/templates' }],
+      },
+    ],
+    []
+  );
 
   return (
-    <header
-      className="sticky top-0 z-50 flex flex-col gap-3 bg-gradient-to-br from-blue-600 to-blue-700 px-6 py-3 text-white shadow-md md:flex-row md:items-center md:justify-between"
-      ref={headerRef}
+    <AppBar
+      position="sticky"
+      elevation={0}
+      sx={{
+        bgcolor: 'transparent',
+        backgroundImage: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+        color: 'common.white',
+      }}
     >
-      <div className="flex w-full items-center gap-3 md:w-auto">
-        <h1 className="text-xl font-semibold tracking-tight">Actual Assist</h1>
+      <Toolbar sx={{ gap: 2, px: { xs: 2, md: 3 } }}>
+        <Typography variant="h6" fontWeight={700} sx={{ flexShrink: 0 }}>
+          Actual Assist
+        </Typography>
         {budgetName && (
-          <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium">
-            {budgetName}
-          </span>
+          <Chip
+            size="small"
+            label={budgetName}
+            sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
+          />
         )}
-        <button
-          type="button"
-          className={[
-            'ml-auto inline-flex items-center justify-center rounded-lg border border-white/35 bg-white/10 px-3 py-2 text-sm font-semibold transition hover:bg-white/20',
-            isMobileMenuOpen ? 'border-white/70 bg-white/30' : '',
-            'md:hidden',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          aria-expanded={isMobileMenuOpen}
-          aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
-          onClick={() => setIsMobileMenuOpen((open) => !open)}
-        >
-          <span className="relative flex h-3 w-5 flex-col justify-between" aria-hidden="true">
-            <span
-              className={[
-                'block h-0.5 w-full rounded-full bg-white transition',
-                isMobileMenuOpen ? 'translate-y-[5px] rotate-45' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            />
-            <span
-              className={[
-                'block h-0.5 w-full rounded-full bg-white transition',
-                isMobileMenuOpen ? 'opacity-0' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            />
-            <span
-              className={[
-                'block h-0.5 w-full rounded-full bg-white transition',
-                isMobileMenuOpen ? '-translate-y-[5px] -rotate-45' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            />
-          </span>
-        </button>
-      </div>
 
-      <div
-        className={[
-          'w-full flex-col items-stretch gap-3',
-          isMobileMenuOpen ? 'flex' : 'hidden',
-          'md:flex md:w-auto md:flex-row md:items-center',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-      >
-        <nav className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
-          <div className="group relative w-full md:w-auto">
-            <button type="button" className={navTriggerClass(isSuggestionsSection)}>
-              Suggestions <span className="ml-2 hidden text-xs md:inline">▾</span>
-            </button>
-            <div className="mt-2 flex flex-col gap-1 rounded-lg bg-white/15 p-2 md:absolute md:left-0 md:top-full md:mt-2 md:min-w-[180px] md:-translate-y-1 md:opacity-0 md:pointer-events-none md:bg-white md:text-slate-800 md:shadow-xl md:transition md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto">
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) => navLinkClass(isActive)}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Review
-              </NavLink>
-              <NavLink
-                to="/history"
-                className={({ isActive }) => navLinkClass(isActive)}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                History
-              </NavLink>
-            </div>
-          </div>
-          <div className="group relative w-full md:w-auto">
-            <button type="button" className={navTriggerClass(isSystemSection)}>
-              System <span className="ml-2 hidden text-xs md:inline">▾</span>
-            </button>
-            <div className="mt-2 flex flex-col gap-1 rounded-lg bg-white/15 p-2 md:absolute md:left-0 md:top-full md:mt-2 md:min-w-[180px] md:-translate-y-1 md:opacity-0 md:pointer-events-none md:bg-white md:text-slate-800 md:shadow-xl md:transition md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto">
-              <NavLink
-                to="/audit"
-                className={({ isActive }) => navLinkClass(isActive)}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Audit Log
-              </NavLink>
-            </div>
-          </div>
-          <div className="group relative w-full md:w-auto">
-            <button type="button" className={navTriggerClass(isTemplatesSection)}>
-              Budget <span className="ml-2 hidden text-xs md:inline">▾</span>
-            </button>
-            <div className="mt-2 flex flex-col gap-1 rounded-lg bg-white/15 p-2 md:absolute md:left-0 md:top-full md:mt-2 md:min-w-[180px] md:-translate-y-1 md:opacity-0 md:pointer-events-none md:bg-white md:text-slate-800 md:shadow-xl md:transition md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto">
-              <NavLink
-                to="/templates"
-                className={({ isActive }) => navLinkClass(isActive)}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Templates
-              </NavLink>
-            </div>
-          </div>
-        </nav>
-        <div className="self-end md:self-auto">
+        <Box sx={{ flex: 1 }} />
+
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          sx={{ display: { xs: 'none', md: 'flex' } }}
+        >
+          <Button
+            color="inherit"
+            onClick={(event) => setSuggestionsAnchor(event.currentTarget)}
+            sx={{
+              fontWeight: 600,
+              bgcolor: isSuggestionsSection ? 'rgba(255,255,255,0.2)' : 'transparent',
+            }}
+          >
+            Suggestions ▾
+          </Button>
+          <Button
+            color="inherit"
+            onClick={(event) => setSystemAnchor(event.currentTarget)}
+            sx={{
+              fontWeight: 600,
+              bgcolor: isSystemSection ? 'rgba(255,255,255,0.2)' : 'transparent',
+            }}
+          >
+            System ▾
+          </Button>
+          <Button
+            color="inherit"
+            onClick={(event) => setBudgetAnchor(event.currentTarget)}
+            sx={{
+              fontWeight: 600,
+              bgcolor: isBudgetSection ? 'rgba(255,255,255,0.2)' : 'transparent',
+            }}
+          >
+            Budget ▾
+          </Button>
+        </Stack>
+
+        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
           <JobCenter budgetId={budgetId} />
-        </div>
-      </div>
-    </header>
+        </Box>
+
+        <IconButton
+          color="inherit"
+          onClick={() => setMobileOpen(true)}
+          sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+          aria-label="Open navigation"
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M3 6h18" strokeLinecap="round" />
+            <path d="M3 12h18" strokeLinecap="round" />
+            <path d="M3 18h18" strokeLinecap="round" />
+          </svg>
+        </IconButton>
+
+        <Menu
+          anchorEl={suggestionsAnchor}
+          open={Boolean(suggestionsAnchor)}
+          onClose={() => setSuggestionsAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        >
+          {navSections[0].items.map((item) => (
+            <MenuItem
+              key={item.path}
+              component={NavLink}
+              to={item.path}
+              selected={location.pathname === item.path}
+              onClick={() => setSuggestionsAnchor(null)}
+            >
+              {item.label}
+            </MenuItem>
+          ))}
+        </Menu>
+        <Menu
+          anchorEl={systemAnchor}
+          open={Boolean(systemAnchor)}
+          onClose={() => setSystemAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        >
+          {navSections[1].items.map((item) => (
+            <MenuItem
+              key={item.path}
+              component={NavLink}
+              to={item.path}
+              selected={location.pathname.startsWith(item.path)}
+              onClick={() => setSystemAnchor(null)}
+            >
+              {item.label}
+            </MenuItem>
+          ))}
+        </Menu>
+        <Menu
+          anchorEl={budgetAnchor}
+          open={Boolean(budgetAnchor)}
+          onClose={() => setBudgetAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        >
+          {navSections[2].items.map((item) => (
+            <MenuItem
+              key={item.path}
+              component={NavLink}
+              to={item.path}
+              selected={location.pathname.startsWith(item.path)}
+              onClick={() => setBudgetAnchor(null)}
+            >
+              {item.label}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Toolbar>
+
+      <Drawer anchor="right" open={mobileOpen} onClose={() => setMobileOpen(false)}>
+        <Box sx={{ width: 280, p: 2 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="subtitle1" fontWeight={600}>
+              Navigation
+            </Typography>
+            <IconButton onClick={() => setMobileOpen(false)} aria-label="Close navigation">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M6 6l12 12" strokeLinecap="round" />
+                <path d="M18 6l-12 12" strokeLinecap="round" />
+              </svg>
+            </IconButton>
+          </Stack>
+
+          {navSections.map((section) => (
+            <Box key={section.label} sx={{ mt: 2 }}>
+              <Typography variant="overline" color="text.secondary">
+                {section.label}
+              </Typography>
+              <List dense>
+                {section.items.map((item) => (
+                  <ListItemButton
+                    key={item.path}
+                    component={NavLink}
+                    to={item.path}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <ListItemText primary={item.label} />
+                  </ListItemButton>
+                ))}
+              </List>
+              <Divider />
+            </Box>
+          ))}
+
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="overline" color="text.secondary">
+              Jobs
+            </Typography>
+            <Box sx={{ mt: 1 }}>
+              <JobCenter budgetId={budgetId} />
+            </Box>
+          </Box>
+        </Box>
+      </Drawer>
+    </AppBar>
   );
 }

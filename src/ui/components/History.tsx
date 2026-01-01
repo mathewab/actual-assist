@@ -1,4 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { api, type Suggestion } from '../services/api';
 import { ProgressBar } from './ProgressBar';
 
@@ -7,6 +21,8 @@ interface HistoryProps {
 }
 
 export function History({ budgetId }: HistoryProps) {
+  const theme = useTheme();
+  const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const { data, isLoading, error } = useQuery({
     queryKey: ['suggestions', budgetId],
     queryFn: () => api.getSuggestionsByBudgetId(budgetId),
@@ -19,9 +35,9 @@ export function History({ budgetId }: HistoryProps) {
 
   if (error) {
     return (
-      <div className="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <Alert severity="error" variant="outlined">
         Error loading history: {error.message}
-      </div>
+      </Alert>
     );
   }
 
@@ -30,90 +46,208 @@ export function History({ budgetId }: HistoryProps) {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] p-4">
-      <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
-        <h2 className="text-lg font-semibold text-slate-800">Applied Changes History</h2>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-          {appliedSuggestions.length} changes applied
-        </span>
-      </div>
+    <Box sx={{ mx: 'auto', width: '100%', maxWidth: 1200, p: 3 }}>
+      <Box
+        sx={{
+          mb: 3,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          pb: 2,
+        }}
+      >
+        <Typography variant="h6" fontWeight={600} color="text.primary">
+          Applied Changes History
+        </Typography>
+        <Chip
+          label={`${appliedSuggestions.length} changes applied`}
+          size="small"
+          variant="outlined"
+        />
+      </Box>
 
       {appliedSuggestions.length === 0 ? (
-        <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-          <p>No changes have been applied yet.</p>
-          <p className="mt-2 text-xs text-slate-400">
+        <Paper
+          variant="outlined"
+          sx={{ px: 4, py: 6, textAlign: 'center', bgcolor: 'background.default' }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            No changes have been applied yet.
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
             Approve suggestions and apply them to see them here.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Date
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Payee
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Amount
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Account
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Category Applied
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Payee Applied
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {appliedSuggestions.map((suggestion: Suggestion) => (
-                <tr key={suggestion.id} className="hover:bg-slate-50">
-                  <td className="border-b border-slate-100 px-3 py-2">
-                    {formatDate(suggestion.transactionDate)}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-2">
-                    <span className="font-medium text-slate-800">
+          </Typography>
+        </Paper>
+      ) : isSmall ? (
+        <Stack spacing={1.5}>
+          {appliedSuggestions.map((suggestion: Suggestion) => {
+            const isNegative = (suggestion.transactionAmount || 0) < 0;
+            return (
+              <Paper
+                key={suggestion.id}
+                variant="outlined"
+                sx={{ p: 1.5, bgcolor: 'background.paper' }}
+              >
+                <Stack spacing={1}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Date
+                    </Typography>
+                    <Typography variant="body2">
+                      {formatDate(suggestion.transactionDate)}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Payee
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
                       {suggestion.transactionPayee || '—'}
-                    </span>
-                  </td>
-                  <td
-                    className={`border-b border-slate-100 px-3 py-2 font-mono text-xs ${
-                      (suggestion.transactionAmount || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'
-                    }`}
-                  >
-                    {formatAmount(suggestion.transactionAmount)}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-2">
-                    {suggestion.transactionAccountName || '—'}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-2">
-                    <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                      {suggestion.categorySuggestion?.proposedCategoryName ||
-                        suggestion.proposedCategoryName ||
-                        '—'}
-                    </span>
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-2">
-                    {suggestion.payeeSuggestion?.proposedPayeeName ? (
-                      <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                        {suggestion.payeeSuggestion.proposedPayeeName}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Amount
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      fontFamily="monospace"
+                      color={isNegative ? 'error.main' : 'success.main'}
+                    >
+                      {formatAmount(suggestion.transactionAmount)}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Account
+                    </Typography>
+                    <Typography variant="body2">
+                      {suggestion.transactionAccountName || '—'}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Category Applied
+                    </Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      <Chip
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        label={
+                          suggestion.categorySuggestion?.proposedCategoryName ||
+                          suggestion.proposedCategoryName ||
+                          '—'
+                        }
+                      />
+                    </Box>
+                  </Box>
+                  {suggestion.payeeSuggestion?.proposedPayeeName && (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Payee Applied
+                      </Typography>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Chip
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                          label={suggestion.payeeSuggestion.proposedPayeeName}
+                        />
+                      </Box>
+                    </Box>
+                  )}
+                </Stack>
+              </Paper>
+            );
+          })}
+        </Stack>
+      ) : (
+        <TableContainer component={Paper} variant="outlined" sx={{ bgcolor: 'background.paper' }}>
+          <Table size="small" aria-label="applied changes history">
+            <TableHead>
+              <TableRow>
+                {['Date', 'Payee', 'Amount', 'Account', 'Category Applied', 'Payee Applied'].map(
+                  (label) => (
+                    <TableCell
+                      key={label}
+                      sx={{
+                        bgcolor: 'background.paper',
+                        borderBottomColor: 'divider',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: 'text.secondary',
+                      }}
+                    >
+                      {label}
+                    </TableCell>
+                  )
+                )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {appliedSuggestions.map((suggestion: Suggestion) => {
+                const isNegative = (suggestion.transactionAmount || 0) < 0;
+
+                return (
+                  <TableRow key={suggestion.id} hover>
+                    <TableCell sx={{ borderBottomColor: 'divider' }}>
+                      {formatDate(suggestion.transactionDate)}
+                    </TableCell>
+                    <TableCell sx={{ borderBottomColor: 'divider' }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {suggestion.transactionPayee || '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        borderBottomColor: 'divider',
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                        color: isNegative ? 'error.main' : 'success.main',
+                      }}
+                    >
+                      {formatAmount(suggestion.transactionAmount)}
+                    </TableCell>
+                    <TableCell sx={{ borderBottomColor: 'divider' }}>
+                      {suggestion.transactionAccountName || '—'}
+                    </TableCell>
+                    <TableCell sx={{ borderBottomColor: 'divider' }}>
+                      <Chip
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        label={
+                          suggestion.categorySuggestion?.proposedCategoryName ||
+                          suggestion.proposedCategoryName ||
+                          '—'
+                        }
+                      />
+                    </TableCell>
+                    <TableCell sx={{ borderBottomColor: 'divider' }}>
+                      {suggestion.payeeSuggestion?.proposedPayeeName ? (
+                        <Chip
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                          label={suggestion.payeeSuggestion.proposedPayeeName}
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
-    </div>
+    </Box>
   );
 }
 

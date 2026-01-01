@@ -1,6 +1,33 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Badge from '@mui/material/Badge';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import { alpha } from '@mui/material/styles';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import ListSubheader from '@mui/material/ListSubheader';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import {
   api,
   type Suggestion,
@@ -40,37 +67,39 @@ interface CorrectionModalState {
   currentValue: string;
 }
 
-const confidenceClass = (level: string) => {
+const confidenceColor = (level: string): 'success' | 'warning' | 'error' => {
   switch (level) {
     case 'high':
-      return 'bg-emerald-50 text-emerald-700';
+      return 'success';
     case 'medium':
-      return 'bg-amber-50 text-amber-700';
+      return 'warning';
     default:
-      return 'bg-rose-50 text-rose-700';
+      return 'error';
   }
 };
 
-const statusTagClass = (status: string) => {
+const statusColor = (status: string): 'warning' | 'success' | 'error' | 'info' | 'default' => {
   switch (status) {
     case 'pending':
-      return 'bg-amber-50 text-amber-700';
+      return 'warning';
     case 'approved':
-      return 'bg-emerald-50 text-emerald-700';
+      return 'success';
     case 'rejected':
-      return 'bg-rose-50 text-rose-700';
+      return 'error';
     case 'applied':
-      return 'bg-blue-50 text-blue-700';
+      return 'info';
     case 'not-generated':
-      return 'bg-slate-100 text-slate-600';
+      return 'default';
     case 'unknown':
-      return 'bg-amber-50 text-amber-700';
+      return 'warning';
     default:
-      return 'bg-slate-100 text-slate-600';
+      return 'default';
   }
 };
 
 export function SuggestionList({ budgetId }: SuggestionListProps) {
+  const theme = useTheme();
+  const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const queryClient = useQueryClient();
   const [expandedPayees, setExpandedPayees] = useState<Set<string>>(new Set());
   const [correctionModal, setCorrectionModal] = useState<CorrectionModalState | null>(null);
@@ -235,17 +264,22 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
 
   if (isLoading) {
     return (
-      <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-        Loading suggestions...
-      </div>
+      <Paper
+        variant="outlined"
+        sx={{ px: 4, py: 6, textAlign: 'center', bgcolor: 'background.default' }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          Loading suggestions...
+        </Typography>
+      </Paper>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-rose-50 px-6 py-4 text-center text-sm text-rose-700">
+      <Alert severity="error" variant="outlined">
         Error loading suggestions: {error.message}
-      </div>
+      </Alert>
     );
   }
 
@@ -253,55 +287,77 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const payeeGroups = groupByPayee(suggestions);
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] p-4">
-      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">
+    <Box sx={{ mx: 'auto', width: '100%', maxWidth: 1200, p: 3 }}>
+      <Box
+        sx={{
+          mb: 3,
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { sm: 'center' },
+          justifyContent: 'space-between',
+          gap: 2,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          pb: 2,
+        }}
+      >
+        <Typography variant="h6" fontWeight={600} color="text.primary">
           Suggestions ({suggestions.length} transactions, {payeeGroups.length} payees)
-        </h2>
-        <div className="flex flex-wrap gap-2">
+        </Typography>
+        <Stack direction="row" spacing={2} flexWrap="wrap">
           {hasApprovedChanges && (
-            <NavLink
+            <Button
+              component={NavLink}
               to="/apply"
-              className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+              variant="contained"
+              color="success"
+              size="small"
             >
-              Apply Changes
-              <span
-                className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-2 text-xs font-bold text-emerald-700 shadow"
-                aria-label={`${approvedChangesCount} to apply`}
+              <Badge
+                color="default"
+                badgeContent={approvedChangesCount}
+                sx={{ '& .MuiBadge-badge': { bgcolor: 'common.white', color: 'success.main' } }}
               >
-                {approvedChangesCount}
-              </span>
-            </NavLink>
+                Apply Changes
+              </Badge>
+            </Button>
           )}
-          <button
-            className="rounded-md bg-amber-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
+          <Button
+            variant="contained"
+            color="warning"
+            size="small"
             onClick={() => suggestionsJobMutation.mutate()}
             disabled={suggestionsJobMutation.isPending}
           >
-            {suggestionsJobMutation.isPending ? 'Starting generation...' : '✨ Generate'}
-          </button>
-        </div>
-      </div>
+            {suggestionsJobMutation.isPending ? 'Starting generation...' : 'Generate'}
+          </Button>
+        </Stack>
+      </Box>
 
       {retrySuggestionMutation.isPending && (
         <ProgressBar message="Retrying AI suggestion for payee group..." />
       )}
 
       {suggestionsJobMutation.error && (
-        <div className="mb-3 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <Alert severity="error" variant="outlined" sx={{ mb: 2 }}>
           Generate failed: {suggestionsJobMutation.error.message}
-        </div>
+        </Alert>
       )}
 
       {payeeGroups.length === 0 ? (
-        <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-          <p>No suggestions available</p>
-          <p className="mt-2 text-xs text-slate-400">
+        <Paper
+          variant="outlined"
+          sx={{ px: 4, py: 6, textAlign: 'center', bgcolor: 'background.default' }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            No suggestions available
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
             Click &quot;Generate&quot; to fetch new suggestions
-          </p>
-        </div>
+          </Typography>
+        </Paper>
       ) : (
-        <div className="flex flex-col gap-px overflow-hidden rounded-md bg-slate-200">
+        <Stack spacing={0.5}>
           {payeeGroups.map((group) => {
             const isExpanded = expandedPayees.has(group.payeeName);
             const pendingIds = group.suggestions
@@ -332,130 +388,141 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               .map((s) => s.id);
             const hasRejectable = rejectableIds.length > 0;
 
-            const rowClasses = [
-              'transition',
-              isExpanded ? 'bg-slate-50' : 'bg-white',
-              !isExpanded ? 'hover:bg-slate-50' : '',
-              hasApproved && !hasPending ? 'bg-emerald-50 hover:bg-emerald-100' : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-
             return (
-              <div key={group.payeeName} className={rowClasses}>
-                {/* Main row - always visible */}
-                <div
-                  className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:gap-3"
+              <Paper
+                key={group.payeeName}
+                variant="outlined"
+                sx={(theme) => ({
+                  bgcolor: isExpanded
+                    ? theme.palette.background.default
+                    : hasApproved && !hasPending
+                      ? alpha(
+                          theme.palette.success.main,
+                          theme.palette.mode === 'dark' ? 0.18 : 0.08
+                        )
+                      : theme.palette.background.paper,
+                })}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', md: 'row' },
+                    alignItems: { md: 'center' },
+                    gap: 2,
+                    px: 2,
+                    py: 1.5,
+                    cursor: 'pointer',
+                  }}
                   onClick={() => toggleExpanded(group.payeeName)}
                 >
-                  <span className="text-xs text-slate-400">{isExpanded ? '▼' : '▶'}</span>
+                  <Typography variant="caption" color="text.secondary">
+                    {isExpanded ? '▼' : '▶'}
+                  </Typography>
 
-                  <div className="flex min-w-0 flex-col gap-0.5 md:flex-[0_0_220px]">
-                    <span className="text-sm font-medium text-slate-800 md:truncate">
+                  <Box sx={{ minWidth: { md: 220 }, flex: { md: '0 0 220px' } }}>
+                    <Typography variant="body2" fontWeight={600} noWrap>
                       {group.payeeName}
-                    </span>
-                    <span className="text-xs text-slate-400">
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
                       {group.suggestions.length} txn{group.suggestions.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
+                    </Typography>
+                  </Box>
 
-                  <div className="flex flex-1 flex-wrap items-center gap-2">
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    alignItems="center"
+                    flexWrap="wrap"
+                    sx={{ flex: 1 }}
+                  >
                     {group.hasPayeeSuggestion &&
                       (group.payeeStatus === 'pending' || group.payeeStatus === 'approved') && (
-                        <span
-                          className={`inline-flex max-w-[180px] items-center truncate rounded px-2 py-0.5 text-xs ${
-                            group.payeeStatus === 'approved'
-                              ? 'border border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700'
-                              : 'bg-violet-50 text-violet-700'
-                          }`}
-                        >
-                          → {group.suggestedPayeeName}
-                        </span>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color="secondary"
+                          label={`→ ${group.suggestedPayeeName}`}
+                          sx={{ maxWidth: 200 }}
+                        />
                       )}
-                    <span
-                      className={`inline-flex max-w-[180px] items-center truncate rounded px-2 py-0.5 text-xs ${
-                        !group.hasCategorySuggestion
-                          ? 'border border-dashed border-slate-300 bg-slate-100 text-slate-500'
-                          : group.categoryStatus === 'approved'
-                            ? 'border border-sky-200 bg-sky-50 text-sky-700'
-                            : 'bg-blue-50 text-blue-700'
-                      }`}
-                    >
-                      {group.proposedCategory}
-                    </span>
-                    <span
-                      className={`inline-flex items-center rounded px-2 py-0.5 text-[0.7rem] font-semibold ${confidenceClass(
-                        getConfidenceLevel(group.avgConfidence)
-                      )}`}
-                    >
-                      {Math.round(group.avgConfidence * 100)}%
-                    </span>
-                  </div>
+                    <Chip
+                      size="small"
+                      variant={group.hasCategorySuggestion ? 'outlined' : 'filled'}
+                      color={group.hasCategorySuggestion ? 'info' : 'default'}
+                      label={group.proposedCategory}
+                      sx={{ maxWidth: 200 }}
+                    />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={confidenceColor(getConfidenceLevel(group.avgConfidence))}
+                      label={`${Math.round(group.avgConfidence * 100)}%`}
+                    />
+                  </Stack>
 
-                  {/* Action buttons */}
-                  <div className="flex shrink-0 gap-2 self-end md:self-center">
+                  <Stack direction="row" spacing={1} alignItems="center">
                     {hasPendingApprovable && (
-                      <button
-                        className="rounded bg-emerald-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
                         onClick={(e) => {
                           e.stopPropagation();
                           bulkApproveMutation.mutate(pendingApprovableIds);
                         }}
                         disabled={bulkApproveMutation.isPending}
-                        title="Approve all suggestions"
                       >
-                        ✓ Approve
-                      </button>
+                        Approve
+                      </Button>
                     )}
                     {hasProcessed && (
-                      <button
-                        className="rounded bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="warning"
                         onClick={(e) => {
                           e.stopPropagation();
                           bulkResetMutation.mutate(processedIds);
                         }}
                         disabled={bulkResetMutation.isPending}
-                        title="Undo approved/rejected suggestions"
                       >
-                        ↩ Undo
-                      </button>
+                        Undo
+                      </Button>
                     )}
-                  </div>
-                </div>
+                  </Stack>
+                </Box>
 
-                {/* Expanded section - reasoning + actions + transactions */}
                 {isExpanded && (
-                  <div className="border-t border-slate-200 px-4 pb-4 pt-3 md:pl-7">
-                    {/* Suggestion details with reasoning */}
-                    <div className="flex flex-col gap-3">
-                      {/* Category suggestion */}
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 2 }}>
+                    <Stack spacing={2}>
                       {group.categoryStatus === 'pending' && (
-                        <div className="rounded-md border border-slate-200 bg-white p-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                            <Typography variant="caption" fontWeight={700} color="text.secondary">
                               Category
-                            </span>
-                            <span className="text-sm font-medium text-slate-700">
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600}>
                               {group.hasCategorySuggestion
                                 ? group.proposedCategory
                                 : 'Not generated'}
-                            </span>
-                            <span
-                              className={`ml-auto rounded px-2 py-0.5 text-[0.65rem] font-semibold ${confidenceClass(
-                                getConfidenceLevel(group.categoryConfidence)
-                              )}`}
-                            >
-                              {Math.round(group.categoryConfidence * 100)}%
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm text-slate-600">
+                            </Typography>
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              color={confidenceColor(getConfidenceLevel(group.categoryConfidence))}
+                              label={`${Math.round(group.categoryConfidence * 100)}%`}
+                              sx={{ ml: 'auto' }}
+                            />
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                             {group.hasCategorySuggestion
                               ? group.categoryRationale
                               : 'No suggestion yet. Generate or correct to proceed.'}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              className="rounded bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                          </Typography>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
                               onClick={() =>
                                 openCorrectionModal(
                                   'category',
@@ -464,53 +531,58 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                 )
                               }
                             >
-                              ✎ Correct
-                            </button>
-                            <button
-                              className="rounded bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                              Correct
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="warning"
                               onClick={() => retrySuggestionMutation.mutate(firstSuggestion.id)}
                               disabled={retrySuggestionMutation.isPending}
                             >
                               {retrySuggestionMutation.isPending
-                                ? '⏳'
+                                ? 'Working...'
                                 : group.hasCategorySuggestion
-                                  ? '↻'
-                                  : '✨'}{' '}
-                              {group.hasCategorySuggestion ? 'Retry' : 'Generate'}
-                            </button>
-                            <button
-                              className="rounded bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                                  ? 'Retry'
+                                  : 'Generate'}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
                               onClick={() => bulkRejectMutation.mutate(rejectableIds)}
                               disabled={bulkRejectMutation.isPending || !hasRejectable}
                             >
-                              ✕ Reject
-                            </button>
-                          </div>
-                        </div>
+                              Reject
+                            </Button>
+                          </Stack>
+                        </Paper>
                       )}
 
-                      {/* Payee suggestion (if different from original) */}
                       {group.hasPayeeSuggestion && group.payeeStatus === 'pending' && (
-                        <div className="rounded-md border border-slate-200 bg-white p-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                            <Typography variant="caption" fontWeight={700} color="text.secondary">
                               Payee
-                            </span>
-                            <span className="text-sm font-medium text-slate-700">
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600}>
                               {group.payeeName} → {group.suggestedPayeeName}
-                            </span>
-                            <span
-                              className={`ml-auto rounded px-2 py-0.5 text-[0.65rem] font-semibold ${confidenceClass(
-                                getConfidenceLevel(group.payeeConfidence)
-                              )}`}
-                            >
-                              {Math.round(group.payeeConfidence * 100)}%
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm text-slate-600">{group.payeeRationale}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              className="rounded bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                            </Typography>
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              color={confidenceColor(getConfidenceLevel(group.payeeConfidence))}
+                              label={`${Math.round(group.payeeConfidence * 100)}%`}
+                              sx={{ ml: 'auto' }}
+                            />
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            {group.payeeRationale}
+                          </Typography>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
                               onClick={() =>
                                 openCorrectionModal(
                                   'payee',
@@ -519,69 +591,64 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                 )
                               }
                             >
-                              ✎ Correct
-                            </button>
-                          </div>
-                        </div>
+                              Correct
+                            </Button>
+                          </Stack>
+                        </Paper>
                       )}
-                    </div>
+                    </Stack>
 
-                    {/* Transactions table */}
-                    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-                      <table className="w-full border-collapse text-xs">
-                        <thead>
-                          <tr>
-                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                              Date
-                            </th>
-                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                              Account
-                            </th>
-                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                              Amount
-                            </th>
-                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                              Status
-                            </th>
-                            <th className="bg-slate-100 px-3 py-2 text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.suggestions.map((suggestion) => {
-                            const statusClass = getStatusClass(suggestion);
-                            return (
-                              <tr
-                                key={suggestion.id}
-                                className={`border-t border-slate-100 ${
-                                  ['approved', 'rejected', 'applied'].includes(statusClass)
-                                    ? 'opacity-50'
-                                    : ''
-                                }`}
-                              >
-                                <td className="px-3 py-2">
-                                  {formatDate(suggestion.transactionDate)}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {suggestion.transactionAccountName || '—'}
-                                </td>
-                                <td className="px-3 py-2 text-right font-mono text-[0.7rem]">
-                                  {formatAmount(suggestion.transactionAmount)}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <span
-                                    className={`inline-flex rounded px-2 py-0.5 text-[0.65rem] font-semibold uppercase ${statusTagClass(
-                                      statusClass
-                                    )}`}
-                                  >
-                                    {getStatusLabel(suggestion)}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-right">
+                    {isSmall ? (
+                      <Stack spacing={1.5} sx={{ mt: 2 }}>
+                        {group.suggestions.map((suggestion) => {
+                          const statusClass = getStatusClass(suggestion);
+                          const isFaded = ['approved', 'rejected', 'applied'].includes(statusClass);
+                          return (
+                            <Paper
+                              key={suggestion.id}
+                              variant="outlined"
+                              sx={{
+                                p: 1.5,
+                                bgcolor: 'background.paper',
+                                opacity: isFaded ? 0.6 : 1,
+                              }}
+                            >
+                              <Stack spacing={1}>
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 1,
+                                  }}
+                                >
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {formatDate(suggestion.transactionDate)}
+                                    </Typography>
+                                    <Typography variant="body2" fontFamily="monospace">
+                                      {formatAmount(suggestion.transactionAmount)}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {suggestion.transactionAccountName || '—'}
+                                    </Typography>
+                                  </Box>
+                                  <Stack direction="row" spacing={1} alignItems="center">
+                                    <Chip
+                                      size="small"
+                                      variant="outlined"
+                                      color={statusColor(statusClass)}
+                                      label={getStatusLabel(suggestion).toUpperCase()}
+                                    />
+                                  </Stack>
+                                </Box>
+
+                                <Stack direction="row" spacing={1} flexWrap="wrap">
                                   {suggestion.status === 'pending' && (
-                                    <button
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      color="success"
                                       onClick={() =>
                                         approveSuggestionMutation.mutate(suggestion.id)
                                       }
@@ -589,125 +656,216 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                         approveSuggestionMutation.isPending ||
                                         !isApprovableSuggestion(suggestion)
                                       }
-                                      title={
-                                        isApprovableSuggestion(suggestion)
-                                          ? 'Approve'
-                                          : 'No suggestion to approve'
-                                      }
-                                      aria-label="Approve"
                                     >
-                                      ✓
-                                    </button>
+                                      Approve
+                                    </Button>
                                   )}
                                   {(suggestion.status === 'approved' ||
                                     suggestion.status === 'rejected') && (
-                                    <button
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-amber-500 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      color="warning"
                                       onClick={() => resetSuggestionMutation.mutate(suggestion.id)}
                                       disabled={resetSuggestionMutation.isPending}
-                                      title="Undo"
-                                      aria-label="Undo"
                                     >
-                                      ↩
-                                    </button>
+                                      Undo
+                                    </Button>
                                   )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                                </Stack>
+                              </Stack>
+                            </Paper>
+                          );
+                        })}
+                      </Stack>
+                    ) : (
+                      <Paper variant="outlined" sx={{ mt: 2, bgcolor: 'background.paper' }}>
+                        <Table size="small" aria-label="transactions">
+                          <TableHead>
+                            <TableRow>
+                              {['Date', 'Account', 'Amount', 'Status', 'Actions'].map((label) => (
+                                <TableCell
+                                  key={label}
+                                  sx={{
+                                    bgcolor: 'background.paper',
+                                    borderBottomColor: 'divider',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 700,
+                                    letterSpacing: '0.08em',
+                                    textTransform: 'uppercase',
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  {label}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {group.suggestions.map((suggestion) => {
+                              const statusClass = getStatusClass(suggestion);
+                              const isFaded = ['approved', 'rejected', 'applied'].includes(
+                                statusClass
+                              );
+
+                              return (
+                                <TableRow key={suggestion.id} sx={{ opacity: isFaded ? 0.6 : 1 }}>
+                                  <TableCell sx={{ borderBottomColor: 'divider' }}>
+                                    {formatDate(suggestion.transactionDate)}
+                                  </TableCell>
+                                  <TableCell sx={{ borderBottomColor: 'divider' }}>
+                                    {suggestion.transactionAccountName || '—'}
+                                  </TableCell>
+                                  <TableCell
+                                    align="right"
+                                    sx={{
+                                      borderBottomColor: 'divider',
+                                      fontFamily: 'monospace',
+                                      fontSize: '0.75rem',
+                                    }}
+                                  >
+                                    {formatAmount(suggestion.transactionAmount)}
+                                  </TableCell>
+                                  <TableCell sx={{ borderBottomColor: 'divider' }}>
+                                    <Chip
+                                      size="small"
+                                      variant="outlined"
+                                      color={statusColor(statusClass)}
+                                      label={getStatusLabel(suggestion).toUpperCase()}
+                                    />
+                                  </TableCell>
+                                  <TableCell align="right" sx={{ borderBottomColor: 'divider' }}>
+                                    {suggestion.status === 'pending' && (
+                                      <Button
+                                        size="small"
+                                        variant="contained"
+                                        color="success"
+                                        onClick={() =>
+                                          approveSuggestionMutation.mutate(suggestion.id)
+                                        }
+                                        disabled={
+                                          approveSuggestionMutation.isPending ||
+                                          !isApprovableSuggestion(suggestion)
+                                        }
+                                      >
+                                        Approve
+                                      </Button>
+                                    )}
+                                    {(suggestion.status === 'approved' ||
+                                      suggestion.status === 'rejected') && (
+                                      <Button
+                                        size="small"
+                                        variant="contained"
+                                        color="warning"
+                                        onClick={() =>
+                                          resetSuggestionMutation.mutate(suggestion.id)
+                                        }
+                                        disabled={resetSuggestionMutation.isPending}
+                                      >
+                                        Undo
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </Paper>
+                    )}
+                  </Box>
                 )}
-              </div>
+              </Paper>
             );
           })}
-        </div>
+        </Stack>
       )}
 
-      {/* Correction Modal */}
-      {correctionModal && (
-        <div
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40"
-          onClick={() => setCorrectionModal(null)}
-        >
-          <div
-            className="w-[90%] max-w-sm rounded-lg bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold text-slate-800">
-              Provide Correct {correctionModal.type === 'payee' ? 'Payee' : 'Category'}
-            </h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Current suggestion: <strong>{correctionModal.currentValue}</strong>
-            </p>
+      <Dialog
+        open={Boolean(correctionModal)}
+        onClose={() => setCorrectionModal(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          Provide Correct {correctionModal?.type === 'payee' ? 'Payee' : 'Category'}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Current suggestion: <strong>{correctionModal?.currentValue}</strong>
+          </Typography>
 
-            {correctionModal.type === 'payee' ? (
-              <input
-                type="text"
-                className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Enter correct payee name..."
-                value={correctionInput}
-                onChange={(e) => setCorrectionInput(e.target.value)}
-                autoFocus
-              />
-            ) : (
-              <select
-                className="mt-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          {correctionModal?.type === 'payee' ? (
+            <TextField
+              fullWidth
+              size="small"
+              label="Correct payee"
+              placeholder="Enter correct payee name..."
+              value={correctionInput}
+              onChange={(e) => setCorrectionInput(e.target.value)}
+              autoFocus
+            />
+          ) : (
+            <FormControl fullWidth size="small" autoFocus>
+              <InputLabel id="correction-category-label">Select a category</InputLabel>
+              <Select
+                labelId="correction-category-label"
+                label="Select a category"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                autoFocus
               >
-                <option value="">-- Select a category --</option>
-                {Object.entries(groupedCategories).map(([groupName, cats]) => (
-                  <optgroup key={groupName} label={groupName}>
-                    {cats.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            )}
+                <MenuItem value="">-- Select a category --</MenuItem>
+                {Object.entries(groupedCategories).flatMap(([groupName, cats]) => [
+                  <ListSubheader key={`group-${groupName}`}>{groupName}</ListSubheader>,
+                  ...cats.map((cat) => (
+                    <MenuItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </MenuItem>
+                  )),
+                ])}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCorrectionModal(null)} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCorrectionSubmit}
+            disabled={
+              correctPayeeMutation.isPending ||
+              correctCategoryMutation.isPending ||
+              (correctionModal?.type === 'payee' ? !correctionInput.trim() : !selectedCategoryId)
+            }
+          >
+            Submit Correction
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                onClick={() => setCorrectionModal(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={handleCorrectionSubmit}
-                disabled={
-                  correctPayeeMutation.isPending ||
-                  correctCategoryMutation.isPending ||
-                  (correctionModal.type === 'payee' ? !correctionInput.trim() : !selectedCategoryId)
-                }
-              >
-                Submit Correction
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-4 rounded-md bg-slate-100 px-3 py-2 text-[0.7rem] text-slate-500">
-        <span className="flex items-center gap-1">
-          <span className="h-2 w-2 rounded-sm bg-emerald-500"></span> ≥80%
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-2 w-2 rounded-sm bg-amber-400"></span> 50-79%
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-2 w-2 rounded-sm bg-rose-400"></span> &lt;50%
-        </span>
-        <span className="text-slate-400 md:ml-auto">Click row to expand</span>
-      </div>
-    </div>
+      <Divider sx={{ my: 2 }} />
+      <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default' }}>
+        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'success.main' }} />
+            <Typography variant="caption">≥80%</Typography>
+          </Stack>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'warning.main' }} />
+            <Typography variant="caption">50-79%</Typography>
+          </Stack>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'error.main' }} />
+            <Typography variant="caption">&lt;50%</Typography>
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+            Click row to expand
+          </Typography>
+        </Stack>
+      </Paper>
+    </Box>
   );
 }
 

@@ -1,25 +1,41 @@
 import { useQuery } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { api, type AuditEvent } from '../services/api';
 import { ProgressBar } from './ProgressBar';
 
-const eventTypeClass = (eventType: string) => {
+const eventTypeColor = (eventType: string): 'success' | 'error' | 'info' | 'default' => {
   if (
     eventType.includes('approved') ||
     eventType.includes('executed') ||
     eventType.includes('applied')
   ) {
-    return 'bg-emerald-50 text-emerald-700';
+    return 'success';
   }
   if (eventType.includes('rejected') || eventType.includes('failed')) {
-    return 'bg-rose-50 text-rose-700';
+    return 'error';
   }
   if (eventType.includes('created') || eventType.includes('generated')) {
-    return 'bg-blue-50 text-blue-700';
+    return 'info';
   }
-  return 'bg-slate-100 text-slate-600';
+  return 'default';
 };
 
 export function Audit() {
+  const theme = useTheme();
+  const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const { data, isLoading, error } = useQuery({
     queryKey: ['audit'],
     queryFn: () => api.getAuditEvents(),
@@ -31,78 +47,165 @@ export function Audit() {
 
   if (error) {
     return (
-      <div className="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <Alert severity="error" variant="outlined">
         Error loading audit log: {error.message}
-      </div>
+      </Alert>
     );
   }
 
   const events = data?.events || [];
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] p-4">
-      <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
-        <h2 className="text-lg font-semibold text-slate-800">Audit Log</h2>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-          {events.length} events
-        </span>
-      </div>
+    <Box sx={{ mx: 'auto', width: '100%', maxWidth: 1400, p: 3 }}>
+      <Box
+        sx={{
+          mb: 3,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          pb: 2,
+        }}
+      >
+        <Typography variant="h6" fontWeight={600} color="text.primary">
+          Audit Log
+        </Typography>
+        <Chip label={`${events.length} events`} size="small" variant="outlined" />
+      </Box>
 
       {events.length === 0 ? (
-        <div className="rounded-md bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-          <p>No audit events recorded yet.</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Timestamp
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Event Type
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Entity Type
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Entity ID
-                </th>
-                <th className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-                  Details
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event: AuditEvent) => (
-                <tr key={event.id} className="hover:bg-slate-50">
-                  <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2 font-mono text-[0.75rem] text-slate-500">
+        <Paper
+          variant="outlined"
+          sx={{ px: 4, py: 6, textAlign: 'center', bgcolor: 'background.default' }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            No audit events recorded yet.
+          </Typography>
+        </Paper>
+      ) : isSmall ? (
+        <Stack spacing={1.5}>
+          {events.map((event: AuditEvent) => (
+            <Paper key={event.id} variant="outlined" sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+              <Stack spacing={1}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Timestamp
+                  </Typography>
+                  <Typography variant="body2" fontFamily="monospace">
                     {formatTimestamp(event.timestamp)}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-2">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${eventTypeClass(
-                        event.eventType
-                      )}`}
-                    >
-                      {formatEventType(event.eventType)}
-                    </span>
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-2">{event.entityType}</td>
-                  <td className="border-b border-slate-100 px-3 py-2 font-mono text-[0.75rem] text-slate-500">
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Event Type
+                  </Typography>
+                  <Box sx={{ mt: 0.5 }}>
+                    <Chip
+                      size="small"
+                      label={formatEventType(event.eventType)}
+                      color={eventTypeColor(event.eventType)}
+                      variant="outlined"
+                      sx={{ fontWeight: 600 }}
+                    />
+                  </Box>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Entity
+                  </Typography>
+                  <Typography variant="body2">{event.entityType}</Typography>
+                  <Typography variant="caption" fontFamily="monospace" color="text.secondary">
                     {truncateId(event.entityId)}
-                  </td>
-                  <td className="max-w-[300px] truncate border-b border-slate-100 px-3 py-2 text-[0.75rem] text-slate-600">
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Details
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
                     {event.metadata ? formatMetadata(event.metadata) : '—'}
-                  </td>
-                </tr>
+                  </Typography>
+                </Box>
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      ) : (
+        <TableContainer component={Paper} variant="outlined" sx={{ bgcolor: 'background.paper' }}>
+          <Table size="small" aria-label="audit log">
+            <TableHead>
+              <TableRow>
+                {['Timestamp', 'Event Type', 'Entity Type', 'Entity ID', 'Details'].map((label) => (
+                  <TableCell
+                    key={label}
+                    sx={{
+                      bgcolor: 'background.paper',
+                      borderBottomColor: 'divider',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {label}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event: AuditEvent) => (
+                <TableRow key={event.id} hover>
+                  <TableCell
+                    sx={{
+                      whiteSpace: 'nowrap',
+                      borderBottomColor: 'divider',
+                      fontFamily: 'monospace',
+                      fontSize: '0.75rem',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {formatTimestamp(event.timestamp)}
+                  </TableCell>
+                  <TableCell sx={{ borderBottomColor: 'divider' }}>
+                    <Chip
+                      size="small"
+                      label={formatEventType(event.eventType)}
+                      color={eventTypeColor(event.eventType)}
+                      variant="outlined"
+                      sx={{ fontWeight: 600 }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ borderBottomColor: 'divider' }}>{event.entityType}</TableCell>
+                  <TableCell
+                    sx={{
+                      borderBottomColor: 'divider',
+                      fontFamily: 'monospace',
+                      fontSize: '0.75rem',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {truncateId(event.entityId)}
+                  </TableCell>
+                  <TableCell sx={{ borderBottomColor: 'divider', maxWidth: 300 }}>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      noWrap
+                      title={event.metadata ? formatMetadata(event.metadata) : '—'}
+                      sx={{ display: 'block' }}
+                    >
+                      {event.metadata ? formatMetadata(event.metadata) : '—'}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
-    </div>
+    </Box>
   );
 }
 

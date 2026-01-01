@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Autocomplete from '@mui/material/Autocomplete';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { api, type CategoryTemplateSummary } from '../services/api';
 import {
   buildNoteFromExisting,
@@ -709,17 +723,25 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
       return '';
     }
 
+    const draftLineMap = new Map<string, string>();
+    drafts.forEach((draft, index) => {
+      const line = draftRenderLines[index] ?? '';
+      draftLineMap.set(draft.id, line);
+    });
+
+    const appendedBlocks = drafts
+      .filter((draft) => draft.sourceIndex === null)
+      .map((draft) => ({
+        comment: draft.comment,
+        line: draftLineMap.get(draft.id) ?? '',
+      }))
+      .filter((block) => block.comment.trim() !== '' || block.line.trim() !== '');
+
     if (activeCategory?.note) {
       const commentsByManagedIndex: string[] = [];
       managedTemplateEntries.forEach((_, index) => {
         const draft = drafts.find((item) => item.sourceIndex === index);
         commentsByManagedIndex.push(draft?.comment ?? '');
-      });
-
-      const draftLineMap = new Map<string, string>();
-      drafts.forEach((draft, index) => {
-        const line = draftRenderLines[index] ?? '';
-        draftLineMap.set(draft.id, line);
       });
 
       const hasRenderedLines = renderedValue.trim().length > 0;
@@ -741,8 +763,10 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
 
       const updated = buildNoteFromExisting(
         activeCategory.note,
-        replacements.filter((item) => item !== null),
-        commentsByManagedIndex
+        activeTemplateEntries,
+        commentsByManagedIndex,
+        replacements,
+        appendedBlocks
       );
 
       return updated;
@@ -750,33 +774,35 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
 
     return buildNoteFromExisting(
       '',
-      draftRenderLines,
-      drafts.map((draft) => draft.comment)
+      [],
+      drafts.map((draft) => draft.comment),
+      [],
+      appendedBlocks
     );
   })();
 
-  const fieldClass =
-    'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200';
-  const labelClass = 'flex flex-col gap-2 text-xs font-semibold text-slate-600';
-  const checkboxClass = 'flex items-center gap-2 text-xs font-semibold text-slate-600';
-  const inlineStackClass = 'flex items-center gap-2';
-  const textareaClass =
-    'min-h-[56px] w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200';
-  const outputTextareaClass =
-    'min-h-[140px] w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200';
-
   return (
-    <section className="flex flex-col gap-6 p-6">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-800">Budget Template Studio</h2>
-          <p className="mt-1 text-sm text-slate-600">
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', lg: 'row' },
+          alignItems: { lg: 'center' },
+          justifyContent: 'space-between',
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography variant="h5" fontWeight={600} color="text.primary">
+            Budget Template Studio
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             View existing notes and build new template lines before updating Actual.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="rounded-md bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-300"
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          size="small"
           onClick={async () => {
             const result = await refetch();
             if (activeCategoryId && result.data) {
@@ -790,31 +816,44 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
           }}
         >
           Refresh
-        </button>
-      </header>
+        </Button>
+      </Box>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(340px,1.2fr)]">
-        <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-col gap-3">
-            <h3 className="text-base font-semibold text-slate-800">Categories & Notes</h3>
-            <input
-              type="search"
-              className={fieldClass}
-              placeholder="Filter by category or group"
-              value={filterText}
-              onChange={(event) => setFilterText(event.target.value)}
-            />
-            <div className="flex flex-col gap-2 lg:hidden">
-              <label
-                className="text-xs font-semibold text-slate-600"
-                htmlFor="template-category-picker"
-              >
-                Select category
-              </label>
-              <select
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 3,
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(280px,1fr) minmax(340px,1.2fr)' },
+        }}
+      >
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            bgcolor: 'background.default',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight={600}>
+            Categories & Notes
+          </Typography>
+          <TextField
+            size="small"
+            label="Filter"
+            placeholder="Filter by category or group"
+            value={filterText}
+            onChange={(event) => setFilterText(event.target.value)}
+          />
+          <Box sx={{ display: { xs: 'flex', lg: 'none' }, flexDirection: 'column', gap: 1 }}>
+            <FormControl size="small">
+              <InputLabel id="template-category-picker-label">Select category</InputLabel>
+              <Select
+                labelId="template-category-picker-label"
                 id="template-category-picker"
-                className={fieldClass}
                 value={activeCategoryId ?? ''}
+                label="Select category"
                 onChange={(event) => {
                   const nextId = event.target.value || null;
                   if (nextId === activeCategoryId) {
@@ -825,221 +864,322 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                   loadCategory(nextCategory);
                 }}
               >
-                <option value="">Choose a category</option>
+                <MenuItem value="">Choose a category</MenuItem>
                 {filteredTemplates.map((item) => (
-                  <option key={item.id} value={item.id}>
+                  <MenuItem key={item.id} value={item.id}>
                     {item.groupName ? `${item.groupName} • ${item.name}` : item.name}
-                  </option>
+                  </MenuItem>
                 ))}
-              </select>
-            </div>
-          </div>
+              </Select>
+            </FormControl>
+          </Box>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3 lg:hidden">
-            <h4 className="text-sm font-semibold text-slate-800">Selected category notes</h4>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              bgcolor: 'background.paper',
+              display: { xs: 'block', lg: 'none' },
+            }}
+          >
+            <Typography variant="subtitle2" fontWeight={600}>
+              Selected category notes
+            </Typography>
             {activeCategory ? (
-              <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-600">
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 1, display: 'block', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}
+              >
                 {activeCategory.note ? activeCategory.note : 'No notes yet'}
-              </pre>
+              </Typography>
             ) : (
-              <p className="mt-2 text-xs text-slate-500">Select a category to view its notes.</p>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Select a category to view its notes.
+              </Typography>
             )}
-          </div>
+          </Paper>
 
-          {isLoading && <p className="text-sm text-slate-500">Remembering your templates...</p>}
-          {error && <p className="text-sm text-rose-700">Failed to load templates.</p>}
-
-          {!isLoading && filteredTemplates.length === 0 && (
-            <p className="text-sm text-slate-500">No categories found.</p>
+          {isLoading && (
+            <Typography variant="body2" color="text.secondary">
+              Remembering your templates...
+            </Typography>
+          )}
+          {error && (
+            <Alert severity="error" variant="outlined">
+              Failed to load templates.
+            </Alert>
           )}
 
-          <div className="hidden max-h-[520px] flex-col gap-3 overflow-auto pr-1 lg:flex">
-            {filteredTemplates.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                className={[
-                  'flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition',
-                  'hover:border-blue-300 hover:shadow-md',
-                  item.id === activeCategoryId ? 'border-blue-300 shadow-md' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                onClick={() => handleUseCategory(item)}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-800">{item.name}</h4>
-                    <span className="text-xs text-slate-500">
-                      {item.groupName || 'Uncategorized'}
-                    </span>
-                  </div>
-                  {item.source && (
-                    <span className="rounded-full bg-sky-100 px-2 py-1 text-[0.65rem] font-semibold text-sky-700">
-                      Source: {item.source}
-                    </span>
+          {!isLoading && filteredTemplates.length === 0 && (
+            <Typography variant="body2" color="text.secondary">
+              No categories found.
+            </Typography>
+          )}
+
+          <Stack
+            spacing={2}
+            sx={{ display: { xs: 'none', lg: 'flex' }, maxHeight: 520, overflow: 'auto', pr: 1 }}
+          >
+            {filteredTemplates.map((item) => {
+              const isActive = item.id === activeCategoryId;
+              return (
+                <Paper
+                  key={item.id}
+                  variant="outlined"
+                  onClick={() => handleUseCategory(item)}
+                  sx={{
+                    p: 2,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    borderColor: isActive ? 'primary.main' : 'divider',
+                    boxShadow: isActive ? '0 0 0 1px' : 'none',
+                    '&:hover': { borderColor: 'primary.light' },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      gap: 2,
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={600}>
+                        {item.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.groupName || 'Uncategorized'}
+                      </Typography>
+                    </Box>
+                    {item.source && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color="info"
+                        label={`Source: ${item.source}`}
+                      />
+                    )}
+                  </Box>
+                  {item.parseError ? (
+                    <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
+                      {item.parseError}
+                    </Alert>
+                  ) : (
+                    <Box
+                      component="pre"
+                      sx={{
+                        mt: 1,
+                        whiteSpace: 'pre-wrap',
+                        bgcolor: 'background.default',
+                        p: 1.5,
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        fontSize: '0.75rem',
+                        color: 'text.secondary',
+                      }}
+                    >
+                      {item.note ? item.note : 'No notes yet'}
+                    </Box>
                   )}
-                </div>
-                {item.parseError ? (
-                  <div className="rounded-md bg-rose-100 px-2 py-1 text-xs text-rose-700">
-                    {item.parseError}
-                  </div>
-                ) : (
-                  <pre className="whitespace-pre-wrap rounded-md bg-slate-100 p-2 text-xs text-slate-600">
-                    {item.note ? item.note : 'No notes yet'}
-                  </pre>
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
+                </Paper>
+              );
+            })}
+          </Stack>
+        </Paper>
 
-        <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-slate-800">Render Templates</h3>
-              <p className="mt-1 text-sm text-slate-600">
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            bgcolor: 'background.default',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 2,
+              alignItems: { sm: 'flex-start' },
+              justifyContent: 'space-between',
+            }}
+          >
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600}>
+                Render Templates
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
                 Build templates with form controls and render the note lines.
-              </p>
-            </div>
+              </Typography>
+            </Box>
             {activeCategory && (
-              <div className="inline-flex rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-                Editing: <strong className="ml-1">{activeCategory.name}</strong>
-              </div>
+              <Chip size="small" variant="outlined" label={`Editing: ${activeCategory.name}`} />
             )}
-          </div>
+          </Box>
 
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <label
-                  className="text-xs font-semibold text-slate-600"
-                  htmlFor="template-type-select"
-                >
-                  Add template
-                </label>
-                <select
-                  id="template-type-select"
-                  className={fieldClass}
-                  value={newTemplateType}
-                  onChange={(event) => setNewTemplateType(event.target.value as TemplateType)}
-                >
-                  <option value="simple">Simple</option>
-                  <option value="percentage">Percentage</option>
-                  <option value="periodic">Periodic</option>
-                  <option value="by">By date</option>
-                  <option value="spend">Spend</option>
-                  <option value="schedule">Schedule</option>
-                  <option value="average">Average</option>
-                  <option value="copy">Copy</option>
-                  <option value="remainder">Remainder</option>
-                  <option value="limit">Limit</option>
-                  <option value="goal">Goal</option>
-                </select>
-                <button
-                  type="button"
-                  className="rounded-md bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
-                  onClick={addDraft}
-                >
+          <Stack spacing={2}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+              alignItems={{ sm: 'center' }}
+              justifyContent="space-between"
+            >
+              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel id="template-type-select-label">Add template</InputLabel>
+                  <Select
+                    labelId="template-type-select-label"
+                    id="template-type-select"
+                    value={newTemplateType}
+                    label="Add template"
+                    onChange={(event) => setNewTemplateType(event.target.value as TemplateType)}
+                  >
+                    <MenuItem value="simple">Simple</MenuItem>
+                    <MenuItem value="percentage">Percentage</MenuItem>
+                    <MenuItem value="periodic">Periodic</MenuItem>
+                    <MenuItem value="by">By date</MenuItem>
+                    <MenuItem value="spend">Spend</MenuItem>
+                    <MenuItem value="schedule">Schedule</MenuItem>
+                    <MenuItem value="average">Average</MenuItem>
+                    <MenuItem value="copy">Copy</MenuItem>
+                    <MenuItem value="remainder">Remainder</MenuItem>
+                    <MenuItem value="limit">Limit</MenuItem>
+                    <MenuItem value="goal">Goal</MenuItem>
+                  </Select>
+                </FormControl>
+                <Button variant="outlined" size="small" onClick={addDraft}>
                   Add
-                </button>
-              </div>
-              <span className="text-xs text-slate-500">
+                </Button>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
                 Set priority to control order; leave blank for default.
-              </span>
-            </div>
+              </Typography>
+            </Stack>
 
             {drafts.length === 0 && (
-              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                No templates yet. Use “Add” to start building one.
-              </div>
+              <Box
+                sx={{
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                  bgcolor: 'background.default',
+                  borderRadius: 1,
+                  px: 2,
+                  py: 1.5,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  No templates yet. Use “Add” to start building one.
+                </Typography>
+              </Box>
             )}
 
-            <div className="flex flex-col gap-4">
+            <Stack spacing={2}>
               {drafts.map((draft, index) => (
-                <div
+                <Paper
                   key={draft.id}
-                  className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4"
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    bgcolor: 'background.paper',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-800">
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 2,
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={600}>
                         {index + 1}. {draft.type.toUpperCase()}
-                      </h4>
+                      </Typography>
                       {draft.type !== 'goal' &&
                         draft.type !== 'remainder' &&
                         draft.type !== 'limit' && (
-                          <label className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-                            Priority
-                            <input
-                              type="number"
-                              className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
-                              value={draft.priority}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { priority: event.target.value })
-                              }
-                            />
-                          </label>
+                          <TextField
+                            size="small"
+                            label="Priority"
+                            type="number"
+                            value={draft.priority}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { priority: event.target.value })
+                            }
+                            sx={{ mt: 1, width: 120 }}
+                          />
                         )}
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                    </Box>
+                    <Button
+                      color="error"
+                      variant="outlined"
+                      size="small"
                       onClick={() => removeDraft(draft.id)}
                     >
                       Remove
-                    </button>
-                  </div>
+                    </Button>
+                  </Box>
 
-                  <label className={labelClass}>
-                    Label / comment (optional)
-                    <textarea
-                      className={textareaClass}
-                      value={draft.comment}
-                      onChange={(event) => updateDraft(draft.id, { comment: event.target.value })}
-                      placeholder="Example: Disney"
-                      rows={2}
-                    />
-                  </label>
+                  <TextField
+                    label="Label / comment (optional)"
+                    size="small"
+                    multiline
+                    minRows={2}
+                    value={draft.comment}
+                    onChange={(event) => updateDraft(draft.id, { comment: event.target.value })}
+                    placeholder="Example: Disney"
+                  />
 
                   {draft.type === 'simple' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Monthly amount
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.monthly}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { monthly: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.limitEnabled}
-                          onChange={(event) => toggleLimit(draft.id, event.target.checked)}
-                        />
-                        Add limit
-                      </label>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Monthly amount"
+                        type="number"
+                        value={draft.monthly}
+                        onChange={(event) => updateDraft(draft.id, { monthly: event.target.value })}
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.limitEnabled}
+                            onChange={(event) => toggleLimit(draft.id, event.target.checked)}
+                          />
+                        }
+                        label="Add limit"
+                      />
                       {draft.limitEnabled && (
                         <>
-                          <label className={labelClass}>
-                            Limit amount
-                            <input
-                              type="number"
-                              className={fieldClass}
-                              value={draft.limitAmount}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitAmount: event.target.value })
-                              }
-                            />
-                          </label>
-                          <label className={labelClass}>
-                            Limit period
-                            <select
-                              className={fieldClass}
+                          <TextField
+                            size="small"
+                            label="Limit amount"
+                            type="number"
+                            value={draft.limitAmount}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitAmount: event.target.value })
+                            }
+                          />
+                          <FormControl size="small">
+                            <InputLabel id={`limit-period-${draft.id}`}>Limit period</InputLabel>
+                            <Select
+                              labelId={`limit-period-${draft.id}`}
+                              label="Limit period"
                               value={draft.limitPeriod}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1047,143 +1187,144 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                                 })
                               }
                             >
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                            </select>
-                          </label>
-                          <label className={labelClass}>
-                            Limit start
-                            <input
-                              type="date"
-                              className={fieldClass}
-                              placeholder="YYYY-MM-DD"
-                              value={draft.limitStart}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitStart: event.target.value })
-                              }
-                            />
-                          </label>
+                              <MenuItem value="daily">Daily</MenuItem>
+                              <MenuItem value="weekly">Weekly</MenuItem>
+                              <MenuItem value="monthly">Monthly</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <TextField
+                            size="small"
+                            label="Limit start"
+                            type="date"
+                            InputLabelProps={{ shrink: true }}
+                            value={draft.limitStart}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitStart: event.target.value })
+                            }
+                          />
                         </>
                       )}
-                    </div>
+                    </Box>
                   )}
 
                   {draft.type === 'percentage' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Percent
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.percent}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { percent: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Category
-                        <AutocompleteInput
-                          value={draft.category}
-                          onChange={(value) => updateDraft(draft.id, { category: value })}
-                          placeholder="Start typing a category"
-                          options={categoryOptions.map((category) => ({
-                            value: category.name,
-                            label: category.label,
-                          }))}
-                        />
-                      </label>
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.previous}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { previous: event.target.checked })
-                          }
-                        />
-                        Use previous month
-                      </label>
-                    </div>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Percent"
+                        type="number"
+                        value={draft.percent}
+                        onChange={(event) => updateDraft(draft.id, { percent: event.target.value })}
+                      />
+                      <AutocompleteInput
+                        value={draft.category}
+                        onChange={(value) => updateDraft(draft.id, { category: value })}
+                        label="Category"
+                        placeholder="Start typing a category"
+                        options={categoryOptions.map((category) => ({
+                          value: category.name,
+                          label: category.label,
+                        }))}
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.previous}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { previous: event.target.checked })
+                            }
+                          />
+                        }
+                        label="Use previous month"
+                      />
+                    </Box>
                   )}
 
                   {draft.type === 'periodic' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Amount
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.amount}
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Amount"
+                        type="number"
+                        value={draft.amount}
+                        onChange={(event) => updateDraft(draft.id, { amount: event.target.value })}
+                      />
+                      <TextField
+                        size="small"
+                        label="Repeat amount"
+                        type="number"
+                        value={draft.periodAmount}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { periodAmount: event.target.value })
+                        }
+                      />
+                      <FormControl size="small">
+                        <InputLabel id={`period-unit-${draft.id}`}>Repeat unit</InputLabel>
+                        <Select
+                          labelId={`period-unit-${draft.id}`}
+                          label="Repeat unit"
+                          value={draft.periodUnit}
                           onChange={(event) =>
-                            updateDraft(draft.id, { amount: event.target.value })
+                            updateDraft(draft.id, {
+                              periodUnit: event.target.value as RepeatPeriod,
+                            })
                           }
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Repeat every
-                        <div className={inlineStackClass}>
-                          <input
-                            type="number"
-                            className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            value={draft.periodAmount}
-                            onChange={(event) =>
-                              updateDraft(draft.id, { periodAmount: event.target.value })
-                            }
+                        >
+                          <MenuItem value="day">Day</MenuItem>
+                          <MenuItem value="week">Week</MenuItem>
+                          <MenuItem value="month">Month</MenuItem>
+                          <MenuItem value="year">Year</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <TextField
+                        size="small"
+                        label="Starting date"
+                        type="date"
+                        InputLabelProps={{ shrink: true }}
+                        value={draft.starting}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { starting: event.target.value })
+                        }
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.limitEnabled}
+                            onChange={(event) => toggleLimit(draft.id, event.target.checked)}
                           />
-                          <select
-                            className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            value={draft.periodUnit}
-                            onChange={(event) =>
-                              updateDraft(draft.id, {
-                                periodUnit: event.target.value as RepeatPeriod,
-                              })
-                            }
-                          >
-                            <option value="day">Day</option>
-                            <option value="week">Week</option>
-                            <option value="month">Month</option>
-                            <option value="year">Year</option>
-                          </select>
-                        </div>
-                      </label>
-                      <label className={labelClass}>
-                        Starting date
-                        <input
-                          type="date"
-                          className={fieldClass}
-                          placeholder="YYYY-MM-DD"
-                          value={draft.starting}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { starting: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.limitEnabled}
-                          onChange={(event) => toggleLimit(draft.id, event.target.checked)}
-                        />
-                        Add limit
-                      </label>
+                        }
+                        label="Add limit"
+                      />
                       {draft.limitEnabled && (
                         <>
-                          <label className={labelClass}>
-                            Limit amount
-                            <input
-                              type="number"
-                              className={fieldClass}
-                              value={draft.limitAmount}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitAmount: event.target.value })
-                              }
-                            />
-                          </label>
-                          <label className={labelClass}>
-                            Limit period
-                            <select
-                              className={fieldClass}
+                          <TextField
+                            size="small"
+                            label="Limit amount"
+                            type="number"
+                            value={draft.limitAmount}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitAmount: event.target.value })
+                            }
+                          />
+                          <FormControl size="small">
+                            <InputLabel id={`period-limit-${draft.id}`}>Limit period</InputLabel>
+                            <Select
+                              labelId={`period-limit-${draft.id}`}
+                              label="Limit period"
                               value={draft.limitPeriod}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1191,103 +1332,100 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                                 })
                               }
                             >
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                            </select>
-                          </label>
-                          <label className={labelClass}>
-                            Limit start
-                            <input
-                              type="date"
-                              className={fieldClass}
-                              placeholder="YYYY-MM-DD"
-                              value={draft.limitStart}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitStart: event.target.value })
-                              }
-                            />
-                          </label>
-                          <label className={checkboxClass}>
-                            <input
-                              type="checkbox"
-                              checked={draft.limitHold}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitHold: event.target.checked })
-                              }
-                            />
-                            Hold leftover
-                          </label>
+                              <MenuItem value="daily">Daily</MenuItem>
+                              <MenuItem value="weekly">Weekly</MenuItem>
+                              <MenuItem value="monthly">Monthly</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <TextField
+                            size="small"
+                            label="Limit start"
+                            type="date"
+                            InputLabelProps={{ shrink: true }}
+                            value={draft.limitStart}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitStart: event.target.value })
+                            }
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={draft.limitHold}
+                                onChange={(event) =>
+                                  updateDraft(draft.id, { limitHold: event.target.checked })
+                                }
+                              />
+                            }
+                            label="Hold leftover"
+                          />
                         </>
                       )}
-                    </div>
+                    </Box>
                   )}
 
                   {(draft.type === 'by' || draft.type === 'spend') && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Amount
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.amount}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { amount: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Month (YYYY-MM)
-                        <input
-                          type="text"
-                          className={fieldClass}
-                          placeholder="2026-01"
-                          value={draft.month}
-                          onChange={(event) => updateDraft(draft.id, { month: event.target.value })}
-                        />
-                      </label>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Amount"
+                        type="number"
+                        value={draft.amount}
+                        onChange={(event) => updateDraft(draft.id, { amount: event.target.value })}
+                      />
+                      <TextField
+                        size="small"
+                        label="Month (YYYY-MM)"
+                        placeholder="2026-01"
+                        value={draft.month}
+                        onChange={(event) => updateDraft(draft.id, { month: event.target.value })}
+                      />
                       {draft.type === 'spend' && (
-                        <label className={labelClass}>
-                          Spend from (YYYY-MM)
-                          <input
-                            type="text"
-                            className={fieldClass}
-                            placeholder="2025-10"
-                            value={draft.from}
+                        <TextField
+                          size="small"
+                          label="Spend from (YYYY-MM)"
+                          placeholder="2025-10"
+                          value={draft.from}
+                          onChange={(event) => updateDraft(draft.id, { from: event.target.value })}
+                        />
+                      )}
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.repeatUnit !== ''}
                             onChange={(event) =>
-                              updateDraft(draft.id, { from: event.target.value })
+                              updateDraft(draft.id, {
+                                repeatUnit: event.target.checked ? 'month' : '',
+                              })
                             }
                           />
-                        </label>
-                      )}
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.repeatUnit !== ''}
-                          onChange={(event) =>
-                            updateDraft(draft.id, {
-                              repeatUnit: event.target.checked ? 'month' : '',
-                            })
-                          }
-                        />
-                        Repeat
-                      </label>
+                        }
+                        label="Repeat"
+                      />
                       {draft.repeatUnit && (
-                        <label className={labelClass}>
-                          Repeat every
-                          <div className={inlineStackClass}>
-                            <input
-                              type="number"
-                              className="w-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                              value={draft.repeat}
-                              min="1"
-                              placeholder="1"
-                              onChange={(event) =>
-                                updateDraft(draft.id, { repeat: event.target.value })
-                              }
-                            />
-                            <select
-                              className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        <>
+                          <TextField
+                            size="small"
+                            label="Repeat amount"
+                            type="number"
+                            placeholder="1"
+                            value={draft.repeat}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { repeat: event.target.value })
+                            }
+                          />
+                          <FormControl size="small">
+                            <InputLabel id={`repeat-unit-${draft.id}`}>Repeat unit</InputLabel>
+                            <Select
+                              labelId={`repeat-unit-${draft.id}`}
+                              label="Repeat unit"
                               value={draft.repeatUnit}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1295,120 +1433,135 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                                 })
                               }
                             >
-                              <option value="month">Month(s)</option>
-                              <option value="year">Year(s)</option>
-                            </select>
-                          </div>
-                        </label>
+                              <MenuItem value="month">Month(s)</MenuItem>
+                              <MenuItem value="year">Year(s)</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </>
                       )}
-                    </div>
+                    </Box>
                   )}
 
                   {draft.type === 'schedule' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Schedule name
-                        <AutocompleteInput
-                          value={draft.name}
-                          onChange={(value) => updateDraft(draft.id, { name: value })}
-                          placeholder="Start typing a schedule"
-                          options={scheduleOptions}
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Adjustment (%)
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.adjustment}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { adjustment: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.full}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { full: event.target.checked })
-                          }
-                        />
-                        Use full scheduled amount
-                      </label>
-                    </div>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <AutocompleteInput
+                        value={draft.name}
+                        onChange={(value) => updateDraft(draft.id, { name: value })}
+                        label="Schedule name"
+                        placeholder="Start typing a schedule"
+                        options={scheduleOptions}
+                      />
+                      <TextField
+                        size="small"
+                        label="Adjustment (%)"
+                        type="number"
+                        value={draft.adjustment}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { adjustment: event.target.value })
+                        }
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.full}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { full: event.target.checked })
+                            }
+                          />
+                        }
+                        label="Use full scheduled amount"
+                      />
+                    </Box>
                   )}
 
                   {draft.type === 'average' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Number of months
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.numMonths}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { numMonths: event.target.value })
-                          }
-                        />
-                      </label>
-                    </div>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Number of months"
+                        type="number"
+                        value={draft.numMonths}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { numMonths: event.target.value })
+                        }
+                      />
+                    </Box>
                   )}
 
                   {draft.type === 'copy' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Copy from months ago
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.lookBack}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { lookBack: event.target.value })
-                          }
-                        />
-                      </label>
-                    </div>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Copy from months ago"
+                        type="number"
+                        value={draft.lookBack}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { lookBack: event.target.value })
+                        }
+                      />
+                    </Box>
                   )}
 
                   {draft.type === 'remainder' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Weight (default 1)
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.weight}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { weight: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.limitEnabled}
-                          onChange={(event) => toggleLimit(draft.id, event.target.checked)}
-                        />
-                        Add limit
-                      </label>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Weight (default 1)"
+                        type="number"
+                        value={draft.weight}
+                        onChange={(event) => updateDraft(draft.id, { weight: event.target.value })}
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.limitEnabled}
+                            onChange={(event) => toggleLimit(draft.id, event.target.checked)}
+                          />
+                        }
+                        label="Add limit"
+                      />
                       {draft.limitEnabled && (
                         <>
-                          <label className={labelClass}>
-                            Limit amount
-                            <input
-                              type="number"
-                              className={fieldClass}
-                              value={draft.limitAmount}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitAmount: event.target.value })
-                              }
-                            />
-                          </label>
-                          <label className={labelClass}>
-                            Limit period
-                            <select
-                              className={fieldClass}
+                          <TextField
+                            size="small"
+                            label="Limit amount"
+                            type="number"
+                            value={draft.limitAmount}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitAmount: event.target.value })
+                            }
+                          />
+                          <FormControl size="small">
+                            <InputLabel id={`remainder-limit-${draft.id}`}>Limit period</InputLabel>
+                            <Select
+                              labelId={`remainder-limit-${draft.id}`}
+                              label="Limit period"
                               value={draft.limitPeriod}
                               onChange={(event) =>
                                 updateDraft(draft.id, {
@@ -1416,55 +1569,60 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                                 })
                               }
                             >
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                            </select>
-                          </label>
-                          <label className={labelClass}>
-                            Limit start
-                            <input
-                              type="date"
-                              className={fieldClass}
-                              placeholder="YYYY-MM-DD"
-                              value={draft.limitStart}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitStart: event.target.value })
-                              }
-                            />
-                          </label>
-                          <label className={checkboxClass}>
-                            <input
-                              type="checkbox"
-                              checked={draft.limitHold}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { limitHold: event.target.checked })
-                              }
-                            />
-                            Hold leftover
-                          </label>
+                              <MenuItem value="daily">Daily</MenuItem>
+                              <MenuItem value="weekly">Weekly</MenuItem>
+                              <MenuItem value="monthly">Monthly</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <TextField
+                            size="small"
+                            label="Limit start"
+                            type="date"
+                            InputLabelProps={{ shrink: true }}
+                            value={draft.limitStart}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitStart: event.target.value })
+                            }
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={draft.limitHold}
+                                onChange={(event) =>
+                                  updateDraft(draft.id, { limitHold: event.target.checked })
+                                }
+                              />
+                            }
+                            label="Hold leftover"
+                          />
                         </>
                       )}
-                    </div>
+                    </Box>
                   )}
 
                   {draft.type === 'limit' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Limit amount
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.limitAmount}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { limitAmount: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Period
-                        <select
-                          className={fieldClass}
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Limit amount"
+                        type="number"
+                        value={draft.limitAmount}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { limitAmount: event.target.value })
+                        }
+                      />
+                      <FormControl size="small">
+                        <InputLabel id={`limit-period-select-${draft.id}`}>Period</InputLabel>
+                        <Select
+                          labelId={`limit-period-select-${draft.id}`}
+                          label="Period"
                           value={draft.limitPeriod}
                           onChange={(event) =>
                             updateDraft(draft.id, {
@@ -1472,68 +1630,64 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
                             })
                           }
                         >
-                          <option value="daily">Daily</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="monthly">Monthly</option>
-                        </select>
-                      </label>
-                      <label className={labelClass}>
-                        Start date
-                        <input
-                          type="date"
-                          className={fieldClass}
-                          placeholder="YYYY-MM-DD"
-                          value={draft.limitStart}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { limitStart: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={checkboxClass}>
-                        <input
-                          type="checkbox"
-                          checked={draft.limitHold}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { limitHold: event.target.checked })
-                          }
-                        />
-                        Hold leftover
-                      </label>
-                    </div>
+                          <MenuItem value="daily">Daily</MenuItem>
+                          <MenuItem value="weekly">Weekly</MenuItem>
+                          <MenuItem value="monthly">Monthly</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <TextField
+                        size="small"
+                        label="Start date"
+                        type="date"
+                        InputLabelProps={{ shrink: true }}
+                        value={draft.limitStart}
+                        onChange={(event) =>
+                          updateDraft(draft.id, { limitStart: event.target.value })
+                        }
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={draft.limitHold}
+                            onChange={(event) =>
+                              updateDraft(draft.id, { limitHold: event.target.checked })
+                            }
+                          />
+                        }
+                        label="Hold leftover"
+                      />
+                    </Box>
                   )}
 
                   {draft.type === 'goal' && (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className={labelClass}>
-                        Goal amount
-                        <input
-                          type="number"
-                          className={fieldClass}
-                          value={draft.amount}
-                          onChange={(event) =>
-                            updateDraft(draft.id, { amount: event.target.value })
-                          }
-                        />
-                      </label>
-                    </div>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 2,
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        label="Goal amount"
+                        type="number"
+                        value={draft.amount}
+                        onChange={(event) => updateDraft(draft.id, { amount: event.target.value })}
+                      />
+                    </Box>
                   )}
-                </div>
+                </Paper>
               ))}
-            </div>
-          </div>
+            </Stack>
+          </Stack>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-70"
-              onClick={handleRender}
-              disabled={renderMutation.isPending}
-            >
+          <Stack direction="row" spacing={2} flexWrap="wrap">
+            <Button variant="contained" onClick={handleRender} disabled={renderMutation.isPending}>
               {renderMutation.isPending ? 'Rendering...' : 'Render Notes'}
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-70"
+            </Button>
+            <Button
+              variant="contained"
               onClick={() => {
                 if (!activeCategory) {
                   setEditorError('Select a category to apply notes');
@@ -1547,42 +1701,57 @@ export function TemplateStudio({ budgetId }: TemplateStudioProps) {
               disabled={!activeCategory || applyMutation.isPending}
             >
               {applyMutation.isPending ? 'Applying...' : 'Apply & Sync'}
-            </button>
-          </div>
+            </Button>
+          </Stack>
 
-          {editorError && <p className="text-sm text-rose-700">{editorError}</p>}
+          {editorError && (
+            <Alert severity="error" variant="outlined">
+              {editorError}
+            </Alert>
+          )}
           {applyStatus && (
-            <p className={`text-sm ${applyStatus.isError ? 'text-rose-700' : 'text-slate-500'}`}>
+            <Alert severity={applyStatus.isError ? 'error' : 'success'} variant="outlined">
               {applyStatus.message}
-            </p>
+            </Alert>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label
-              className="text-xs font-semibold text-slate-600"
-              htmlFor="template-rendered-full"
-            >
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+            }}
+          >
+            <Typography variant="caption" fontWeight={600}>
               Rendered Notes (with labels)
-            </label>
-            <button
-              type="button"
-              className="rounded-md bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-60"
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
               onClick={handleCopy}
               disabled={!renderedWithComments}
             >
               {copyStatus === 'copied' ? 'Copied' : 'Copy Notes'}
-            </button>
-          </div>
-          <textarea
+            </Button>
+          </Box>
+          <TextField
             id="template-rendered-full"
-            className={outputTextareaClass}
             value={renderedWithComments}
-            readOnly
+            multiline
+            minRows={6}
+            fullWidth
+            InputProps={{
+              readOnly: true,
+              sx: { fontFamily: 'monospace', fontSize: '0.75rem' },
+            }}
             spellCheck={false}
+            size="small"
           />
-        </section>
-      </div>
-    </section>
+        </Paper>
+      </Box>
+    </Box>
   );
 }
 
@@ -1591,145 +1760,35 @@ interface AutocompleteInputProps {
   onChange: (value: string) => void;
   options: AutocompleteOption[];
   placeholder?: string;
+  label?: string;
 }
 
-function AutocompleteInput({ value, onChange, options, placeholder }: AutocompleteInputProps) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [filterText, setFilterText] = useState('');
-
-  const getFilteredOptions = (nextFilterText: string) => {
-    const normalized = nextFilterText.trim().toLowerCase();
-    if (!normalized) {
-      return options.slice(0, 100);
-    }
-    return options
-      .filter((option) => option.label.toLowerCase().includes(normalized))
-      .slice(0, 100);
-  };
-
-  const filteredOptions = getFilteredOptions(filterText);
-
-  useEffect(() => {
-    const handleClick = (event: MouseEvent) => {
-      if (!wrapperRef.current) {
-        return;
-      }
-      if (!wrapperRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-    };
-  }, []);
-
-  const highlightMatch = (nextOptions: AutocompleteOption[], nextValue = value) => {
-    if (!nextValue) {
-      setHighlightedIndex(0);
-      return;
-    }
-    const matchIndex = nextOptions.findIndex((option) => option.value === nextValue);
-    if (matchIndex >= 0) {
-      setHighlightedIndex(matchIndex);
-      requestAnimationFrame(() => {
-        const list = listRef.current;
-        if (!list) {
-          return;
-        }
-        const item = list.querySelector<HTMLElement>(`[data-option-index="${matchIndex}"]`);
-        if (item) {
-          item.scrollIntoView({ block: 'nearest' });
-        }
-      });
-    } else {
-      setHighlightedIndex(0);
-    }
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (!isOpen && event.key === 'ArrowDown') {
-      setIsOpen(true);
-      highlightMatch(filteredOptions);
-      return;
-    }
-    if (!isOpen) {
-      return;
-    }
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setHighlightedIndex((prev) => Math.min(prev + 1, filteredOptions.length - 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setHighlightedIndex((prev) => Math.max(prev - 1, 0));
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      const option = filteredOptions[highlightedIndex];
-      if (option) {
-        onChange(option.value);
-        setIsOpen(false);
-      }
-    } else if (event.key === 'Escape') {
-      setIsOpen(false);
-    }
-  };
-
-  const handleSelect = (option: AutocompleteOption) => {
-    onChange(option.value);
-    setIsOpen(false);
-  };
-
+function AutocompleteInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+  label,
+}: AutocompleteInputProps) {
   return (
-    <div className="relative w-full" ref={wrapperRef}>
-      <input
-        type="text"
-        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => {
-          const nextValue = event.target.value;
-          const nextFilterText = event.target.value;
-          const nextOptions = getFilteredOptions(nextFilterText);
-          onChange(nextValue);
-          setFilterText(nextFilterText);
-          setIsOpen(true);
-          highlightMatch(nextOptions, nextValue);
-        }}
-        onFocus={() => {
-          const nextFilterText = '';
-          const nextOptions = getFilteredOptions(nextFilterText);
-          setFilterText('');
-          setIsOpen(true);
-          highlightMatch(nextOptions, value);
-        }}
-        onKeyDown={handleKeyDown}
-      />
-      {isOpen && filteredOptions.length > 0 && (
-        <div
-          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
-          role="listbox"
-          ref={listRef}
-        >
-          {filteredOptions.map((option, index) => (
-            <button
-              type="button"
-              key={`${option.value}-${option.label}`}
-              className={`w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-sky-50 ${index === highlightedIndex ? 'bg-sky-50 text-sky-800' : ''}`}
-              data-option-index={index}
-              onMouseEnter={() => setHighlightedIndex(index)}
-              onClick={() => handleSelect(option)}
-              role="option"
-              aria-selected={index === highlightedIndex}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+    <Autocomplete<AutocompleteOption, false, false, true>
+      freeSolo
+      options={options}
+      getOptionLabel={(option) => (typeof option === 'string' ? option : option.label)}
+      inputValue={value}
+      onInputChange={(_, newValue) => onChange(newValue)}
+      onChange={(_, newValue) => {
+        if (typeof newValue === 'string') {
+          onChange(newValue);
+        } else if (newValue) {
+          onChange(newValue.value);
+        } else {
+          onChange('');
+        }
+      }}
+      renderInput={(params) => (
+        <TextField {...params} size="small" placeholder={placeholder} label={label ?? 'Select'} />
       )}
-    </div>
+    />
   );
 }

@@ -1,24 +1,33 @@
 import { useQuery } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { api, type JobStep } from '../services/api';
 
 interface JobDetailProps {
   jobId: string;
 }
 
-const statusTagClass = (status: string) => {
+const statusColor = (status: string): 'default' | 'info' | 'success' | 'error' | 'warning' => {
   switch (status) {
     case 'queued':
-      return 'bg-slate-200 text-slate-600';
+      return 'default';
     case 'running':
-      return 'bg-blue-100 text-blue-700';
+      return 'info';
     case 'succeeded':
-      return 'bg-emerald-100 text-emerald-700';
+      return 'success';
     case 'failed':
-      return 'bg-rose-100 text-rose-700';
+      return 'error';
     case 'canceled':
-      return 'bg-slate-100 text-slate-500';
+      return 'warning';
     default:
-      return 'bg-slate-100 text-slate-600';
+      return 'default';
   }
 };
 
@@ -44,68 +53,81 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (!jobId) return null;
   if (isLoading) {
     return (
-      <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-        Loading job details...
-      </div>
+      <Paper variant="outlined" sx={{ mt: 2, p: 2, bgcolor: 'background.default' }}>
+        <Typography variant="body2" color="text.secondary">
+          Loading job details...
+        </Typography>
+      </Paper>
     );
   }
   if (error) {
     return (
-      <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+      <Alert severity="error" variant="outlined" sx={{ mt: 2 }}>
         Error loading job detail: {(error as Error).message}
-      </div>
+      </Alert>
     );
   }
 
   const steps = data?.steps ?? [];
 
   return (
-    <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 text-sm font-semibold text-slate-700">Steps</div>
+    <Paper variant="outlined" sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
+      <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+        Steps
+      </Typography>
       {steps.length === 0 ? (
-        <div className="text-sm text-slate-500">No steps</div>
+        <Typography variant="body2" color="text.secondary">
+          No steps
+        </Typography>
       ) : (
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr>
-              <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold text-slate-600">
-                Step
-              </th>
-              <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold text-slate-600">
-                Status
-              </th>
-              <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold text-slate-600">
-                Started
-              </th>
-              <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold text-slate-600">
-                Completed
-              </th>
-              <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold text-slate-600">
-                Failure
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table size="small" aria-label="job steps">
+          <TableHead>
+            <TableRow>
+              {['Step', 'Status', 'Started', 'Completed', 'Failure'].map((label) => (
+                <TableCell
+                  key={label}
+                  sx={{
+                    borderBottomColor: 'divider',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: 'text.secondary',
+                  }}
+                >
+                  {label}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {steps.map((step) => (
-              <tr key={step.id} className="border-b border-slate-100 last:border-b-0">
-                <td className="px-2 py-1">{formatStepType(step.stepType)}</td>
-                <td className="px-2 py-1">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${statusTagClass(
-                      step.status
-                    )}`}
-                  >
-                    {step.status}
-                  </span>
-                </td>
-                <td className="px-2 py-1">{formatTimestamp(step.startedAt)}</td>
-                <td className="px-2 py-1">{formatTimestamp(step.completedAt)}</td>
-                <td className="px-2 py-1 text-rose-700">{step.failureReason || '—'}</td>
-              </tr>
+              <TableRow key={step.id} hover>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  {formatStepType(step.stepType)}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={statusColor(step.status)}
+                    label={step.status}
+                  />
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  {formatTimestamp(step.startedAt)}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  {formatTimestamp(step.completedAt)}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider', color: 'error.main' }}>
+                  {step.failureReason || '—'}
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
-    </div>
+    </Paper>
   );
 }

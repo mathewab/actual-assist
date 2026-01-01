@@ -1,5 +1,16 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { api, type Job } from '../services/api';
 import { JobDetail } from './JobDetail';
 
@@ -7,20 +18,20 @@ interface JobListProps {
   budgetId: string;
 }
 
-const statusTagClass = (status: string) => {
+const statusColor = (status: string): 'default' | 'info' | 'success' | 'error' | 'warning' => {
   switch (status) {
     case 'queued':
-      return 'bg-slate-200 text-slate-600';
+      return 'default';
     case 'running':
-      return 'bg-blue-100 text-blue-700';
+      return 'info';
     case 'succeeded':
-      return 'bg-emerald-100 text-emerald-700';
+      return 'success';
     case 'failed':
-      return 'bg-rose-100 text-rose-700';
+      return 'error';
     case 'canceled':
-      return 'bg-slate-100 text-slate-500';
+      return 'warning';
     default:
-      return 'bg-slate-100 text-slate-600';
+      return 'default';
   }
 };
 
@@ -66,85 +77,100 @@ export function JobList({ budgetId }: JobListProps) {
   if (!budgetId) return null;
   if (isLoading) {
     return (
-      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
-        Loading jobs...
-      </div>
+      <Paper variant="outlined" sx={{ mt: 2, p: 2, bgcolor: 'background.default' }}>
+        <Typography variant="body2" color="text.secondary">
+          Loading jobs...
+        </Typography>
+      </Paper>
     );
   }
   if (error) {
     return (
-      <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+      <Alert severity="error" variant="outlined" sx={{ mt: 2 }}>
         Error loading jobs: {(error as Error).message}
-      </div>
+      </Alert>
     );
   }
 
   const jobs = data?.jobs ?? [];
 
   return (
-    <div className="my-4 rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-800">Jobs</h3>
-        <span className="text-xs text-slate-500">{jobs.length} recent</span>
-      </div>
+    <Paper variant="outlined" sx={{ my: 2, p: 2, bgcolor: 'background.paper' }}>
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="subtitle1" fontWeight={600}>
+          Jobs
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {jobs.length} recent
+        </Typography>
+      </Box>
       {jobs.length === 0 ? (
-        <div className="text-sm text-slate-500">No jobs yet</div>
+        <Typography variant="body2" color="text.secondary">
+          No jobs yet
+        </Typography>
       ) : (
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr>
-              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
-                Type
-              </th>
-              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
-                Status
-              </th>
-              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
-                Started
-              </th>
-              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
-                Completed
-              </th>
-              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600">
-                Failure
-              </th>
-              <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-600"></th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table size="small" aria-label="jobs">
+          <TableHead>
+            <TableRow>
+              {['Type', 'Status', 'Started', 'Completed', 'Failure', ''].map((label) => (
+                <TableCell
+                  key={label}
+                  sx={{
+                    borderBottomColor: 'divider',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: 'text.secondary',
+                  }}
+                >
+                  {label}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {jobs.map((job) => (
-              <tr key={job.id} className="border-b border-slate-100 last:border-b-0">
-                <td className="px-2 py-2">{formatJobType(job.type)}</td>
-                <td className="px-2 py-2">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${statusTagClass(
-                      job.status
-                    )}`}
-                  >
-                    {job.status}
-                  </span>
-                </td>
-                <td className="px-2 py-2">{formatTimestamp(job.startedAt)}</td>
-                <td className="px-2 py-2">{formatTimestamp(job.completedAt)}</td>
-                <td className="px-2 py-2 text-rose-700">{job.failureReason || '—'}</td>
-                <td className="px-2 py-2">
+              <TableRow key={job.id} hover>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  {formatJobType(job.type)}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={statusColor(job.status)}
+                    label={job.status}
+                  />
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  {formatTimestamp(job.startedAt)}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
+                  {formatTimestamp(job.completedAt)}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider', color: 'error.main' }}>
+                  {job.failureReason || '—'}
+                </TableCell>
+                <TableCell sx={{ borderBottomColor: 'divider' }}>
                   {job.type === 'sync_and_suggest' ? (
-                    <button
-                      className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[0.7rem] font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                    <Button
+                      variant="outlined"
+                      size="small"
                       onClick={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
                     >
                       {selectedJobId === job.id ? 'Hide' : 'Details'}
-                    </button>
+                    </Button>
                   ) : (
                     '—'
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
       {selectedJobId && <JobDetail jobId={selectedJobId} />}
-    </div>
+    </Paper>
   );
 }

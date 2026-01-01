@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+:root {
+  --theme-bg: #f1f5f9;
+  --theme-text: #0f172a;
+  --theme-surface: #ffffff;
+  --theme-muted: #64748b;
+}
+
 @layer base {
   *,
   ::before,
@@ -8,7 +15,9 @@
   }
 
   body {
-    @apply min-h-screen bg-slate-100 font-sans text-slate-900 antialiased;
+    @apply min-h-screen font-sans antialiased;
+    background-color: var(--theme-bg);
+    color: var(--theme-text);
   }
 
   #root {

@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
+import Badge from '@mui/material/Badge';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import Popover from '@mui/material/Popover';
+import Snackbar from '@mui/material/Snackbar';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { api, type Job } from '../services/api';
 
 interface JobCenterProps {
@@ -13,33 +25,33 @@ interface ToastState {
   phase: ToastPhase;
 }
 
-const statusTagClass = (status: string) => {
+const statusColor = (status: string): 'default' | 'info' | 'success' | 'error' | 'warning' => {
   switch (status) {
     case 'queued':
-      return 'bg-slate-200 text-slate-600';
+      return 'default';
     case 'running':
-      return 'bg-blue-100 text-blue-700';
+      return 'info';
     case 'succeeded':
-      return 'bg-emerald-100 text-emerald-700';
+      return 'success';
     case 'failed':
-      return 'bg-rose-100 text-rose-700';
+      return 'error';
     case 'canceled':
-      return 'bg-slate-100 text-slate-500';
+      return 'warning';
     default:
-      return 'bg-slate-100 text-slate-600';
+      return 'default';
   }
 };
 
-const statusBorderClass = (status: string) => {
+const statusBorderColor = (status: string): string => {
   switch (status) {
     case 'succeeded':
-      return 'border-l-emerald-400';
+      return 'success.main';
     case 'failed':
-      return 'border-l-rose-400';
+      return 'error.main';
     case 'canceled':
-      return 'border-l-slate-300';
+      return 'warning.main';
     default:
-      return 'border-l-sky-400';
+      return 'info.main';
   }
 };
 
@@ -80,7 +92,7 @@ function sortJobsByCreatedAt(items: Job[]): Job[] {
 }
 
 export function JobCenter({ budgetId }: JobCenterProps) {
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const lastActiveJobIdRef = useRef<string | null>(null);
   const toastHideTimeoutRef = useRef<number | null>(null);
@@ -160,45 +172,60 @@ export function JobCenter({ budgetId }: JobCenterProps) {
     };
   }, []);
 
-  const isHistoryVisible = hasBudget && isHistoryOpen;
-
-  useEffect(() => {
-    if (!isHistoryVisible) return undefined;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsHistoryOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isHistoryVisible]);
-
   const runningCount = activeJobs.length;
   const historyJobs = jobs.slice(0, 10);
   const showToast = hasBudget && !isLoading && toast;
+  const isHistoryVisible = Boolean(anchorEl);
+
+  const toastLabel = toast
+    ? `${formatJobType(toast.job.type)} job ${
+        toast.phase === 'running'
+          ? toast.job.status === 'queued'
+            ? 'queued'
+            : 'running'
+          : toast.job.status
+      }`
+    : '';
+
+  const toastDetail = toast
+    ? toast.phase === 'running'
+      ? 'Working in the background'
+      : `Completed at ${formatTimestamp(toast.job.completedAt)}`
+    : '';
 
   return (
-    <div className="relative flex items-center">
-      <button
-        className={[
-          'relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/30 bg-white/10 text-white transition',
-          'hover:-translate-y-0.5 hover:border-white/60 hover:bg-white/20',
-          isHistoryVisible ? 'border-white/70 bg-white/25' : '',
-          'disabled:cursor-not-allowed disabled:opacity-50',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        type="button"
+    <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <IconButton
+        size="small"
+        color="inherit"
         disabled={!hasBudget}
         title={hasBudget ? 'Job history' : 'Select a budget to view jobs'}
         aria-label="Job history"
         aria-expanded={isHistoryVisible}
-        onClick={() => {
+        onClick={(event) => {
           if (!hasBudget) return;
-          setIsHistoryOpen((open) => !open);
+          setAnchorEl((prev) => (prev ? null : event.currentTarget));
+        }}
+        sx={{
+          width: 40,
+          height: 40,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'rgba(255,255,255,0.35)',
+          bgcolor: 'rgba(255,255,255,0.08)',
+          color: 'common.white',
+          '&:hover': {
+            bgcolor: 'rgba(255,255,255,0.18)',
+            borderColor: 'rgba(255,255,255,0.6)',
+          },
         }}
       >
-        <span className="inline-flex" aria-hidden="true">
+        <Badge
+          color="error"
+          badgeContent={runningCount}
+          invisible={runningCount === 0}
+          overlap="circular"
+        >
           <svg
             className="h-5 w-5"
             viewBox="0 0 24 24"
@@ -209,123 +236,122 @@ export function JobCenter({ budgetId }: JobCenterProps) {
             <circle cx="12" cy="12" r="8.5" />
             <path d="M12 7.5v5l3.5 2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        </span>
-        {runningCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-semibold text-white shadow">
-            {runningCount}
-          </span>
-        )}
-      </button>
+        </Badge>
+      </IconButton>
 
-      {showToast && (
-        <div
-          className={`fixed right-6 top-[78px] z-50 flex min-w-[240px] items-center gap-2 rounded-xl border-l-4 bg-slate-900 px-3 py-3 text-white shadow-xl ${statusBorderClass(
-            toast.job.status
-          )}`}
-          role="status"
+      <Snackbar
+        open={Boolean(showToast)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        onClose={() => setToast(null)}
+        autoHideDuration={toast?.phase === 'completed' ? 2400 : null}
+      >
+        <Alert
+          severity={toast ? statusColor(toast.job.status) : 'info'}
+          variant="filled"
+          icon={
+            toast?.phase === 'running' ? <CircularProgress size={14} color="inherit" /> : undefined
+          }
         >
-          <span className="inline-flex h-6 w-6 items-center justify-center" aria-hidden="true">
-            {toast.phase === 'running' ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            ) : (
-              <svg
-                className="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M4 10.5l3.5 3.5L16 6.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </span>
-          <div>
-            <div className="text-xs font-semibold capitalize">
-              {formatJobType(toast.job.type)} job{' '}
-              {toast.phase === 'running'
-                ? toast.job.status === 'queued'
-                  ? 'queued'
-                  : 'running'
-                : toast.job.status}
-            </div>
-            <div className="mt-1 text-[11px] text-white/70">
-              {toast.phase === 'running'
-                ? 'Working in the background'
-                : `Completed at ${formatTimestamp(toast.job.completedAt)}`}
-            </div>
-          </div>
-        </div>
-      )}
+          <Typography variant="subtitle2" fontWeight={600}>
+            {toastLabel}
+          </Typography>
+          <Typography variant="caption">{toastDetail}</Typography>
+        </Alert>
+      </Snackbar>
 
-      {isHistoryVisible && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-slate-900/20"
-            onClick={() => setIsHistoryOpen(false)}
-            aria-hidden="true"
-          />
-          <div className="absolute right-0 top-full z-50 mt-3 w-[360px] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold text-slate-800">Job history</div>
-                <div className="text-xs text-slate-500">Latest activity</div>
-              </div>
-              <button
-                className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
-                type="button"
-                onClick={() => setIsHistoryOpen(false)}
-              >
-                Close
-              </button>
-            </div>
+      <Popover
+        open={isHistoryVisible}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{
+          sx: {
+            mt: 1.5,
+            width: 360,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            p: 2,
+          },
+        }}
+      >
+        <Stack spacing={2}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600}>
+                Job history
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Latest activity
+              </Typography>
+            </Box>
+            <Button size="small" variant="outlined" onClick={() => setAnchorEl(null)}>
+              Close
+            </Button>
+          </Stack>
 
-            {isLoading && <div className="text-xs text-slate-500">Loading jobs...</div>}
-            {error && (
-              <div className="text-xs text-rose-700">
-                Error loading jobs: {(error as Error).message}
-              </div>
-            )}
-            {!isLoading && !error && historyJobs.length === 0 && (
-              <div className="text-xs text-slate-500">No jobs yet</div>
-            )}
+          {isLoading && (
+            <Typography variant="caption" color="text.secondary">
+              Loading jobs...
+            </Typography>
+          )}
+          {error && (
+            <Alert severity="error" variant="outlined">
+              Error loading jobs: {(error as Error).message}
+            </Alert>
+          )}
+          {!isLoading && !error && historyJobs.length === 0 && (
+            <Typography variant="caption" color="text.secondary">
+              No jobs yet
+            </Typography>
+          )}
 
-            {!isLoading && !error && historyJobs.length > 0 && (
-              <ul className="max-h-[360px] space-y-2 overflow-y-auto">
-                {historyJobs.map((job) => (
-                  <li
-                    key={job.id}
-                    className={`rounded-xl border border-slate-200 bg-slate-50 p-3 ${statusBorderClass(
-                      job.status
-                    )} border-l-4`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-700">
-                          {formatJobType(job.type)}
-                        </div>
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          Started {formatTimestamp(job.startedAt)} · Completed{' '}
-                          {formatTimestamp(job.completedAt)}
-                        </div>
-                      </div>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${statusTagClass(
-                          job.status
-                        )}`}
-                      >
-                        {job.status}
-                      </span>
-                    </div>
-                    {job.failureReason && (
-                      <div className="mt-2 text-[11px] text-rose-700">{job.failureReason}</div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+          {!isLoading && !error && historyJobs.length > 0 && (
+            <Stack spacing={1} sx={{ maxHeight: 360, overflowY: 'auto' }}>
+              {historyJobs.map((job) => (
+                <Paper
+                  key={job.id}
+                  variant="outlined"
+                  sx={{
+                    p: 1.5,
+                    borderLeft: '4px solid',
+                    borderLeftColor: statusBorderColor(job.status),
+                    bgcolor: 'background.default',
+                  }}
+                >
+                  <Stack direction="row" justifyContent="space-between" spacing={2}>
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>
+                        {formatJobType(job.type)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Started {formatTimestamp(job.startedAt)} · Completed{' '}
+                        {formatTimestamp(job.completedAt)}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={statusColor(job.status)}
+                      label={job.status}
+                    />
+                  </Stack>
+                  {job.failureReason && (
+                    <Typography
+                      variant="caption"
+                      color="error.main"
+                      sx={{ mt: 1, display: 'block' }}
+                    >
+                      {job.failureReason}
+                    </Typography>
+                  )}
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </Stack>
+      </Popover>
+    </Box>
   );
 }

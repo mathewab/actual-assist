@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { SuggestionList } from './components/SuggestionList';
@@ -6,6 +7,8 @@ import { ApplyChanges } from './components/ApplyChanges';
 import { History } from './components/History';
 import { Audit } from './components/Audit';
 import { TemplateStudio } from './components/TemplateStudio';
+import { Settings } from './components/Settings';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { api, type Budget } from './services/api';
 
 /**
@@ -51,41 +54,89 @@ export function App() {
     };
   }, []);
 
+  const renderBudgetRoute = (render: (budgetId: string) => ReactElement) => {
+    if (budgetLoading) {
+      return <BudgetLoading />;
+    }
+    if (budgetError) {
+      return <BudgetError message={budgetError} />;
+    }
+    if (!selectedBudget) {
+      return <BudgetRequired />;
+    }
+    return render(selectedBudget.id);
+  };
+
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen flex-col bg-slate-100">
+      <div className="flex min-h-screen flex-col bg-[var(--theme-bg)]">
         <Header budgetName={selectedBudget?.name} budgetId={selectedBudget?.id} />
 
         <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-5 py-5">
-          {budgetLoading ? (
-            <main className="flex min-h-[400px] items-center justify-center rounded-lg bg-white px-6 py-10 text-sm text-slate-500 shadow-sm">
-              <p>Loading budget...</p>
-            </main>
-          ) : budgetError ? (
-            <main className="flex min-h-[400px] items-center justify-center rounded-lg bg-white px-6 py-10 text-sm text-rose-700 shadow-sm">
-              <p>{budgetError}</p>
-            </main>
-          ) : selectedBudget ? (
-            <main className="min-h-[400px] rounded-lg bg-white shadow-sm">
+          <main className="min-h-[400px] rounded-lg bg-[var(--theme-surface)] shadow-sm">
+            <ErrorBoundary title="Something went wrong">
               <Routes>
-                <Route path="/" element={<SuggestionList budgetId={selectedBudget.id} />} />
-                <Route path="/apply" element={<ApplyChanges budgetId={selectedBudget.id} />} />
-                <Route path="/history" element={<History budgetId={selectedBudget.id} />} />
-                <Route path="/audit" element={<Audit />} />
+                <Route
+                  path="/"
+                  element={renderBudgetRoute((budgetId) => (
+                    <SuggestionList budgetId={budgetId} />
+                  ))}
+                />
+                <Route
+                  path="/apply"
+                  element={renderBudgetRoute((budgetId) => (
+                    <ApplyChanges budgetId={budgetId} />
+                  ))}
+                />
+                <Route
+                  path="/history"
+                  element={renderBudgetRoute((budgetId) => (
+                    <History budgetId={budgetId} />
+                  ))}
+                />
+                <Route
+                  path="/audit"
+                  element={renderBudgetRoute(() => (
+                    <Audit />
+                  ))}
+                />
                 <Route
                   path="/templates"
-                  element={<TemplateStudio budgetId={selectedBudget.id} />}
+                  element={renderBudgetRoute((budgetId) => (
+                    <TemplateStudio budgetId={budgetId} />
+                  ))}
                 />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            </main>
-          ) : (
-            <main className="flex min-h-[400px] items-center justify-center rounded-lg bg-white px-6 py-10 text-sm text-slate-500 shadow-sm">
-              <p>No budget configured.</p>
-            </main>
-          )}
+            </ErrorBoundary>
+          </main>
         </div>
       </div>
     </BrowserRouter>
+  );
+}
+
+function BudgetRequired() {
+  return (
+    <div className="flex min-h-[400px] items-center justify-center px-6 py-10 text-sm text-slate-500">
+      <p>Please select a budget to get started.</p>
+    </div>
+  );
+}
+
+function BudgetLoading() {
+  return (
+    <div className="flex min-h-[400px] items-center justify-center px-6 py-10 text-sm text-slate-500">
+      <p>Loading budget...</p>
+    </div>
+  );
+}
+
+function BudgetError({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-[400px] items-center justify-center px-6 py-10 text-sm text-rose-700">
+      <p>{message}</p>
+    </div>
   );
 }

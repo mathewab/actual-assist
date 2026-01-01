@@ -1,3 +1,9 @@
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import LinearProgress from '@mui/material/LinearProgress';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+
 interface ProgressBarProps {
   /** Message to display above the progress bar */
   message?: string;
@@ -16,22 +22,30 @@ export function ProgressBar({
   indeterminate = true,
   value = 0,
 }: ProgressBarProps) {
+  const clampedValue = Math.min(100, Math.max(0, value));
+
   return (
-    <div className="my-4 rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-fuchsia-50 px-5 py-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-blue-700">
-        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-        {message}
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-blue-100">
-        {indeterminate ? (
-          <div className="h-full w-1/3 animate-[indeterminate_1.5s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-600 to-indigo-400" />
-        ) : (
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-400 transition-[width] duration-300"
-            style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-          />
-        )}
-      </div>
-    </div>
+    <Paper
+      variant="outlined"
+      sx={(theme) => ({
+        my: 2,
+        px: 2.5,
+        py: 2,
+        borderColor: theme.palette.divider,
+        bgcolor: theme.palette.background.default,
+      })}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <CircularProgress size={14} thickness={5} />
+        <Typography variant="body2" color="text.secondary" fontWeight={600}>
+          {message}
+        </Typography>
+      </Box>
+      <LinearProgress
+        variant={indeterminate ? 'indeterminate' : 'determinate'}
+        value={clampedValue}
+        sx={{ height: 6, borderRadius: 999, bgcolor: 'action.hover' }}
+      />
+    </Paper>
   );
 }

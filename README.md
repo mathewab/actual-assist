@@ -1,23 +1,25 @@
 # Actual Budget Assistant
 
-AI-powered categorization assistant for [Actual Budget](https://actualbudget.com/).
+AI-powered assistant for [Actual Budget](https://actualbudget.com/).
 
 ## Features
 
-- **AI Category Suggestions**: Automatically suggest categories for uncategorized transactions using GPT-4o-mini
-- **Review & Approve**: Review AI suggestions before applying them to your budget
-- **Sync Plan**: See exactly what changes will be made before syncing
-- **Audit Log**: Track all AI suggestions and user actions
+- **Category suggestions**: AI category + payee suggestions with review, correction, and apply-in-place
+- **Duplicate payee suggestions**: Fuzzy matching + optional AI refinement, with merge controls
+- **Budget Template Studio**: Template previews and safe apply checks for category notes
 
 ## Architecture
 
-**Constitution-Driven Development**: This project follows strict engineering principles documented in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+**Constitution-Driven Development**: This project follows the engineering principles documented in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 
 **Tech Stack**:
-- **App**: Node.js 24, TypeScript 5, Express.js, React 18, Vite, TanStack Query
-- **AI**: OpenAI GPT-4o-mini
-- **Storage**: SQLite (audit log)
-- **Deployment**: Docker, docker-compose
+- **App**: Node.js 24, TypeScript 5 (ES modules), Express 5, React 19, Vite 7, TanStack Query, MUI + Tailwind
+- **AI**: OpenAI SDK (Responses API, default model `gpt-4o-mini`)
+- **Storage**: SQLite via better-sqlite3 with knex migrations
+- **Ops**: node-cron scheduling, winston logging, express-rate-limit
+- **Deployment**: Docker, docker-compose (Helm chart under `charts/actual-assist`)
+
+**Runtime shape**: a single server that mounts the Express API and serves the React UI. In development, Vite runs in middleware mode; in production, the built UI is served statically.
 
 ## Quick Start
 
@@ -25,7 +27,6 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 
 - Node.js >= 24.0.0
 - npm >= 10.0.0
-- Docker & docker-compose (for containerized deployment)
 - Actual Budget server URL and credentials
 - OpenAI API key
 
@@ -55,6 +56,12 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 
    This starts the single app at `http://localhost:3000` (UI + API).
 
+5. **Optional: run UI only** (requires API running separately):
+   ```bash
+   npm run dev:ui
+   ```
+   Set `VITE_API_BASE_URL` (for example `http://localhost:3000/api`) if the API is not served from the same origin.
+
 ### Docker Deployment
 
 1. **Configure environment**:
@@ -70,6 +77,8 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 
 3. **Access the application**:
    - UI + API: `http://localhost:3000`
+   - Health: `http://localhost:3000/health`
+   - Readiness: `http://localhost:3000/ready`
 
 4. **View logs**:
    ```bash
@@ -83,18 +92,17 @@ AI-powered categorization assistant for [Actual Budget](https://actualbudget.com
 
 ## Usage Workflow
 
-1. **Create Snapshot**: Capture current budget state
-2. **Generate Suggestions**: AI analyzes uncategorized transactions
-3. **Review Suggestions**: Approve/reject each suggestion in the UI
-4. **Create Sync Plan**: See what changes will be applied
-5. **Execute Sync**: Apply approved suggestions to Actual Budget
+1. **Category suggestions**: Generate suggestions, review/correct, and apply changes.
+2. **Duplicate payee suggestions**: Generate duplicate clusters, hide noise, and merge cleanly.
+3. **Template Studio**: Review template notes, preview rendering, and apply safely.
 
-See [`specs/001-actual-assist-app/quickstart.md`](specs/001-actual-assist-app/quickstart.md) for detailed usage guide.
+See `docs/usage.md` for a UI-focused walkthrough.
 
 ## Project Structure
 
 ```
 actual-assist/
+├── docs/                # User docs
 ├── src/
 │   ├── api/              # HTTP routes
 │   ├── domain/           # Business entities and errors
@@ -106,27 +114,6 @@ actual-assist/
 │   ├── unit/             # Unit tests
 │   ├── integration/      # Integration tests
 │   └── e2e/              # Playwright E2E tests
-└── specs/                # Feature specifications and planning
-```
-
-## Development Commands
-
-```bash
-# Run all tests
-npm run test:all
-
-# Run unit tests only
-npm run test
-
-# Run E2E tests
-npm run test:e2e
-
-# Build for production
-npm run build
-
-# Lint and format
-npm run lint
-npm run format
 ```
 
 ## Configuration
@@ -134,50 +121,28 @@ npm run format
 ### Environment Variables
 
 Required variables (see `.env.example`):
-- `ACTUAL_SERVER_URL`: Your Actual Budget server URL
+- `ACTUAL_SERVER_URL`: Actual Budget server URL
 - `ACTUAL_PASSWORD`: Actual Budget password
 - `ACTUAL_BUDGET_ID`: Budget file ID (UUID)
 - `OPENAI_API_KEY`: OpenAI API key (starts with `sk-`)
 
-Optional:
+Optional (defaults are enforced by `src/infra/env.ts`):
 - `ACTUAL_SYNC_ID`: Sync ID for cloud-synced budgets
 - `ACTUAL_ENCRYPTION_KEY`: Budget encryption key
+- `OPENAI_MODEL`: OpenAI model name (default: `gpt-4o-mini`)
+- `DATA_DIR`: Local data directory (default: `./data`)
+- `SQLITE_DB_PATH`: SQLite database path (default: `./data/audit.db`)
+- `PORT`: Server port (default: `3000`)
 - `NODE_ENV`: `development` | `production` | `test`
 - `LOG_LEVEL`: `error` | `warn` | `info` | `debug`
-- `JOB_TIMEOUT_MINUTES`: Minutes before a job is marked failed (default: 60)
-- `JOB_TIMEOUT_CHECK_INTERVAL_MINUTES`: How often to scan for timed-out jobs (default: 5)
+- `LOG_FILE`: Optional log file path
+- `SYNC_INTERVAL_MINUTES`: Interval for scheduled sync+suggest jobs (default: `360`)
+- `JOB_TIMEOUT_MINUTES`: Minutes before a job is marked failed (default: `60`)
+- `JOB_TIMEOUT_CHECK_INTERVAL_MINUTES`: How often to scan for timed-out jobs (default: `5`)
+- `RATE_LIMIT_WINDOW_MS`: API rate limit window (default: `60000`)
+- `RATE_LIMIT_MAX_REQUESTS`: API rate limit max requests per window (default: `120`)
 - `VITE_API_BASE_URL`: API base URL (defaults to `/api`)
-
-## API Documentation
-
-OpenAPI 3.0 specification: [`specs/001-actual-assist-app/contracts/api.yaml`](specs/001-actual-assist-app/contracts/api.yaml)
-
-Key endpoints:
-- `POST /api/snapshots` - Create budget snapshot
-- `GET /api/suggestions/pending` - Get pending suggestions
-- `POST /api/suggestions/:id/approve` - Approve suggestion
-- `POST /api/sync/execute` - Execute sync plan
 
 ## License
 
 MIT
-
-## Contributing
-
-This project follows strict engineering principles. Before contributing:
-1. Read the constitution: [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
-2. Review the feature spec: [`specs/001-actual-assist-app/spec.md`](specs/001-actual-assist-app/spec.md)
-3. Ensure all tests pass: `npm run test:all`
-4. Follow the established architecture (Domain/Service/Infra separation)
-
-## Troubleshooting
-
-**Database errors**: Delete `data/audit.db` and restart to reinitialize schema.
-
-**Connection errors to Actual Budget**: Verify `ACTUAL_SERVER_URL` is reachable and credentials are correct.
-
-**OpenAI errors**: Check API key is valid and has available quota.
-
-**Docker networking issues**: Ensure port 3000 is not in use.
-
-For more help, see the [quickstart guide](specs/001-actual-assist-app/quickstart.md) or open an issue.

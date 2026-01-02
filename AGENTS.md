@@ -1,16 +1,20 @@
 # actual-assist Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-12-24
+Last updated: 2026-01-02
+
+## Project Summary
+Single-app Actual Budget assistant (Express API + React UI) with AI-driven category/payee suggestions, duplicate payee merge tooling, and budget template management.
 
 ## Active Technologies
-- Node.js 20.x, TypeScript 5.x (ES modules) + Express, React 18, Vite, TanStack Query, @actual-app/api, OpenAI SDK, better-sqlite3, zod, winston (003-add-jobs-workflow)
-- SQLite (better-sqlite3) with migrations via knex (003-add-jobs-workflow)
-
-- Node.js 20.x with TypeScript 5.x (ES modules) + Express.js, React 18, Vite, TanStack Query, @actual-app/api, OpenAI SDK, better-sqlite3, zod, winston (002-single-app-refactor)
+- Node.js 24.x, TypeScript 5.x (ES modules)
+- Express 5, React 19, Vite 7, TanStack Query, MUI + Tailwind
+- @actual-app/api, OpenAI SDK (Responses API), zod, winston
+- SQLite via better-sqlite3 with knex migrations
 
 ## Project Structure
 
 ```text
+docs/
 src/
 tests/
 ```
@@ -21,12 +25,10 @@ npm test && npm run lint
 
 ## Code Style
 
-Node.js 20.x with TypeScript 5.x (ES modules): Follow standard conventions
+Node.js 24.x with TypeScript 5.x (ES modules): Follow standard conventions.
 
-## Recent Changes
-- 003-add-jobs-workflow: Added Node.js 20.x, TypeScript 5.x (ES modules) + Express, React 18, Vite, TanStack Query, @actual-app/api, OpenAI SDK, better-sqlite3, zod, winston
+## Documentation
+- Follow [`.specify/memory/constitution.md`](.specify/memory/constitution.md) for engineering principles and documentation guidance.
 
-- 002-single-app-refactor: Added Node.js 20.x with TypeScript 5.x (ES modules) + Express.js, React 18, Vite, TanStack Query, @actual-app/api, OpenAI SDK, better-sqlite3, zod, winston
-
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->
+## Product Expectations
+- Jobs and audit coverage are required for all features (ensure job tracking and audit logging remain supported across workflows).

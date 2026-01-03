@@ -214,6 +214,30 @@ export class PayeeMergeService {
     await this.actualBudget.mergePayees(targetPayeeId, mergePayeeIds);
   }
 
+  async resolveTargetPayee(options: {
+    targetPayeeId?: string | null;
+    targetPayeeName?: string | null;
+  }): Promise<{ targetPayeeId: string; targetPayeeName?: string; created: boolean }> {
+    if (options.targetPayeeName) {
+      const trimmedName = options.targetPayeeName.trim();
+      if (!trimmedName) {
+        throw new Error('targetPayeeName is required');
+      }
+      const existing = await this.actualBudget.findPayeeByName(trimmedName);
+      if (existing) {
+        return { targetPayeeId: existing.id, targetPayeeName: existing.name, created: false };
+      }
+      const targetPayeeId = await this.actualBudget.createPayee(trimmedName);
+      return { targetPayeeId, targetPayeeName: trimmedName, created: true };
+    }
+
+    if (options.targetPayeeId) {
+      return { targetPayeeId: options.targetPayeeId, created: false };
+    }
+
+    throw new Error('targetPayeeId or targetPayeeName is required');
+  }
+
   async sync(): Promise<void> {
     await this.actualBudget.sync();
   }

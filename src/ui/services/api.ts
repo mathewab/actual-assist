@@ -316,18 +316,19 @@ export const api = {
   /**
    * Merge payees into a target payee
    */
-  async mergePayees(
-    targetPayeeId: string,
-    mergePayeeIds: string[],
-    budgetId: string
-  ): Promise<{
+  async mergePayees(payload: {
+    targetPayeeId?: string;
+    targetPayeeName?: string;
+    mergePayeeIds: string[];
+    budgetId: string;
+  }): Promise<{
     merged: { targetPayeeId: string; mergePayeeIds: string[]; mergeCount: number };
     job: Job;
   }> {
     const response = await fetch(`${API_BASE}/payees/merge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetPayeeId, mergePayeeIds, budgetId }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {

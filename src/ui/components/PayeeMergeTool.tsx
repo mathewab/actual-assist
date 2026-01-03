@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Alert from '@mui/material/Alert';
+import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -28,18 +29,26 @@ interface PayeeMergeToolProps {
   budgetId: string;
 }
 
+type TargetSelection = { mode: 'existing'; payeeId: string } | { mode: 'new'; name: string };
+
+type PayeeOption =
+  | { id: string; name: string; type: 'existing' }
+  | { id: 'add_new'; name: string; type: 'add_new' };
+
 export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   const queryClient = useQueryClient();
   const [settings] = useState(loadPayeeMergeSettings());
   const [forceDialogOpen, setForceDialogOpen] = useState(false);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [pendingClusterId, setPendingClusterId] = useState<string | null>(null);
-  const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<TargetSelection | null>(null);
   const [excludedByCluster, setExcludedByCluster] = useState<Record<string, string[]>>({});
-  const [targetByCluster, setTargetByCluster] = useState<Record<string, string>>({});
+  const [targetByCluster, setTargetByCluster] = useState<Record<string, TargetSelection>>({});
   const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
   const theme = useTheme();
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
+  const filterPayeeOptions = createFilterOptions<PayeeOption>();
+  const addNewOption: PayeeOption = { id: 'add_new', name: 'Add new payee', type: 'add_new' };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['payee-merge-suggestions', budgetId, settings.minScore],
@@ -120,13 +129,20 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   });
 
   const mergeMutation = useMutation({
-    mutationFn: (payload: { targetPayeeId: string; mergePayeeIds: string[] }) =>
-      api.mergePayees(payload.targetPayeeId, payload.mergePayeeIds, budgetId),
+    mutationFn: (payload: {
+      targetPayeeId?: string;
+      targetPayeeName?: string;
+      mergePayeeIds: string[];
+    }) =>
+      api.mergePayees({
+        ...payload,
+        budgetId,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payee-merge-suggestions'] });
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
       setPendingClusterId(null);
-      setPendingTargetId(null);
+      setPendingTarget(null);
     },
   });
 
@@ -162,6 +178,15 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
       }
       return { ...prev, [clusterId]: Array.from(current) };
     });
+  };
+
+  const setTargetSelection = (clusterId: string, selection: TargetSelection) => {
+    setPendingClusterId(clusterId);
+    setPendingTarget(selection);
+    setTargetByCluster((prev) => ({
+      ...prev,
+      [clusterId]: selection,
+    }));
   };
 
   return (
@@ -284,17 +309,42 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
             const clusterHasStalePayee = cluster.payees.some((payee) =>
               stalePayeeIds.has(payee.id)
             );
-            const selectedTargetId =
+            const payeeOptions: PayeeOption[] = includedPayees.map((payee) => ({
+              id: payee.id,
+              name: payee.name,
+              type: 'existing',
+            }));
+            const rawSelection =
               pendingClusterId === cluster.clusterId
-                ? pendingTargetId
+                ? pendingTarget
                 : targetByCluster[cluster.clusterId];
-            const effectiveTargetId =
-              selectedTargetId && includedPayees.some((payee) => payee.id === selectedTargetId)
-                ? selectedTargetId
-                : includedPayees[0]?.id;
-            const mergeIds = includedPayees
-              .map((payee) => payee.id)
-              .filter((id) => id !== effectiveTargetId);
+            const fallbackSelection = includedPayees[0]
+              ? { mode: 'existing', payeeId: includedPayees[0].id }
+              : null;
+            const effectiveSelection =
+              rawSelection?.mode === 'existing' &&
+              payeeOptions.every((option) => option.id !== rawSelection.payeeId)
+                ? fallbackSelection
+                : (rawSelection ?? fallbackSelection);
+            const selectedOption =
+              effectiveSelection?.mode === 'existing'
+                ? (payeeOptions.find((option) => option.id === effectiveSelection.payeeId) ?? null)
+                : effectiveSelection?.mode === 'new'
+                  ? addNewOption
+                  : null;
+            const selectedInputValue =
+              effectiveSelection?.mode === 'existing'
+                ? (payeeOptions.find((option) => option.id === effectiveSelection.payeeId)?.name ??
+                  '')
+                : effectiveSelection?.mode === 'new'
+                  ? effectiveSelection.name
+                  : '';
+            const mergeIds =
+              effectiveSelection?.mode === 'existing'
+                ? includedPayees
+                    .map((payee) => payee.id)
+                    .filter((id) => id !== effectiveSelection.payeeId)
+                : includedPayees.map((payee) => payee.id);
 
             return (
               <Paper key={cluster.clusterId} variant="outlined" sx={{ borderRadius: 3, p: 2 }}>
@@ -384,40 +434,87 @@ export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
                     spacing={2}
                     alignItems={{ xs: 'stretch', md: 'center' }}
                   >
-                    <TextField
-                      select
-                      label="Merge into"
-                      size="small"
-                      value={effectiveTargetId ?? ''}
-                      onChange={(event) => {
-                        setPendingClusterId(cluster.clusterId);
-                        setPendingTargetId(event.target.value);
-                        setTargetByCluster((prev) => ({
-                          ...prev,
-                          [cluster.clusterId]: event.target.value,
-                        }));
+                    <Autocomplete
+                      options={[...payeeOptions, addNewOption]}
+                      value={selectedOption}
+                      inputValue={selectedInputValue}
+                      onInputChange={(_, newInputValue, reason) => {
+                        if (reason === 'input') {
+                          setTargetSelection(cluster.clusterId, {
+                            mode: 'new',
+                            name: newInputValue,
+                          });
+                        }
                       }}
-                      sx={{ minWidth: { md: 240 } }}
+                      onChange={(_, newValue) => {
+                        if (!newValue) return;
+                        if (typeof newValue === 'string') {
+                          setTargetSelection(cluster.clusterId, {
+                            mode: 'new',
+                            name: newValue,
+                          });
+                          return;
+                        }
+                        if (newValue.type === 'add_new') {
+                          setTargetSelection(cluster.clusterId, {
+                            mode: 'new',
+                            name: effectiveSelection?.mode === 'new' ? effectiveSelection.name : '',
+                          });
+                          return;
+                        }
+                        setTargetSelection(cluster.clusterId, {
+                          mode: 'existing',
+                          payeeId: newValue.id,
+                        });
+                      }}
+                      getOptionLabel={(option) =>
+                        typeof option === 'string' ? option : option.name
+                      }
+                      isOptionEqualToValue={(option, value) =>
+                        option.id === value.id && option.type === value.type
+                      }
+                      filterOptions={(options, params) => {
+                        const existingOptions = options.filter(
+                          (option) => option.type !== 'add_new'
+                        );
+                        const filtered = filterPayeeOptions(existingOptions, params);
+                        return [...filtered, addNewOption];
+                      }}
                       fullWidth={isSmall}
-                      SelectProps={{ native: true }}
-                    >
-                      {includedPayees.map((payee) => (
-                        <option key={payee.id} value={payee.id}>
-                          {payee.name}
-                        </option>
-                      ))}
-                    </TextField>
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Merge into"
+                          size="small"
+                          helperText={
+                            effectiveSelection?.mode === 'new'
+                              ? 'Enter the new payee name.'
+                              : undefined
+                          }
+                        />
+                      )}
+                      sx={{ minWidth: { md: 240 } }}
+                    />
                     <Button
                       variant="contained"
                       onClick={() =>
-                        effectiveTargetId &&
+                        effectiveSelection &&
                         mergeMutation.mutate({
-                          targetPayeeId: effectiveTargetId,
+                          targetPayeeId:
+                            effectiveSelection.mode === 'existing'
+                              ? effectiveSelection.payeeId
+                              : undefined,
+                          targetPayeeName:
+                            effectiveSelection.mode === 'new'
+                              ? effectiveSelection.name.trim()
+                              : undefined,
                           mergePayeeIds: mergeIds,
                         })
                       }
                       disabled={
-                        !effectiveTargetId ||
+                        !effectiveSelection ||
+                        (effectiveSelection.mode === 'new' &&
+                          effectiveSelection.name.trim().length === 0) ||
                         mergeIds.length === 0 ||
                         mergeMutation.isPending ||
                         clusterHasStalePayee

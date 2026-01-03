@@ -95,10 +95,16 @@ export function createPayeeRouter(deps: {
   router.post('/merge', async (req: Request, res: Response, next: NextFunction) => {
     let jobId: string | null = null;
     try {
-      const { targetPayeeId, mergePayeeIds, budgetId } = req.body;
+      const { targetPayeeId, targetPayeeName, mergePayeeIds, budgetId } = req.body;
+      const normalizedTargetPayeeId = typeof targetPayeeId === 'string' ? targetPayeeId.trim() : '';
+      const normalizedTargetPayeeName =
+        typeof targetPayeeName === 'string' ? targetPayeeName.trim() : '';
 
-      if (!targetPayeeId || typeof targetPayeeId !== 'string') {
-        throw new ValidationError('targetPayeeId is required');
+      if (!normalizedTargetPayeeId && !normalizedTargetPayeeName) {
+        throw new ValidationError('targetPayeeId or targetPayeeName is required');
+      }
+      if (normalizedTargetPayeeName && normalizedTargetPayeeName.length === 0) {
+        throw new ValidationError('targetPayeeName is required');
       }
       if (!Array.isArray(mergePayeeIds) || mergePayeeIds.length === 0) {
         throw new ValidationError('mergePayeeIds must be a non-empty array');
@@ -107,9 +113,6 @@ export function createPayeeRouter(deps: {
       if (invalidId) {
         throw new ValidationError('mergePayeeIds must be an array of strings');
       }
-      if (mergePayeeIds.includes(targetPayeeId)) {
-        throw new ValidationError('mergePayeeIds must not include targetPayeeId');
-      }
 
       const resolvedBudgetId =
         typeof budgetId === 'string' && budgetId.length > 0 ? budgetId : defaultBudgetId;
@@ -117,28 +120,43 @@ export function createPayeeRouter(deps: {
         throw new ValidationError('budgetId is required');
       }
 
-      const uniqueMergeIds = Array.from(new Set(mergePayeeIds));
+      const resolvedTarget = await payeeMergeService.resolveTargetPayee({
+        targetPayeeId: normalizedTargetPayeeId || null,
+        targetPayeeName: normalizedTargetPayeeName || null,
+      });
+      const uniqueMergeIds = Array.from(new Set(mergePayeeIds)).filter(
+        (id) => id !== resolvedTarget.targetPayeeId
+      );
+      if (uniqueMergeIds.length === 0) {
+        throw new ValidationError('mergePayeeIds must include at least one non-target payee');
+      }
 
       const job = jobService.createJob({
         budgetId: resolvedBudgetId,
         type: 'payees_merge',
-        metadata: { targetPayeeId, mergePayeeIds: uniqueMergeIds },
+        metadata: {
+          targetPayeeId: resolvedTarget.targetPayeeId,
+          targetPayeeName: resolvedTarget.targetPayeeName ?? null,
+          mergePayeeIds: uniqueMergeIds,
+        },
       });
       jobId = job.id;
       jobService.markJobRunning(job.id);
 
-      await payeeMergeService.mergePayees(targetPayeeId, uniqueMergeIds);
+      await payeeMergeService.mergePayees(resolvedTarget.targetPayeeId, uniqueMergeIds);
       await payeeMergeService.sync();
 
       auditRepo.log({
         eventType: 'payees_merged',
         entityType: 'Payee',
-        entityId: targetPayeeId,
+        entityId: resolvedTarget.targetPayeeId,
         metadata: {
           budgetId: resolvedBudgetId,
           mergePayeeIds: uniqueMergeIds,
           mergeCount: uniqueMergeIds.length,
           synced: true,
+          targetPayeeName: resolvedTarget.targetPayeeName ?? null,
+          createdNewPayee: resolvedTarget.created,
         },
       });
 
@@ -146,7 +164,7 @@ export function createPayeeRouter(deps: {
 
       res.json({
         merged: {
-          targetPayeeId,
+          targetPayeeId: resolvedTarget.targetPayeeId,
           mergePayeeIds: uniqueMergeIds,
           mergeCount: uniqueMergeIds.length,
         },
@@ -172,6 +190,8 @@ export function createPayeeRouter(deps: {
               typeof req.body?.budgetId === 'string' && req.body.budgetId.length > 0
                 ? req.body.budgetId
                 : defaultBudgetId,
+            targetPayeeName:
+              typeof req.body?.targetPayeeName === 'string' ? req.body.targetPayeeName : null,
             error: reason,
           },
         });

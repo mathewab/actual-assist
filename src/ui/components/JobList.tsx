@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { api, type Job } from '../services/api';
 import { JobDetail } from './JobDetail';
 
@@ -73,11 +77,27 @@ function formatJobType(type: Job['type']): string {
 
 export function JobList({ budgetId }: JobListProps) {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { data, isLoading, error } = useQuery({
     queryKey: ['jobs', budgetId],
     queryFn: () => api.listJobs({ budgetId, limit: 20 }),
     enabled: !!budgetId,
     refetchInterval: 5000,
+  });
+  const syncMutation = useMutation({
+    mutationFn: () => api.createSyncJob(budgetId),
+    onSuccess: () => {
+      setSyncError(null);
+      void queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
+    },
+    onError: (mutationError) => {
+      setSyncError(
+        mutationError instanceof Error ? mutationError.message : 'Failed to start sync job.'
+      );
+    },
   });
 
   if (!budgetId) return null;
@@ -102,14 +122,45 @@ export function JobList({ budgetId }: JobListProps) {
 
   return (
     <Paper variant="outlined" sx={{ my: 2, p: 2, bgcolor: 'background.paper' }}>
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="subtitle1" fontWeight={600}>
-          Jobs
-        </Typography>
+      <Box
+        sx={{
+          mb: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+        }}
+      >
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => {
+              if (syncMutation.isPending) return;
+              setSyncError(null);
+              syncMutation.mutate();
+            }}
+            disabled={syncMutation.isPending}
+            startIcon={
+              syncMutation.isPending ? <CircularProgress color="inherit" size={14} /> : undefined
+            }
+          >
+            {isMobile ? 'Sync' : 'Sync Budget'}
+          </Button>
+          <Typography variant="subtitle1" fontWeight={600}>
+            Jobs
+          </Typography>
+        </Stack>
         <Typography variant="caption" color="text.secondary">
           {jobs.length} recent
         </Typography>
       </Box>
+      {syncError && (
+        <Alert severity="error" variant="outlined" sx={{ mb: 2 }}>
+          {syncError}
+        </Alert>
+      )}
       {jobs.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No jobs yet

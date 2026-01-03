@@ -61,11 +61,9 @@ export class JobOrchestrator {
     return { job, steps };
   }
 
-  startSuggestionsRetryJob(params: {
-    budgetId: string;
-    suggestionId: string;
-    useAI?: boolean;
-  }): { job: Job } {
+  startSuggestionsRetryJob(params: { budgetId: string; suggestionId: string; useAI?: boolean }): {
+    job: Job;
+  } {
     const job = this.jobService.createJob({
       budgetId: params.budgetId,
       type: 'suggestions_retry_payee',
@@ -168,12 +166,7 @@ export class JobOrchestrator {
     });
   }
 
-  private runCombinedJob(
-    job: Job,
-    steps: JobStep[],
-    fullResync: boolean,
-    useAI: boolean
-  ): void {
+  private runCombinedJob(job: Job, steps: JobStep[], fullResync: boolean, useAI: boolean): void {
     setImmediate(async () => {
       try {
         this.jobService.markJobRunning(job.id);

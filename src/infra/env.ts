@@ -28,22 +28,19 @@ const envSchema = z.object({
   LOG_FILE: z.string().optional(),
 
   // Periodic Sync
-  SYNC_INTERVAL_MINUTES: z
-    .coerce
+  SYNC_INTERVAL_MINUTES: z.coerce
     .number()
     .int()
     .min(1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
     .default(360),
 
   // Job timeout handling
-  JOB_TIMEOUT_MINUTES: z
-    .coerce
+  JOB_TIMEOUT_MINUTES: z.coerce
     .number()
     .int()
     .min(1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
     .default(60),
-  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z
-    .coerce
+  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z.coerce
     .number()
     .int()
     .min(1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })

@@ -30,22 +30,26 @@ export class JobOrchestrator {
     return { job };
   }
 
-  startSuggestionsGenerateJob(budgetId: string): { job: Job } {
-    const job = this.jobService.createJob({ budgetId, type: 'suggestions_generate' });
+  startSuggestionsGenerateJob(params: { budgetId: string; useAI?: boolean }): { job: Job } {
+    const job = this.jobService.createJob({
+      budgetId: params.budgetId,
+      type: 'suggestions_generate',
+      metadata: { useAI: params.useAI === true },
+    });
     this.runSingleJob(job, async () => {
-      await this.suggestionService.generateSuggestions(budgetId);
+      await this.suggestionService.generateSuggestions(params.budgetId, params.useAI === true);
     });
     return { job };
   }
 
-  startSyncAndSuggestJob(params: { budgetId: string; fullResync?: boolean }): {
+  startSyncAndSuggestJob(params: { budgetId: string; fullResync?: boolean; useAI?: boolean }): {
     job: Job;
     steps: JobStep[];
   } {
     const job = this.jobService.createJob({
       budgetId: params.budgetId,
       type: 'sync_and_suggest',
-      metadata: { fullResync: params.fullResync === true },
+      metadata: { fullResync: params.fullResync === true, useAI: params.useAI === true },
     });
 
     const steps = [
@@ -53,18 +57,20 @@ export class JobOrchestrator {
       this.jobService.createJobStep({ jobId: job.id, stepType: 'suggestions', position: 2 }),
     ];
 
-    this.runCombinedJob(job, steps, params.fullResync === true);
+    this.runCombinedJob(job, steps, params.fullResync === true, params.useAI === true);
     return { job, steps };
   }
 
-  startSuggestionsRetryJob(budgetId: string, suggestionId: string): { job: Job } {
+  startSuggestionsRetryJob(params: { budgetId: string; suggestionId: string; useAI?: boolean }): {
+    job: Job;
+  } {
     const job = this.jobService.createJob({
-      budgetId,
+      budgetId: params.budgetId,
       type: 'suggestions_retry_payee',
-      metadata: { suggestionId },
+      metadata: { suggestionId: params.suggestionId, useAI: params.useAI === true },
     });
     this.runSingleJob(job, async () => {
-      await this.suggestionService.retryPayeeGroup(suggestionId);
+      await this.suggestionService.retryPayeeGroup(params.suggestionId, params.useAI === true);
     });
     return { job };
   }
@@ -160,7 +166,7 @@ export class JobOrchestrator {
     });
   }
 
-  private runCombinedJob(job: Job, steps: JobStep[], fullResync: boolean): void {
+  private runCombinedJob(job: Job, steps: JobStep[], fullResync: boolean, useAI: boolean): void {
     setImmediate(async () => {
       try {
         this.jobService.markJobRunning(job.id);
@@ -170,9 +176,9 @@ export class JobOrchestrator {
 
         await this.executeStep(steps[1], async () => {
           if (fullResync) {
-            await this.suggestionService.syncAndGenerateSuggestions(job.budgetId, true);
+            await this.suggestionService.syncAndGenerateSuggestions(job.budgetId, true, useAI);
           } else {
-            await this.suggestionService.syncAndGenerateSuggestions(job.budgetId, false);
+            await this.suggestionService.syncAndGenerateSuggestions(job.budgetId, false, useAI);
           }
         });
 

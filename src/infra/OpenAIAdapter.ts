@@ -30,13 +30,17 @@ export interface CompletionOptions {
  * - Consistent interface for all completion types
  */
 export class OpenAIAdapter {
-  private client: OpenAI;
+  private client: OpenAI | null;
   private model: string;
+  private apiKey?: string;
 
   constructor(env: Env) {
-    this.client = new OpenAI({
-      apiKey: env.OPENAI_API_KEY,
-    });
+    this.apiKey = env.OPENAI_API_KEY;
+    this.client = this.apiKey
+      ? new OpenAI({
+          apiKey: this.apiKey,
+        })
+      : null;
     this.model = env.OPENAI_MODEL;
   }
 
@@ -47,6 +51,11 @@ export class OpenAIAdapter {
    * @param options.webSearch - Enable web search for up-to-date information
    */
   async completion(options: CompletionOptions): Promise<string> {
+    if (!this.client || !this.apiKey) {
+      logger.error('OpenAI API key is not configured');
+      throw new OpenAIError('OpenAI API key is not configured');
+    }
+
     try {
       const tools: OpenAI.Responses.Tool[] = options.webSearch
         ? [{ type: 'web_search_preview' }]

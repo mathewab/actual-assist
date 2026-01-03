@@ -16,7 +16,10 @@ const envSchema = z.object({
   ACTUAL_ENCRYPTION_KEY: z.string().optional(),
 
   // OpenAI API
-  OPENAI_API_KEY: z.string().regex(/^sk-/),
+  OPENAI_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().regex(/^sk-/).optional()
+  ),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
   // Data storage

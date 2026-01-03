@@ -13,11 +13,20 @@ import {
   savePayeeMergeSettings,
   getDefaultPayeeMergeSettings,
 } from '../services/payeeMergeSettings';
+import {
+  loadCategorySuggestionSettings,
+  saveCategorySuggestionSettings,
+  getDefaultCategorySuggestionSettings,
+} from '../services/categorySuggestionSettings';
 
 export function Settings() {
   const { themeId, setThemeId, options } = useAppTheme();
   const [payeeMergeSettings, setPayeeMergeSettings] = useState(loadPayeeMergeSettings());
   const defaultPayeeMergeSettings = getDefaultPayeeMergeSettings();
+  const [categorySuggestionSettings, setCategorySuggestionSettings] = useState(
+    loadCategorySuggestionSettings()
+  );
+  const defaultCategorySuggestionSettings = getDefaultCategorySuggestionSettings();
   const activeTheme = options.find((theme) => theme.id === themeId) ?? options[0];
 
   const updatePayeeMergeSettings = (
@@ -26,6 +35,16 @@ export function Settings() {
     setPayeeMergeSettings((prev) => {
       const next = updater(prev);
       savePayeeMergeSettings(next);
+      return next;
+    });
+  };
+
+  const updateCategorySuggestionSettings = (
+    updater: (prev: typeof categorySuggestionSettings) => typeof categorySuggestionSettings
+  ) => {
+    setCategorySuggestionSettings((prev) => {
+      const next = updater(prev);
+      saveCategorySuggestionSettings(next);
       return next;
     });
   };
@@ -89,6 +108,38 @@ export function Settings() {
           </Box>
         </Paper>
       </Stack>
+
+      <Box sx={{ mt: 5, mb: 2 }}>
+        <Typography variant="subtitle1" fontWeight={600}>
+          Category suggestions
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Control whether AI is used to recommend categories.
+        </Typography>
+      </Box>
+
+      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+        <Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={categorySuggestionSettings.useAI}
+                onChange={(event) =>
+                  updateCategorySuggestionSettings((prev) => ({
+                    ...prev,
+                    useAI: event.target.checked,
+                  }))
+                }
+              />
+            }
+            label="Use AI for category suggestions"
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
+            Uses heuristics only when disabled. Default:{' '}
+            {defaultCategorySuggestionSettings.useAI ? 'on' : 'off'}.
+          </Typography>
+        </Box>
+      </Paper>
 
       <Box sx={{ mt: 5, mb: 2 }}>
         <Typography variant="subtitle1" fontWeight={600}>

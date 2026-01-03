@@ -164,8 +164,8 @@ export class SuggestionService {
    * Deduplication: Skips transactions that already have pending suggestions
    * Cleanup: Removes suggestions for deleted transactions
    */
-  async generateSuggestions(budgetId: string): Promise<Suggestion[]> {
-    logger.info('Generating suggestions', { budgetId });
+  async generateSuggestions(budgetId: string, useAI = true): Promise<Suggestion[]> {
+    logger.info('Generating suggestions', { budgetId, useAI });
 
     // Get existing suggestions and filter out failed ones so they can be retried
     const existingSuggestions = this.suggestionRepo.findByBudgetId(budgetId);
@@ -286,7 +286,8 @@ export class SuggestionService {
         budgetId,
         uncached,
         byPayee,
-        categories
+        categories,
+        useAI
       );
       suggestions.push(...aiSuggestions);
     }
@@ -300,14 +301,15 @@ export class SuggestionService {
         suggestionsCount: suggestions.length,
         uncategorizedCount: uncategorized.length,
         cacheHits: cachedCategories.size,
-        llmCalls: uncached.length > 0 ? 1 : 0,
+        llmCalls: useAI && uncached.length > 0 ? 1 : 0,
       },
     });
 
     logger.info('Suggestions generated', {
       count: suggestions.length,
       cacheHits: cachedCategories.size,
-      llmPayees: uncached.length,
+      llmPayees: useAI ? uncached.length : 0,
+      useAI,
       budgetId,
     });
 
@@ -884,8 +886,13 @@ ${categoryList}`;
     rawPayeeName: string,
     categories: Category[],
     fuzzyMatchCandidates: PayeeCandidate[],
-    budgetId: string
+    budgetId: string,
+    useAI = true
   ): Promise<CombinedSuggestionResult> {
+    if (!useAI) {
+      return this.generateHeuristicSuggestion(rawPayeeName, fuzzyMatchCandidates, budgetId);
+    }
+
     // Step 1: Check payee match cache
     if (this.payeeMatchCache) {
       const cachedPayee = this.payeeMatchCache.findByPayee(budgetId, rawPayeeName);
@@ -988,6 +995,110 @@ ${categoryList}`;
     };
   }
 
+  private generateHeuristicSuggestion(
+    rawPayeeName: string,
+    fuzzyMatchCandidates: PayeeCandidate[],
+    budgetId: string
+  ): CombinedSuggestionResult {
+    const emptyPayee: PayeeSuggestionResult = {
+      payeeName: rawPayeeName,
+      canonicalPayeeId: null,
+      canonicalPayeeName: null,
+      confidence: 0,
+      rationale: 'No heuristic match',
+      source: 'fuzzy_match',
+    };
+    const emptyCategory: CategorySuggestionResult = {
+      payeeName: rawPayeeName,
+      categoryId: null,
+      categoryName: null,
+      confidence: 0,
+      rationale: 'No heuristic match',
+      source: 'fuzzy_match',
+    };
+
+    const bestMatch = payeeMatcher.findBestMatch(rawPayeeName, fuzzyMatchCandidates);
+
+    if (this.payeeMatchCache) {
+      const cachedPayee = this.payeeMatchCache.findByPayee(budgetId, rawPayeeName);
+      if (cachedPayee) {
+        const payeeResult: PayeeSuggestionResult = {
+          payeeName: rawPayeeName,
+          canonicalPayeeId: cachedPayee.canonicalPayeeId,
+          canonicalPayeeName: cachedPayee.canonicalPayeeName,
+          confidence: cachedPayee.confidence,
+          rationale: `Cached: ${cachedPayee.source === 'user_approved' ? 'Previously approved' : 'High-confidence match'}`,
+          source: 'cache',
+        };
+
+        if (this.payeeCache) {
+          const cachedCategory = this.payeeCache.findByPayee(
+            budgetId,
+            cachedPayee.canonicalPayeeName
+          );
+          if (cachedCategory) {
+            return {
+              payee: payeeResult,
+              category: {
+                payeeName: rawPayeeName,
+                categoryId: cachedCategory.categoryId,
+                categoryName: cachedCategory.categoryName,
+                confidence: cachedCategory.confidence,
+                rationale: `Cached: ${cachedCategory.source === 'user_approved' ? 'Previously approved' : 'High-confidence AI'}`,
+                source: 'cache',
+              },
+            };
+          }
+        }
+
+        if (bestMatch) {
+          return {
+            payee: payeeResult,
+            category: {
+              payeeName: rawPayeeName,
+              categoryId: bestMatch.categoryId,
+              categoryName: bestMatch.categoryName,
+              confidence: bestMatch.score / 100,
+              rationale: `Heuristic match: "${bestMatch.payeeName}" (${bestMatch.score}%)`,
+              source: 'fuzzy_match',
+            },
+          };
+        }
+
+        return {
+          payee: payeeResult,
+          category: {
+            ...emptyCategory,
+            rationale: 'No heuristic category match',
+          },
+        };
+      }
+    }
+
+    if (bestMatch) {
+      return {
+        payee: {
+          payeeName: rawPayeeName,
+          canonicalPayeeId: bestMatch.payeeId ?? null,
+          canonicalPayeeName: bestMatch.payeeName,
+          confidence: bestMatch.score / 100,
+          rationale: `Heuristic match: "${bestMatch.payeeName}" (${bestMatch.score}%)`,
+          source: 'fuzzy_match',
+        },
+        category: {
+          payeeName: rawPayeeName,
+          categoryId: bestMatch.categoryId,
+          categoryName: bestMatch.categoryName,
+          confidence: bestMatch.score / 100,
+          rationale: `Heuristic match: "${bestMatch.payeeName}" (${bestMatch.score}%)`,
+          source: 'fuzzy_match',
+        },
+      };
+    }
+
+    return { payee: emptyPayee, category: emptyCategory };
+  }
+
   /**
    * Get category suggestion for a known payee (from cache or fuzzy match)
    */
@@ -1035,7 +1146,8 @@ ${categoryList}`;
     budgetId: string,
     payeeNames: string[],
     transactionsByPayee: Map<string, Transaction[]>,
-    categories: Category[]
+    categories: Category[],
+    useAI = true
   ): Promise<Suggestion[]> {
     const suggestions: Suggestion[] = [];
     const payeeMatchesToCache: Array<{
@@ -1057,6 +1169,7 @@ ${categoryList}`;
 
     logger.info('Processing payees with independent payee/category suggestions', {
       payeeCount: payeeNames.length,
+      useAI,
     });
 
     // Build fuzzy match candidates pool
@@ -1083,7 +1196,8 @@ ${categoryList}`;
         payeeName,
         categories,
         fuzzyMatchCandidates,
-        budgetId
+        budgetId,
+        useAI
       );
 
       // Track source
@@ -1091,7 +1205,7 @@ ${categoryList}`;
         cacheHits++;
       } else if (result.payee.source === 'fuzzy_match') {
         fuzzyMatchHits++;
-      } else {
+      } else if (useAI) {
         aiCalls++;
       }
 
@@ -1144,6 +1258,7 @@ ${categoryList}`;
 
       // Cache high-confidence category mappings
       if (
+        useAI &&
         result.category.categoryId &&
         result.category.confidence >= HIGH_CONFIDENCE_THRESHOLD &&
         result.category.source !== 'cache'
@@ -1607,7 +1722,7 @@ ${categoryList}`;
    * Retry LLM suggestion for a specific suggestion
    * Deletes the existing suggestion and regenerates it using AI
    */
-  async retrySuggestion(suggestionId: string): Promise<Suggestion> {
+  async retrySuggestion(suggestionId: string, useAI = true): Promise<Suggestion> {
     const existing = this.suggestionRepo.findById(suggestionId);
     if (!existing) {
       throw new Error(`Suggestion not found: ${suggestionId}`);
@@ -1619,22 +1734,38 @@ ${categoryList}`;
       budgetId: existing.budgetId,
     });
 
-    // Fetch categories from budget
-    const categories = await this.actualBudget.getCategories();
-
-    // Force regeneration using AI (bypass cache by calling AI directly)
     const payeeName = existing.transactionPayee || 'Unknown';
+    let payeeResult: PayeeSuggestionResult;
+    let categoryResult: CategorySuggestionResult;
 
-    // First identify the payee
-    const payeeResult = await this.identifyPayee(payeeName);
+    if (useAI) {
+      // Fetch categories from budget
+      const categories = await this.actualBudget.getCategories();
 
-    // Then suggest category with web search
-    const categoryResult = await this.suggestCategory(
-      payeeName,
-      payeeResult.canonicalPayeeName,
-      categories,
-      [] // No matched payees - force fresh AI suggestion
-    );
+      // Force regeneration using AI (bypass cache by calling AI directly)
+      // First identify the payee
+      payeeResult = await this.identifyPayee(payeeName);
+
+      // Then suggest category with web search
+      categoryResult = await this.suggestCategory(
+        payeeName,
+        payeeResult.canonicalPayeeName,
+        categories,
+        [] // No matched payees - force fresh AI suggestion
+      );
+    } else {
+      const categories = await this.actualBudget.getCategories();
+      const fuzzyMatchCandidates = await this.buildFuzzyMatchCandidates(existing.budgetId);
+      const heuristic = await this.generateCombinedSuggestion(
+        payeeName,
+        categories,
+        fuzzyMatchCandidates,
+        existing.budgetId,
+        false
+      );
+      payeeResult = heuristic.payee;
+      categoryResult = heuristic.category;
+    }
 
     // Update the suggestion with new values
     const updated = createSuggestion({
@@ -1691,7 +1822,7 @@ ${categoryList}`;
    * Retry LLM suggestions for all suggestions with the same payee in a budget
    * This is useful when suggestions are grouped by payee in the UI
    */
-  async retryPayeeGroup(suggestionId: string): Promise<Suggestion[]> {
+  async retryPayeeGroup(suggestionId: string, useAI = true): Promise<Suggestion[]> {
     const existing = this.suggestionRepo.findById(suggestionId);
     if (!existing) {
       throw new Error(`Suggestion not found: ${suggestionId}`);
@@ -1700,7 +1831,7 @@ ${categoryList}`;
     const payeeName = existing.transactionPayee;
     if (!payeeName) {
       // If no payee name, just retry the single suggestion
-      return [await this.retrySuggestion(suggestionId)];
+      return [await this.retrySuggestion(suggestionId, useAI)];
     }
 
     // Find all pending suggestions with the same payee
@@ -1720,17 +1851,31 @@ ${categoryList}`;
       budgetId: existing.budgetId,
     });
 
-    // Fetch categories from budget
     const categories = await this.actualBudget.getCategories();
+    let payeeResult: PayeeSuggestionResult;
+    let categoryResult: CategorySuggestionResult;
 
-    // Generate new suggestion once (same for all transactions with this payee)
-    const payeeResult = await this.identifyPayee(payeeName);
-    const categoryResult = await this.suggestCategory(
-      payeeName,
-      payeeResult.canonicalPayeeName,
-      categories,
-      [] // No matched payees - force fresh AI suggestion
-    );
+    if (useAI) {
+      // Generate new suggestion once (same for all transactions with this payee)
+      payeeResult = await this.identifyPayee(payeeName);
+      categoryResult = await this.suggestCategory(
+        payeeName,
+        payeeResult.canonicalPayeeName,
+        categories,
+        [] // No matched payees - force fresh AI suggestion
+      );
+    } else {
+      const fuzzyMatchCandidates = await this.buildFuzzyMatchCandidates(existing.budgetId);
+      const heuristic = await this.generateCombinedSuggestion(
+        payeeName,
+        categories,
+        fuzzyMatchCandidates,
+        existing.budgetId,
+        false
+      );
+      payeeResult = heuristic.payee;
+      categoryResult = heuristic.category;
+    }
 
     // Update all suggestions in the group
     const updatedSuggestions: Suggestion[] = [];
@@ -1846,8 +1991,12 @@ ${categoryList}`;
    * Optimized: Uses batch LLM calls and payee caching
    * Cleanup: Removes suggestions for deleted transactions
    */
-  async syncAndGenerateSuggestions(budgetId: string, fullSnapshot = false): Promise<Suggestion[]> {
-    logger.info('Syncing and generating suggestions', { budgetId, fullSnapshot });
+  async syncAndGenerateSuggestions(
+    budgetId: string,
+    fullSnapshot = false,
+    useAI = true
+  ): Promise<Suggestion[]> {
+    logger.info('Syncing and generating suggestions', { budgetId, fullSnapshot, useAI });
 
     // Sync latest data from Actual Budget server
     await this.actualBudget.sync();
@@ -1855,7 +2004,7 @@ ${categoryList}`;
     // If full snapshot mode (e.g., after redownload), use full generation
     if (fullSnapshot) {
       logger.info('Full snapshot mode enabled, generating all suggestions');
-      return this.generateSuggestions(budgetId);
+      return this.generateSuggestions(budgetId, useAI);
     }
 
     // Fetch current budget state
@@ -1957,7 +2106,8 @@ ${categoryList}`;
         budgetId,
         uncached,
         byPayee,
-        categories
+        categories,
+        useAI
       );
       suggestions.push(...aiSuggestions);
     }
@@ -1971,7 +2121,7 @@ ${categoryList}`;
         suggestionsCount: suggestions.length,
         newUncategorizedCount: uncategorized.length,
         cacheHits: cachedCategories.size,
-        llmCalls: uncached.length > 0 ? 1 : 0,
+        llmCalls: useAI && uncached.length > 0 ? 1 : 0,
         mode: 'diff',
       },
     });
@@ -1979,7 +2129,8 @@ ${categoryList}`;
     logger.info('Diff-based suggestions generated', {
       count: suggestions.length,
       cacheHits: cachedCategories.size,
-      llmPayees: uncached.length,
+      llmPayees: useAI ? uncached.length : 0,
+      useAI,
       budgetId,
     });
 

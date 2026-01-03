@@ -425,16 +425,17 @@ export const api = {
   },
 
   /**
-   * Generate AI suggestions
+   * Generate suggestions
    */
   async generateSuggestions(
     budgetId: string,
-    _maxSuggestions?: number
+    _maxSuggestions?: number,
+    useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
     const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId }),
+      body: JSON.stringify({ budgetId, useAI }),
     });
 
     if (!response.ok) {
@@ -450,12 +451,13 @@ export const api = {
    */
   async syncAndGenerateSuggestions(
     budgetId: string,
-    fullSnapshot = false
+    fullSnapshot = false,
+    useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
     const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, fullResync: fullSnapshot }),
+      body: JSON.stringify({ budgetId, fullResync: fullSnapshot, useAI }),
     });
 
     if (!response.ok) {
@@ -561,11 +563,14 @@ export const api = {
   /**
    * Create a suggestions generation job
    */
-  async createSuggestionsJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
+  async createSuggestionsJob(
+    budgetId: string,
+    useAI?: boolean
+  ): Promise<{ job: Job; steps: JobStep[] }> {
     const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId }),
+      body: JSON.stringify({ budgetId, useAI }),
     });
 
     if (!response.ok) {
@@ -580,12 +585,13 @@ export const api = {
    */
   async createSyncAndGenerateJob(
     budgetId: string,
-    fullResync = false
+    fullResync = false,
+    useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
     const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, fullResync }),
+      body: JSON.stringify({ budgetId, fullResync, useAI }),
     });
 
     if (!response.ok) {
@@ -806,12 +812,13 @@ export const api = {
    */
   async retrySuggestion(
     budgetId: string,
-    suggestionId: string
+    suggestionId: string,
+    useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
     const response = await fetch(`${API_BASE}/jobs/suggestions-retry`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ budgetId, suggestionId }),
+      body: JSON.stringify({ budgetId, suggestionId, useAI }),
     });
 
     if (!response.ok) {

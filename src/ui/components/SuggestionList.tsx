@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Alert from '@mui/material/Alert';
+import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -33,6 +34,7 @@ import {
   type Suggestion,
   type SuggestionComponentStatus,
   type Category,
+  type Payee,
 } from '../services/api';
 import { loadCategorySuggestionSettings } from '../services/categorySuggestionSettings';
 import { ProgressBar } from './ProgressBar';
@@ -67,6 +69,14 @@ interface CorrectionModalState {
   suggestionIds: string[];
   currentValue: string;
 }
+
+type PayeeOption = { id: string; name: string; type: 'existing' | 'add_new' };
+type PayeeCorrectionSelection =
+  | { mode: 'existing'; payeeId: string }
+  | { mode: 'new'; name: string };
+
+const addNewPayeeOption: PayeeOption = { id: 'add_new', name: 'Add new payee', type: 'add_new' };
+const filterPayeeOptions = createFilterOptions<PayeeOption>({ limit: 50 });
 
 const confidenceColor = (level: string): 'success' | 'warning' | 'error' => {
   switch (level) {
@@ -104,7 +114,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const queryClient = useQueryClient();
   const [expandedPayees, setExpandedPayees] = useState<Set<string>>(new Set());
   const [correctionModal, setCorrectionModal] = useState<CorrectionModalState | null>(null);
-  const [correctionInput, setCorrectionInput] = useState('');
+  const [payeeSelection, setPayeeSelection] = useState<PayeeCorrectionSelection | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const { data: appConfig } = useQuery({
     queryKey: ['app-config'],
@@ -145,7 +155,17 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     queryFn: () => api.getCategories(),
   });
 
+  const { data: payeesData } = useQuery({
+    queryKey: ['payees'],
+    queryFn: () => api.getPayees(),
+  });
+
   const categories = categoriesData?.categories || [];
+  const payeeOptions: PayeeOption[] = (payeesData?.payees || []).map((payee: Payee) => ({
+    id: payee.id,
+    name: payee.name,
+    type: 'existing',
+  }));
   const uncategorizedCount = uncategorizedData?.transactions.length ?? 0;
 
   // Group categories by group name for better UX
@@ -159,6 +179,23 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     {} as Record<string, Category[]>
   );
 
+  const selectedPayeeOption =
+    payeeSelection?.mode === 'existing'
+      ? (payeeOptions.find((option) => option.id === payeeSelection.payeeId) ?? null)
+      : payeeSelection?.mode === 'new'
+        ? addNewPayeeOption
+        : null;
+  const payeeInputValue =
+    payeeSelection?.mode === 'existing'
+      ? (payeeOptions.find((option) => option.id === payeeSelection.payeeId)?.name ?? '')
+      : payeeSelection?.mode === 'new'
+        ? payeeSelection.name
+        : '';
+  const hasValidPayeeCorrection =
+    payeeSelection?.mode === 'existing'
+      ? Boolean(payeeOptions.find((option) => option.id === payeeSelection.payeeId))
+      : payeeSelection?.mode === 'new' && payeeSelection.name.trim().length > 0;
+
   const suggestionsJobMutation = useMutation({
     mutationFn: () => api.createSuggestionsJob(budgetId, categorySuggestionSettings.useAI),
     onSuccess: () => {
@@ -167,12 +204,17 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const correctPayeeMutation = useMutation({
-    mutationFn: ({ ids, correction }: { ids: string[]; correction: { payeeName: string } }) =>
-      api.bulkCorrectPayeeSuggestions(ids, correction),
+    mutationFn: ({
+      ids,
+      correction,
+    }: {
+      ids: string[];
+      correction: { payeeId?: string; payeeName: string };
+    }) => api.bulkCorrectPayeeSuggestions(ids, correction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
       setCorrectionModal(null);
-      setCorrectionInput('');
+      setPayeeSelection(null);
     },
   });
 
@@ -187,7 +229,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
       setCorrectionModal(null);
-      setCorrectionInput('');
+      setPayeeSelection(null);
     },
   });
 
@@ -257,7 +299,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     currentValue: string
   ) => {
     setCorrectionModal({ isOpen: true, type, suggestionIds, currentValue });
-    setCorrectionInput('');
+    setPayeeSelection(null);
     setSelectedCategoryId('');
   };
 
@@ -265,10 +307,21 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     if (!correctionModal) return;
 
     if (correctionModal.type === 'payee') {
-      if (!correctionInput.trim()) return;
+      if (!payeeSelection) return;
+      if (payeeSelection.mode === 'new') {
+        const trimmedName = payeeSelection.name.trim();
+        if (!trimmedName) return;
+        correctPayeeMutation.mutate({
+          ids: correctionModal.suggestionIds,
+          correction: { payeeName: trimmedName },
+        });
+        return;
+      }
+      const selectedPayee = payeeOptions.find((option) => option.id === payeeSelection.payeeId);
+      if (!selectedPayee?.name) return;
       correctPayeeMutation.mutate({
         ids: correctionModal.suggestionIds,
-        correction: { payeeName: correctionInput.trim() },
+        correction: { payeeId: payeeSelection.payeeId, payeeName: selectedPayee.name },
       });
     } else {
       // For category, use the selected category from dropdown
@@ -851,14 +904,71 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
           </Typography>
 
           {correctionModal?.type === 'payee' ? (
-            <TextField
+            <Autocomplete
+              options={[...payeeOptions, addNewPayeeOption]}
+              value={selectedPayeeOption}
+              inputValue={payeeInputValue}
+              onInputChange={(_, newInputValue, reason) => {
+                if (reason === 'input') {
+                  setPayeeSelection({ mode: 'new', name: newInputValue });
+                }
+                if (reason === 'clear') {
+                  setPayeeSelection(null);
+                }
+              }}
+              onChange={(_, newValue) => {
+                if (!newValue) {
+                  setPayeeSelection(null);
+                  return;
+                }
+                if (typeof newValue === 'string') {
+                  setPayeeSelection({ mode: 'new', name: newValue });
+                  return;
+                }
+                if (newValue.type === 'add_new') {
+                  setPayeeSelection({
+                    mode: 'new',
+                    name: payeeSelection?.mode === 'new' ? payeeSelection.name : '',
+                  });
+                  return;
+                }
+                setPayeeSelection({ mode: 'existing', payeeId: newValue.id });
+              }}
+              getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
+              isOptionEqualToValue={(option, value) =>
+                typeof option !== 'string' &&
+                typeof value !== 'string' &&
+                option.id === value.id &&
+                option.type === value.type
+              }
+              filterOptions={(options, params) => {
+                const existingOptions = options.filter((option) => option.type !== 'add_new');
+                const filtered = filterPayeeOptions(existingOptions, params);
+                const inputValue = params.inputValue.trim();
+                if (!inputValue) return filtered;
+                const match = existingOptions.some(
+                  (option) => option.name.toLowerCase() === inputValue.toLowerCase()
+                );
+                return match ? filtered : [...filtered, addNewPayeeOption];
+              }}
+              noOptionsText={
+                payeeInputValue.trim().length === 0
+                  ? 'Start typing to search payees'
+                  : 'No matching payees'
+              }
               fullWidth
-              size="small"
-              label="Correct payee"
-              placeholder="Enter correct payee name..."
-              value={correctionInput}
-              onChange={(e) => setCorrectionInput(e.target.value)}
-              autoFocus
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Correct payee"
+                  placeholder="Search or enter payee..."
+                  size="small"
+                  autoFocus
+                  helperText={
+                    payeeSelection?.mode === 'new' ? 'Enter the new payee name.' : undefined
+                  }
+                />
+              )}
             />
           ) : (
             <FormControl fullWidth size="small" autoFocus>
@@ -892,7 +1002,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
             disabled={
               correctPayeeMutation.isPending ||
               correctCategoryMutation.isPending ||
-              (correctionModal?.type === 'payee' ? !correctionInput.trim() : !selectedCategoryId)
+              (correctionModal?.type === 'payee' ? !hasValidPayeeCorrection : !selectedCategoryId)
             }
           >
             Submit Correction

@@ -56,6 +56,24 @@ export function createBudgetRouter(deps: {
   });
 
   /**
+   * GET /api/budgets/payees - Get all payees from the current budget
+   */
+  router.get('/payees', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payees = await actualBudget.getPayees();
+
+      res.json({
+        payees: payees.map((p) => ({
+          id: p.id,
+          name: p.name,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * GET /api/budgets/templates - List categories with goal templates
    */
   router.get('/templates', async (_req: Request, res: Response, next: NextFunction) => {

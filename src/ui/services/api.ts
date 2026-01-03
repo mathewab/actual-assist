@@ -258,6 +258,19 @@ export const api = {
   },
 
   /**
+   * Get all payees from the current budget
+   */
+  async getPayees(): Promise<{ payees: Payee[] }> {
+    const response = await fetch(`${API_BASE}/budgets/payees`);
+
+    if (!response.ok) {
+      throw new Error('Failed to get payees');
+    }
+
+    return parseJson(response, 'Failed to parse payees response');
+  },
+
+  /**
    * Get merge suggestions for duplicate payees
    */
   async getPayeeMergeSuggestions(

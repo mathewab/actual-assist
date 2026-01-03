@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 
 /**
  * Environment variable schema with strict validation
@@ -6,7 +6,7 @@ import { z } from 'zod';
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().regex(/^\d+$/).transform(Number).default('3000'),
+  PORT: z.coerce.number().int().default(3000),
 
   // Actual Budget API credentials
   ACTUAL_SERVER_URL: z.string().url(),
@@ -28,30 +28,27 @@ const envSchema = z.object({
   LOG_FILE: z.string().optional(),
 
   // Periodic Sync
-  SYNC_INTERVAL_MINUTES: z
-    .string()
-    .regex(/^\d+$/)
-    .transform(Number)
-    .refine((n) => n >= 1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
-    .default('360'),
+  SYNC_INTERVAL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
+    .default(360),
 
   // Job timeout handling
-  JOB_TIMEOUT_MINUTES: z
-    .string()
-    .regex(/^\d+$/)
-    .transform(Number)
-    .refine((n) => n >= 1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
-    .default('60'),
-  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z
-    .string()
-    .regex(/^\d+$/)
-    .transform(Number)
-    .refine((n) => n >= 1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
-    .default('5'),
+  JOB_TIMEOUT_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
+    .default(60),
+  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
+    .default(5),
 
   // Rate limiting (API)
-  RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).default('60000'),
-  RATE_LIMIT_MAX_REQUESTS: z.string().regex(/^\d+$/).transform(Number).default('120'),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60000),
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -64,9 +61,9 @@ export function validateEnv(): Env {
   try {
     return envSchema.parse(process.env);
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       console.error('❌ Environment validation failed:');
-      error.errors.forEach((err) => {
+      error.issues.forEach((err) => {
         console.error(`  - ${err.path.join('.')}: ${err.message}`);
       });
       console.error('\nCheck .env.example for required variables');

@@ -5,6 +5,14 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+async function parseJson<T>(response: Response, errorMessage: string): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error(errorMessage);
+  }
+}
+
 export function getJobEventsStreamUrl(budgetId: string): string {
   const base = API_BASE.startsWith('http') ? API_BASE : window.location.origin + API_BASE;
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
@@ -217,7 +225,7 @@ export const api = {
       throw new Error('Failed to list budgets');
     }
 
-    return response.json();
+    return parseJson(response, 'Failed to list jobs');
   },
 
   /**
@@ -230,7 +238,7 @@ export const api = {
       throw new Error('Failed to get categories');
     }
 
-    return response.json();
+    return parseJson(response, 'Failed to create sync job');
   },
 
   /**

@@ -8,17 +8,33 @@ const DEFAULT_SETTINGS: CategorySuggestionSettings = {
   useAI: true,
 };
 
-export function loadCategorySuggestionSettings(): CategorySuggestionSettings {
-  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+export interface CategorySuggestionSettingsOptions {
+  allowAI?: boolean;
+  defaultUseAI?: boolean;
+}
+
+export function loadCategorySuggestionSettings(
+  options: CategorySuggestionSettingsOptions = {}
+): CategorySuggestionSettings {
+  const allowAI = options.allowAI ?? true;
+  const defaultUseAI = options.defaultUseAI ?? DEFAULT_SETTINGS.useAI;
+  const fallback = { useAI: allowAI ? defaultUseAI : false };
+
+  if (typeof window === 'undefined') return fallback;
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return DEFAULT_SETTINGS;
+  if (!raw) return fallback;
   try {
     const parsed = JSON.parse(raw) as Partial<CategorySuggestionSettings>;
     return {
-      useAI: typeof parsed.useAI === 'boolean' ? parsed.useAI : DEFAULT_SETTINGS.useAI,
+      useAI:
+        allowAI && typeof parsed.useAI === 'boolean'
+          ? parsed.useAI
+          : allowAI
+            ? defaultUseAI
+            : false,
     };
   } catch {
-    return DEFAULT_SETTINGS;
+    return fallback;
   }
 }
 
@@ -27,6 +43,10 @@ export function saveCategorySuggestionSettings(settings: CategorySuggestionSetti
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 
-export function getDefaultCategorySuggestionSettings(): CategorySuggestionSettings {
-  return DEFAULT_SETTINGS;
+export function getDefaultCategorySuggestionSettings(
+  options: CategorySuggestionSettingsOptions = {}
+): CategorySuggestionSettings {
+  const allowAI = options.allowAI ?? true;
+  const defaultUseAI = options.defaultUseAI ?? DEFAULT_SETTINGS.useAI;
+  return { useAI: allowAI ? defaultUseAI : false };
 }

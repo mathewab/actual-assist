@@ -15,8 +15,9 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import { api, type Job } from '../services/api';
+import { api } from '../services/api';
 import { JobDetail } from './JobDetail';
+import { formatJobTypeLabel } from '../utils/jobLabels';
 
 interface JobListProps {
   budgetId: string;
@@ -44,35 +45,6 @@ function formatTimestamp(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
-}
-
-function formatJobType(type: Job['type']): string {
-  switch (type) {
-    case 'budget_sync':
-      return 'Sync Budget';
-    case 'suggestions_generate':
-      return 'Generate Suggestions (AI)';
-    case 'sync_and_suggest':
-      return 'Sync & Generate (AI)';
-    case 'suggestions_retry_payee':
-      return 'Retry Suggestions';
-    case 'suggestions_apply':
-      return 'Apply Suggestions';
-    case 'templates_apply':
-      return 'Apply Templates';
-    case 'payees_merge':
-      return 'Merge Payees';
-    case 'payees_merge_suggestions_generate':
-      return 'Generate Payee Merges';
-    case 'snapshot_create':
-      return 'Create Snapshot';
-    case 'snapshot_redownload':
-      return 'Redownload Snapshot';
-    case 'scheduled_sync_and_suggest':
-      return 'Scheduled Sync & Generate (AI)';
-    default:
-      return type;
-  }
 }
 
 export function JobList({ budgetId }: JobListProps) {
@@ -190,7 +162,7 @@ export function JobList({ budgetId }: JobListProps) {
             {jobs.map((job) => (
               <TableRow key={job.id} hover>
                 <TableCell sx={{ borderBottomColor: 'divider' }}>
-                  {formatJobType(job.type)}
+                  {formatJobTypeLabel(job)}
                 </TableCell>
                 <TableCell sx={{ borderBottomColor: 'divider' }}>
                   <Chip

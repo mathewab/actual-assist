@@ -7,6 +7,7 @@ import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useQuery } from '@tanstack/react-query';
 import { useAppTheme } from '../theme/AppThemeProvider';
 import {
   loadPayeeMergeSettings,
@@ -18,15 +19,17 @@ import {
   saveCategorySuggestionSettings,
   getDefaultCategorySuggestionSettings,
 } from '../services/categorySuggestionSettings';
+import { api } from '../services/api';
 
 export function Settings() {
   const { themeId, setThemeId, options } = useAppTheme();
+  const { data: appConfig } = useQuery({
+    queryKey: ['app-config'],
+    queryFn: () => api.getAppConfig(),
+  });
+  const openaiConfigured = appConfig?.openaiConfigured ?? true;
   const [payeeMergeSettings, setPayeeMergeSettings] = useState(loadPayeeMergeSettings());
   const defaultPayeeMergeSettings = getDefaultPayeeMergeSettings();
-  const [categorySuggestionSettings, setCategorySuggestionSettings] = useState(
-    loadCategorySuggestionSettings()
-  );
-  const defaultCategorySuggestionSettings = getDefaultCategorySuggestionSettings();
   const activeTheme = options.find((theme) => theme.id === themeId) ?? options[0];
 
   const updatePayeeMergeSettings = (
@@ -35,16 +38,6 @@ export function Settings() {
     setPayeeMergeSettings((prev) => {
       const next = updater(prev);
       savePayeeMergeSettings(next);
-      return next;
-    });
-  };
-
-  const updateCategorySuggestionSettings = (
-    updater: (prev: typeof categorySuggestionSettings) => typeof categorySuggestionSettings
-  ) => {
-    setCategorySuggestionSettings((prev) => {
-      const next = updater(prev);
-      saveCategorySuggestionSettings(next);
       return next;
     });
   };
@@ -118,28 +111,10 @@ export function Settings() {
         </Typography>
       </Box>
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
-        <Box>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={categorySuggestionSettings.useAI}
-                onChange={(event) =>
-                  updateCategorySuggestionSettings((prev) => ({
-                    ...prev,
-                    useAI: event.target.checked,
-                  }))
-                }
-              />
-            }
-            label="Use AI for category suggestions"
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
-            Uses heuristics only when disabled. Default:{' '}
-            {defaultCategorySuggestionSettings.useAI ? 'on' : 'off'}.
-          </Typography>
-        </Box>
-      </Paper>
+      <CategorySuggestionSettingsCard
+        key={`cat-ai-${openaiConfigured ? 'on' : 'off'}`}
+        openaiConfigured={openaiConfigured}
+      />
 
       <Box sx={{ mt: 5, mb: 2 }}>
         <Typography variant="subtitle1" fontWeight={600}>
@@ -208,5 +183,56 @@ export function Settings() {
         </Stack>
       </Paper>
     </Box>
+  );
+}
+
+function CategorySuggestionSettingsCard({ openaiConfigured }: { openaiConfigured: boolean }) {
+  const [categorySuggestionSettings, setCategorySuggestionSettings] = useState(() =>
+    loadCategorySuggestionSettings({
+      allowAI: openaiConfigured,
+      defaultUseAI: openaiConfigured,
+    })
+  );
+  const defaultCategorySuggestionSettings = getDefaultCategorySuggestionSettings({
+    allowAI: openaiConfigured,
+    defaultUseAI: openaiConfigured,
+  });
+
+  const updateCategorySuggestionSettings = (
+    updater: (prev: typeof categorySuggestionSettings) => typeof categorySuggestionSettings
+  ) => {
+    setCategorySuggestionSettings((prev) => {
+      const next = updater(prev);
+      saveCategorySuggestionSettings(next);
+      return next;
+    });
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+      <Box>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={categorySuggestionSettings.useAI}
+              disabled={!openaiConfigured}
+              onChange={(event) =>
+                updateCategorySuggestionSettings((prev) => ({
+                  ...prev,
+                  useAI: event.target.checked,
+                }))
+              }
+            />
+          }
+          label="Use AI for category suggestions"
+        />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
+          {openaiConfigured
+            ? 'Uses heuristics only when disabled.'
+            : 'OpenAI is not configured. Add OPENAI_API_KEY to enable AI suggestions.'}{' '}
+          Default: {defaultCategorySuggestionSettings.useAI ? 'on' : 'off'}.
+        </Typography>
+      </Box>
+    </Paper>
   );
 }

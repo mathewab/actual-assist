@@ -7,6 +7,7 @@ import { createBudgetRouter } from './budgetRoutes.js';
 import { createJobRouter } from './jobRoutes.js';
 import { createJobEventsRouter } from './jobEventsRoutes.js';
 import { createPayeeRouter } from './payeeRoutes.js';
+import { createConfigRouter } from './configRoutes.js';
 import type { SuggestionService } from '../services/SuggestionService.js';
 import type { SyncService } from '../services/SyncService.js';
 import type { JobService } from '../services/JobService.js';
@@ -31,6 +32,7 @@ export function createApiRouter(deps: {
   actualBudget: ActualBudgetAdapter;
   payeeMergeService: PayeeMergeService;
   defaultBudgetId: string | null;
+  openaiConfigured: boolean;
 }): Router {
   const router = Router();
 
@@ -59,6 +61,7 @@ export function createApiRouter(deps: {
     })
   );
   router.use('/audit', createAuditRouter(deps.auditRepo));
+  router.use('/config', createConfigRouter({ openaiConfigured: deps.openaiConfigured }));
 
   return router;
 }

@@ -52,6 +52,7 @@ const db = new DatabaseAdapter(env);
 await runMigrations(env);
 const actualBudget = new ActualBudgetAdapter(env);
 const openai = new OpenAIAdapter(env);
+const openaiConfigured = openai.isConfigured();
 
 // Initialize repositories
 const suggestionRepo = new SuggestionRepository(db);
@@ -153,6 +154,7 @@ const apiRouter = createApiRouter({
   actualBudget,
   payeeMergeService,
   defaultBudgetId: env.ACTUAL_SYNC_ID || env.ACTUAL_BUDGET_ID || null,
+  openaiConfigured,
 });
 app.use('/api', apiRouter);
 

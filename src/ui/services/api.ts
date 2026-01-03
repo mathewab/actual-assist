@@ -26,6 +26,10 @@ export interface Budget {
   name: string;
 }
 
+export interface AppConfig {
+  openaiConfigured: boolean;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -214,6 +218,18 @@ export interface JobStep {
 }
 
 export const api = {
+  /**
+   * Get app configuration for UI defaults
+   */
+  async getAppConfig(): Promise<AppConfig> {
+    const response = await fetch(`${API_BASE}/config`);
+
+    if (!response.ok) {
+      throw new Error('Failed to load app configuration');
+    }
+
+    return parseJson<AppConfig>(response, 'Failed to parse app configuration');
+  },
   /**
    * List available budgets
    * T081: GET /api/budgets

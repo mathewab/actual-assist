@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Alert from '@mui/material/Alert';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -12,10 +14,12 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import { JobCenter } from './JobCenter';
+import { api } from '../services/api';
 
 interface HeaderProps {
   budgetName?: string;
@@ -27,6 +31,22 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toolsAnchor, setToolsAnchor] = useState<null | HTMLElement>(null);
   const [systemAnchor, setSystemAnchor] = useState<null | HTMLElement>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const hasBudget = Boolean(budgetId);
+
+  const syncMutation = useMutation({
+    mutationFn: () => api.createSyncJob(budgetId ?? ''),
+    onSuccess: () => {
+      setSyncError(null);
+      if (budgetId) {
+        void queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
+      }
+    },
+    onError: (error) => {
+      setSyncError(error instanceof Error ? error.message : 'Failed to start sync job.');
+    },
+  });
 
   const isHomeSection = location.pathname === '/';
   const isToolsSection =
@@ -89,6 +109,30 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
         )}
 
         <Box sx={{ flex: 1 }} />
+
+        <Button
+          size="small"
+          variant="outlined"
+          color="inherit"
+          disabled={!hasBudget || syncMutation.isPending}
+          onClick={() => {
+            if (!hasBudget || syncMutation.isPending) return;
+            syncMutation.mutate();
+          }}
+          sx={{
+            borderColor: 'rgba(255,255,255,0.5)',
+            color: 'common.white',
+            textTransform: 'none',
+            fontWeight: 600,
+            px: 1.5,
+            '&:hover': {
+              borderColor: 'rgba(255,255,255,0.8)',
+              bgcolor: 'rgba(255,255,255,0.15)',
+            },
+          }}
+        >
+          Sync
+        </Button>
 
         <JobCenter budgetId={budgetId} />
 
@@ -234,6 +278,17 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
           ))}
         </Box>
       </Drawer>
+
+      <Snackbar
+        open={Boolean(syncError)}
+        onClose={() => setSyncError(null)}
+        autoHideDuration={8000}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="error" variant="filled" onClose={() => setSyncError(null)}>
+          {syncError}
+        </Alert>
+      </Snackbar>
     </AppBar>
   );
 }

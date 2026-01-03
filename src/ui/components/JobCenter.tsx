@@ -15,6 +15,7 @@ import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import { api, getJobEventsStreamUrl, type Job } from '../services/api';
+import { formatJobTypeLabel } from '../utils/jobLabels';
 
 interface JobCenterProps {
   budgetId?: string;
@@ -64,35 +65,6 @@ function formatTimestamp(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
-}
-
-function formatJobType(type: Job['type']): string {
-  switch (type) {
-    case 'budget_sync':
-      return 'Sync Budget';
-    case 'suggestions_generate':
-      return 'Generate Suggestions (AI)';
-    case 'sync_and_suggest':
-      return 'Sync & Generate (AI)';
-    case 'suggestions_retry_payee':
-      return 'Retry Suggestions';
-    case 'suggestions_apply':
-      return 'Apply Suggestions';
-    case 'templates_apply':
-      return 'Apply Templates';
-    case 'payees_merge':
-      return 'Merge Payees';
-    case 'payees_merge_suggestions_generate':
-      return 'Generate Payee Merges';
-    case 'snapshot_create':
-      return 'Create Snapshot';
-    case 'snapshot_redownload':
-      return 'Redownload Snapshot';
-    case 'scheduled_sync_and_suggest':
-      return 'Scheduled Sync & Generate (AI)';
-    default:
-      return type;
-  }
 }
 
 function sortJobsByCreatedAt(items: Job[]): Job[] {
@@ -275,7 +247,7 @@ export function JobCenter({ budgetId }: JobCenterProps) {
   const isHistoryVisible = drawerOpen;
 
   const toastLabel = toast
-    ? `${formatJobType(toast.job.type)} job ${
+    ? `${formatJobTypeLabel(toast.job)} job ${
         toast.phase === 'running'
           ? toast.job.status === 'queued'
             ? 'queued'
@@ -443,7 +415,7 @@ export function JobCenter({ budgetId }: JobCenterProps) {
                   <Stack direction="row" justifyContent="space-between" spacing={2}>
                     <Box>
                       <Typography variant="body2" fontWeight={600}>
-                        {formatJobType(job.type)}
+                        {formatJobTypeLabel(job)}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Started {formatTimestamp(job.startedAt)} · Completed{' '}

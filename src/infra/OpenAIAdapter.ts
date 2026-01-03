@@ -165,6 +165,10 @@ export class OpenAIAdapter {
     }
   }
 
+  isConfigured(): boolean {
+    return Boolean(this.apiKey);
+  }
+
   /**
    * Parse JSON from LLM response (handles markdown code blocks)
    */

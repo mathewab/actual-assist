@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Alert from '@mui/material/Alert';
@@ -106,7 +106,19 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const [correctionModal, setCorrectionModal] = useState<CorrectionModalState | null>(null);
   const [correctionInput, setCorrectionInput] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
-  const [categorySuggestionSettings] = useState(loadCategorySuggestionSettings());
+  const { data: appConfig } = useQuery({
+    queryKey: ['app-config'],
+    queryFn: () => api.getAppConfig(),
+  });
+  const openaiConfigured = appConfig?.openaiConfigured ?? true;
+  const categorySuggestionSettings = useMemo(
+    () =>
+      loadCategorySuggestionSettings({
+        allowAI: openaiConfigured,
+        defaultUseAI: openaiConfigured,
+      }),
+    [openaiConfigured]
+  );
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['suggestions', budgetId],

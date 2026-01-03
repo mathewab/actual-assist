@@ -34,6 +34,7 @@ import {
   type SuggestionComponentStatus,
   type Category,
 } from '../services/api';
+import { loadCategorySuggestionSettings } from '../services/categorySuggestionSettings';
 import { ProgressBar } from './ProgressBar';
 
 interface SuggestionListProps {
@@ -105,6 +106,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   const [correctionModal, setCorrectionModal] = useState<CorrectionModalState | null>(null);
   const [correctionInput, setCorrectionInput] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [categorySuggestionSettings] = useState(loadCategorySuggestionSettings());
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['suggestions', budgetId],
@@ -146,7 +148,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   );
 
   const suggestionsJobMutation = useMutation({
-    mutationFn: () => api.createSuggestionsJob(budgetId),
+    mutationFn: () => api.createSuggestionsJob(budgetId, categorySuggestionSettings.useAI),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
@@ -213,12 +215,17 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
   });
 
   const retrySuggestionMutation = useMutation({
-    mutationFn: (id: string) => api.retrySuggestion(budgetId, id),
+    mutationFn: (id: string) => api.retrySuggestion(budgetId, id, categorySuggestionSettings.useAI),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suggestions'] });
       queryClient.invalidateQueries({ queryKey: ['jobs', budgetId] });
     },
   });
+
+  const generateLabel = categorySuggestionSettings.useAI ? 'Generate (AI)' : 'Generate';
+  const generateHint = categorySuggestionSettings.useAI
+    ? 'Click "Generate (AI)" to request new suggestions'
+    : 'Click "Generate" to request new suggestions';
 
   const toggleExpanded = (payeeName: string) => {
     setExpandedPayees((prev) => {
@@ -356,19 +363,25 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                 uncategorizedCount === 0
               }
             >
-              {suggestionsJobMutation.isPending ? 'Starting generation...' : 'Generate (AI)'}
+              {suggestionsJobMutation.isPending ? 'Starting generation...' : generateLabel}
             </Button>
           )}
         </Stack>
       </Box>
 
       {retrySuggestionMutation.isPending && (
-        <ProgressBar message="Retrying AI suggestion for payee group..." />
+        <ProgressBar
+          message={
+            categorySuggestionSettings.useAI
+              ? 'Retrying AI suggestion for payee group...'
+              : 'Retrying suggestion for payee group...'
+          }
+        />
       )}
 
       {suggestionsJobMutation.error && (
         <Alert severity="error" variant="outlined" sx={{ mb: 2 }}>
-          Generate (AI) failed: {suggestionsJobMutation.error.message}
+          {generateLabel} failed: {suggestionsJobMutation.error.message}
         </Alert>
       )}
 
@@ -383,9 +396,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
               : 'No suggestions available yet'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {uncategorizedCount === 0
-              ? 'All transactions are categorized.'
-              : 'Click "Generate (AI)" to request new suggestions'}
+            {uncategorizedCount === 0 ? 'All transactions are categorized.' : generateHint}
           </Typography>
         </Paper>
       ) : (
@@ -549,7 +560,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                             {group.hasCategorySuggestion
                               ? group.categoryRationale
-                              : 'No suggestion yet. Generate (AI) or correct to proceed.'}
+                              : `No suggestion yet. ${generateLabel} or correct to proceed.`}
                           </Typography>
                           <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
                             <Button
@@ -576,7 +587,7 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
                                 ? 'Working...'
                                 : group.hasCategorySuggestion
                                   ? 'Retry'
-                                  : 'Generate (AI)'}
+                                  : generateLabel}
                             </Button>
                             <Button
                               size="small"

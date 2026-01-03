@@ -89,13 +89,16 @@ export function createSuggestionRouter(
    */
   router.post('/generate', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId } = req.body;
+      const { budgetId, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSuggestionsGenerateJob(budgetId);
+      const result = jobOrchestrator.startSuggestionsGenerateJob({
+        budgetId,
+        useAI: useAI === true,
+      });
       res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);
@@ -310,7 +313,7 @@ export function createSuggestionRouter(
    */
   router.post('/sync-and-generate', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId, fullSnapshot } = req.body;
+      const { budgetId, fullSnapshot, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
@@ -319,6 +322,7 @@ export function createSuggestionRouter(
       const result = jobOrchestrator.startSyncAndSuggestJob({
         budgetId,
         fullResync: fullSnapshot === true,
+        useAI: useAI === true,
       });
       res.status(201).json({
         job: result.job,
@@ -336,13 +340,17 @@ export function createSuggestionRouter(
   router.post('/:id/retry', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { budgetId } = req.body;
+      const { budgetId, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSuggestionsRetryJob(budgetId, id);
+      const result = jobOrchestrator.startSuggestionsRetryJob({
+        budgetId,
+        suggestionId: id,
+        useAI: useAI === true,
+      });
       res.status(201).json({ job: result.job, steps: [] });
     } catch (error) {
       next(error);

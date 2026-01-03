@@ -77,13 +77,16 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
    */
   router.post('/suggestions', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId } = req.body;
+      const { budgetId, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSuggestionsGenerateJob(budgetId);
+      const result = jobOrchestrator.startSuggestionsGenerateJob({
+        budgetId,
+        useAI: useAI === true,
+      });
       res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {
       next(error);
@@ -96,7 +99,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
    */
   router.post('/sync-and-generate', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId, fullResync } = req.body;
+      const { budgetId, fullResync, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
@@ -105,6 +108,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
       const result = jobOrchestrator.startSyncAndSuggestJob({
         budgetId,
         fullResync: fullResync === true,
+        useAI: useAI === true,
       });
       res.status(201).json({
         job: mapJobToResponse(result.job),
@@ -138,13 +142,16 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
    */
   router.post('/suggestions-generate', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId } = req.body;
+      const { budgetId, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
       }
 
-      const result = jobOrchestrator.startSuggestionsGenerateJob(budgetId);
+      const result = jobOrchestrator.startSuggestionsGenerateJob({
+        budgetId,
+        useAI: useAI === true,
+      });
       res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {
       next(error);
@@ -156,7 +163,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
    */
   router.post('/sync-and-suggest', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId, fullResync } = req.body;
+      const { budgetId, fullResync, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
@@ -165,6 +172,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
       const result = jobOrchestrator.startSyncAndSuggestJob({
         budgetId,
         fullResync: fullResync === true,
+        useAI: useAI === true,
       });
       res.status(201).json({
         job: mapJobToResponse(result.job),
@@ -180,7 +188,7 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
    */
   router.post('/suggestions-retry', (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { budgetId, suggestionId } = req.body;
+      const { budgetId, suggestionId, useAI } = req.body;
 
       if (!budgetId || typeof budgetId !== 'string') {
         throw new ValidationError('budgetId is required in request body');
@@ -190,7 +198,11 @@ export function createJobRouter(jobService: JobService, jobOrchestrator: JobOrch
         throw new ValidationError('suggestionId is required in request body');
       }
 
-      const result = jobOrchestrator.startSuggestionsRetryJob(budgetId, suggestionId);
+      const result = jobOrchestrator.startSuggestionsRetryJob({
+        budgetId,
+        suggestionId,
+        useAI: useAI === true,
+      });
       res.status(201).json({ job: mapJobToResponse(result.job), steps: [] });
     } catch (error) {
       next(error);

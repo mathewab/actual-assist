@@ -27,10 +27,24 @@ export class ActualBudgetError extends AppError {
 
 /**
  * OpenAI API errors (502 Bad Gateway)
+ * @deprecated Use AIError instead for new code
  */
 export class OpenAIError extends AppError {
   constructor(message: string, details?: unknown) {
     super(message, 'OPENAI_API_ERROR', 502, details);
+  }
+}
+
+/**
+ * Generic AI API errors (502 Bad Gateway) - used by all AI backends
+ */
+export class AIError extends AppError {
+  constructor(
+    message: string,
+    public readonly backend: string,
+    details?: unknown
+  ) {
+    super(message, 'AI_API_ERROR', 502, { backend, ...(details as object) });
   }
 }
 

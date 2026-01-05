@@ -15,12 +15,22 @@ const envSchema = z.object({
   ACTUAL_SYNC_ID: z.string().optional(),
   ACTUAL_ENCRYPTION_KEY: z.string().optional(),
 
+  // AI Backend Selection
+  AI_BACKEND: z.enum(['openai', 'google']).default('openai'),
+
   // OpenAI API
   OPENAI_API_KEY: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.string().regex(/^sk-/).optional()
   ),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+
+  // Google AI (Gemini) API
+  GOOGLE_AI_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().optional()
+  ),
+  GOOGLE_AI_MODEL: z.string().default('gemini-2.0-flash'),
 
   // Data storage
   DATA_DIR: z.string().default('./data'),

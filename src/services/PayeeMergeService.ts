@@ -1,7 +1,8 @@
 import * as fuzz from 'fuzzball';
 import { createHash } from 'node:crypto';
 import { payeeMatcher } from '../infra/PayeeMatcher.js';
-import { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
+import type { AIAdapter } from '../infra/ai/AIAdapter.js';
+import { parseJsonResponse } from '../infra/ai/parseJsonResponse.js';
 import { logger } from '../infra/logger.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { PayeeMergeClusterRepository } from '../infra/repositories/PayeeMergeClusterRepository.js';
@@ -21,7 +22,7 @@ export class PayeeMergeService {
     private clusterMetaRepo: PayeeMergeClusterMetaRepository,
     private payeeSnapshotRepo: PayeeMergePayeeSnapshotRepository,
     private hiddenGroupRepo: PayeeMergeHiddenGroupRepository,
-    private openai: OpenAIAdapter,
+    private ai: AIAdapter,
     private auditRepo: AuditRepository
   ) {}
 
@@ -305,7 +306,7 @@ If they are all the same entity, return one group with all indexes.`;
     const input = `Payee list:\n${lines}`;
 
     try {
-      const response = await this.openai.completion({
+      const response = await this.ai.completion({
         instructions,
         input,
         jsonSchema: {
@@ -326,7 +327,7 @@ If they are all the same entity, return one group with all indexes.`;
           },
         },
       });
-      const parsed = OpenAIAdapter.parseJsonResponse<{ groups: number[][] }>(response);
+      const parsed = parseJsonResponse<{ groups: number[][] }>(response);
       if (!parsed?.groups || !Array.isArray(parsed.groups)) {
         return null;
       }

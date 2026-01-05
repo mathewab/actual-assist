@@ -120,14 +120,14 @@ export function SuggestionList({ budgetId }: SuggestionListProps) {
     queryKey: ['app-config'],
     queryFn: () => api.getAppConfig(),
   });
-  const openaiConfigured = appConfig?.openaiConfigured ?? true;
+  const llmConfigured = appConfig?.llmConfigured ?? true;
   const categorySuggestionSettings = useMemo(
     () =>
       loadCategorySuggestionSettings({
-        allowAI: openaiConfigured,
-        defaultUseAI: openaiConfigured,
+        allowAI: llmConfigured,
+        defaultUseAI: llmConfigured,
       }),
-    [openaiConfigured]
+    [llmConfigured]
   );
 
   const { data, isLoading, error } = useQuery({

@@ -15,7 +15,7 @@ interface ProgressBarProps {
 
 /**
  * A progress bar component for showing loading states
- * during sync and OpenAI operations
+ * during sync and LLM operations
  */
 export function ProgressBar({
   message = 'Processing...',

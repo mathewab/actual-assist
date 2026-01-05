@@ -1,7 +1,7 @@
 import * as fuzz from 'fuzzball';
 import { createHash } from 'node:crypto';
 import { payeeMatcher } from '../infra/PayeeMatcher.js';
-import { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
+import type { LLMAdapter } from '../infra/llm/LLMAdapter.js';
 import { logger } from '../infra/logger.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { PayeeMergeClusterRepository } from '../infra/repositories/PayeeMergeClusterRepository.js';
@@ -14,6 +14,10 @@ import type { PayeeMergeClusterMetaRepository } from '../infra/repositories/Paye
 import type { PayeeMergeHiddenGroupRepository } from '../infra/repositories/PayeeMergeHiddenGroupRepository.js';
 import type { PayeeMergePayeeSnapshotRepository } from '../infra/repositories/PayeeMergePayeeSnapshotRepository.js';
 
+interface PayeeClusterSplitOutput {
+  groups: number[][];
+}
+
 export class PayeeMergeService {
   constructor(
     private actualBudget: ActualBudgetAdapter,
@@ -21,7 +25,7 @@ export class PayeeMergeService {
     private clusterMetaRepo: PayeeMergeClusterMetaRepository,
     private payeeSnapshotRepo: PayeeMergePayeeSnapshotRepository,
     private hiddenGroupRepo: PayeeMergeHiddenGroupRepository,
-    private openai: OpenAIAdapter,
+    private llm: LLMAdapter,
     private auditRepo: AuditRepository
   ) {}
 
@@ -305,10 +309,10 @@ If they are all the same entity, return one group with all indexes.`;
     const input = `Payee list:\n${lines}`;
 
     try {
-      const response = await this.openai.completion({
-        instructions,
+      const parsed = await this.llm.generateObject<PayeeClusterSplitOutput>({
+        system: instructions,
         input,
-        jsonSchema: {
+        schema: {
           name: 'payee_cluster_split',
           schema: {
             type: 'object',
@@ -326,22 +330,29 @@ If they are all the same entity, return one group with all indexes.`;
           },
         },
       });
-      const parsed = OpenAIAdapter.parseJsonResponse<{ groups: number[][] }>(response);
       if (!parsed?.groups || !Array.isArray(parsed.groups)) {
-        return null;
+        throw new Error('LLM returned an invalid cluster split response');
       }
 
       const total = cluster.payees.length;
       const seen = new Set<number>();
       for (const group of parsed.groups) {
-        if (!Array.isArray(group) || group.length === 0) return null;
+        if (!Array.isArray(group) || group.length === 0) {
+          throw new Error('LLM returned an invalid cluster split response');
+        }
         for (const index of group) {
-          if (typeof index !== 'number' || index < 0 || index >= total) return null;
-          if (seen.has(index)) return null;
+          if (typeof index !== 'number' || index < 0 || index >= total) {
+            throw new Error('LLM returned an invalid cluster split response');
+          }
+          if (seen.has(index)) {
+            throw new Error('LLM returned an invalid cluster split response');
+          }
           seen.add(index);
         }
       }
-      if (seen.size !== total) return null;
+      if (seen.size !== total) {
+        throw new Error('LLM returned an invalid cluster split response');
+      }
 
       const createdAt = new Date().toISOString();
       return parsed.groups
@@ -353,7 +364,16 @@ If they are all the same entity, return one group with all indexes.`;
         clusterId: cluster.clusterId,
         error: error instanceof Error ? error.message : String(error),
       });
-      return null;
+      this.auditRepo.log({
+        eventType: 'llm_call_failed',
+        entityType: 'payee_merge',
+        entityId: cluster.clusterId,
+        metadata: {
+          budgetId: cluster.budgetId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
     }
   }
 

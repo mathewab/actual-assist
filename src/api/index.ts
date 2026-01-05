@@ -16,6 +16,7 @@ import type { JobEventBus } from '../services/JobEventBus.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
 import type { PayeeMergeService } from '../services/PayeeMergeService.js';
+import type { LLMConfigService } from '../services/LLMConfigService.js';
 
 /**
  * Main API router - composes all route handlers
@@ -32,7 +33,7 @@ export function createApiRouter(deps: {
   actualBudget: ActualBudgetAdapter;
   payeeMergeService: PayeeMergeService;
   defaultBudgetId: string | null;
-  openaiConfigured: boolean;
+  llmConfigService: LLMConfigService;
 }): Router {
   const router = Router();
 
@@ -61,7 +62,7 @@ export function createApiRouter(deps: {
     })
   );
   router.use('/audit', createAuditRouter(deps.auditRepo));
-  router.use('/config', createConfigRouter({ openaiConfigured: deps.openaiConfigured }));
+  router.use('/config', createConfigRouter({ llmConfigService: deps.llmConfigService }));
 
   return router;
 }

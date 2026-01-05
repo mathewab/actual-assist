@@ -56,6 +56,13 @@ CREATE TABLE IF NOT EXISTS audit_log (
   timestamp TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- App config: Simple key/value store for runtime settings
+CREATE TABLE IF NOT EXISTS app_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Jobs: Track user-initiated background work (sync, suggestions, combined)
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,              -- UUID v4

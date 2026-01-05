@@ -13,6 +13,21 @@ async function parseJson<T>(response: Response, errorMessage: string): Promise<T
   }
 }
 
+async function parseError(response: Response, fallbackMessage: string): Promise<never> {
+  try {
+    const payload = (await response.json()) as { message?: string };
+    if (payload?.message) {
+      throw new Error(payload.message);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'Unexpected end of JSON input') {
+      throw error;
+    }
+  }
+
+  throw new Error(fallbackMessage);
+}
+
 export function getJobEventsStreamUrl(budgetId: string): string {
   const base = API_BASE.startsWith('http') ? API_BASE : window.location.origin + API_BASE;
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
@@ -27,7 +42,18 @@ export interface Budget {
 }
 
 export interface AppConfig {
-  openaiConfigured: boolean;
+  llmConfigured: boolean;
+  llmProvider: string;
+  llmModel: string;
+  llmModelOverride?: string | null;
+  llmBaseUrl?: string | null;
+  llmBaseUrlEffective?: string | null;
+  llmProviders: Array<{
+    id: string;
+    label: string;
+    configured: boolean;
+    defaultModel: string;
+  }>;
 }
 
 export interface Category {
@@ -229,6 +255,24 @@ export const api = {
     }
 
     return parseJson<AppConfig>(response, 'Failed to parse app configuration');
+  },
+
+  async updateLlmConfig(payload: {
+    provider: string;
+    model?: string;
+    baseUrl?: string;
+  }): Promise<AppConfig> {
+    const response = await fetch(`${API_BASE}/config/llm`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      await parseError(response, 'Failed to update LLM configuration');
+    }
+
+    return parseJson<AppConfig>(response, 'Failed to parse LLM configuration');
   },
   /**
    * List available budgets

@@ -15,12 +15,37 @@ const envSchema = z.object({
   ACTUAL_SYNC_ID: z.string().optional(),
   ACTUAL_ENCRYPTION_KEY: z.string().optional(),
 
-  // OpenAI API
+  // LLM Providers (Vercel AI SDK)
+  LLM_PROVIDER: z.enum(['openai', 'anthropic', 'google', 'ollama', 'gateway']).default('openai'),
+  LLM_MODEL: z.preprocess((value) => (value === '' ? undefined : value), z.string().optional()),
   OPENAI_API_KEY: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.string().regex(/^sk-/).optional()
   ),
-  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  ANTHROPIC_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().optional()
+  ),
+  GOOGLE_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().optional()
+  ),
+  OLLAMA_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().optional()
+  ),
+  OLLAMA_BASE_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().url().optional()
+  ),
+  AI_GATEWAY_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional()
+  ),
+  AI_GATEWAY_BASE_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().url().optional()
+  ),
 
   // Data storage
   DATA_DIR: z.string().default('./data'),

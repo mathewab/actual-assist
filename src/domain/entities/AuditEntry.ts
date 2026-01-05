@@ -30,7 +30,9 @@ export type AuditEventType =
   | 'payees_merge_suggestions_failed'
   | 'scheduled_sync_started'
   | 'scheduled_sync_completed'
-  | 'scheduled_sync_failed';
+  | 'scheduled_sync_failed'
+  | 'llm_provider_changed'
+  | 'llm_call_failed';
 
 /**
  * Factory function to create a new AuditEntry

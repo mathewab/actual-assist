@@ -14,7 +14,7 @@ AI-powered assistant for [Actual Budget](https://actualbudget.com/).
 
 **Tech Stack**:
 - **App**: Node.js 24, TypeScript 5 (ES modules), Express 5, React 19, Vite 7, TanStack Query, MUI + Tailwind
-- **AI**: OpenAI SDK (Responses API, default model `gpt-4o-mini`)
+- **AI**: Vercel AI SDK (OpenAI/Anthropic/Gemini/Ollama/Gateway, provider-agnostic interface)
 - **Storage**: SQLite via better-sqlite3 with knex migrations
 - **Ops**: node-cron scheduling, winston logging, express-rate-limit
 - **Deployment**: Docker, docker-compose (Helm chart under `charts/actual-assist`)
@@ -28,7 +28,7 @@ AI-powered assistant for [Actual Budget](https://actualbudget.com/).
 - Node.js >= 24.0.0
 - npm >= 10.0.0
 - Actual Budget server URL and credentials
-- OpenAI API key
+- LLM provider API key (OpenAI, Anthropic, Gemini, Ollama, or Gateway)
 
 ### Development Setup
 
@@ -129,7 +129,14 @@ Required variables (see `.env.example`):
 Optional (defaults are enforced by `src/infra/env.ts`):
 - `ACTUAL_SYNC_ID`: Sync ID for cloud-synced budgets
 - `ACTUAL_ENCRYPTION_KEY`: Budget encryption key
-- `OPENAI_MODEL`: OpenAI model name (default: `gpt-4o-mini`)
+- `LLM_PROVIDER`: LLM provider selector (`openai`, `anthropic`, `google`, `ollama`, `gateway`)
+- `LLM_MODEL`: Optional model override (defaults to provider-specific model)
+- `ANTHROPIC_API_KEY`: Anthropic API key
+- `GOOGLE_API_KEY`: Google Gemini API key
+- `OLLAMA_API_KEY`: Optional API key for Ollama (if required by your setup)
+- `OLLAMA_BASE_URL`: Ollama base URL (default: `http://localhost:11434`)
+- `AI_GATEWAY_API_KEY`: Vercel AI Gateway API key (if using `gateway`)
+- `AI_GATEWAY_BASE_URL`: Optional gateway base URL override
 - `DATA_DIR`: Local data directory (default: `./data`)
 - `SQLITE_DB_PATH`: SQLite database path (default: `./data/audit.db`)
 - `PORT`: Server port (default: `3000`)

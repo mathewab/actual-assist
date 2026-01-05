@@ -1,4 +1,4 @@
-import { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
+import type { LLMAdapter } from '../infra/llm/LLMAdapter.js';
 import type { SuggestionRepository } from '../infra/repositories/SuggestionRepository.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
@@ -115,6 +115,41 @@ interface CombinedSuggestionResult {
   category: CategorySuggestionResult;
 }
 
+interface PayeeIdentificationOutput {
+  canonicalPayeeName: string;
+  confidence: number;
+  reasoning: string;
+}
+
+interface CategorySuggestionOutput {
+  categoryId: string | null;
+  categoryName: string | null;
+  confidence: number;
+  reasoning: string;
+}
+
+interface FuzzyMatchVerificationOutput {
+  isSameMerchant: boolean;
+  canonicalPayeeName: string | null;
+  payeeConfidence: number;
+  payeeReasoning: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryConfidence: number;
+  categoryReasoning: string;
+}
+
+interface FuzzyMatchDisambiguationOutput {
+  matchIndex: number | null;
+  canonicalPayeeName: string | null;
+  payeeConfidence: number;
+  payeeReasoning: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryConfidence: number;
+  categoryReasoning: string;
+}
+
 /**
  * SuggestionService - generates AI suggestions for payees and categories
  * P1 (Single Responsibility): Focused on suggestion generation
@@ -129,12 +164,21 @@ interface CombinedSuggestionResult {
 export class SuggestionService {
   constructor(
     private actualBudget: ActualBudgetAdapter,
-    private openai: OpenAIAdapter,
+    private llm: LLMAdapter,
     private suggestionRepo: SuggestionRepository,
     private auditRepo: AuditRepository,
     private payeeCache?: PayeeCacheRepository,
     private payeeMatchCache?: PayeeMatchCacheRepository
   ) {}
+
+  private logLlmFailure(action: string, metadata: Record<string, unknown>): void {
+    this.auditRepo.log({
+      eventType: 'llm_call_failed',
+      entityType: 'suggestions',
+      entityId: action,
+      metadata,
+    });
+  }
 
   /**
    * Identify transactions that need an LLM retry because the previous attempt failed
@@ -441,28 +485,30 @@ ${categoryList}`;
   /**
    * Identify canonical payee name via LLM with web search
    */
-  private async identifyPayee(rawPayeeName: string): Promise<PayeeSuggestionResult> {
+  private async identifyPayee(
+    rawPayeeName: string,
+    strict: boolean
+  ): Promise<PayeeSuggestionResult> {
     try {
       const input = this.buildPayeeIdentificationInput(rawPayeeName);
-      logger.debug('Calling OpenAI for payee identification', { rawPayeeName });
+      logger.debug('Calling LLM for payee identification', { rawPayeeName });
 
-      const response = await this.openai.completion({
-        instructions: this.PAYEE_IDENTIFICATION_INSTRUCTIONS,
+      const result = await this.llm.generateObject<PayeeIdentificationOutput>({
+        system: this.PAYEE_IDENTIFICATION_INSTRUCTIONS,
         input,
         webSearch: true,
-        jsonSchema: {
+        schema: {
           name: 'payee_identification',
           schema: PAYEE_IDENTIFICATION_SCHEMA,
         },
       });
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
 
       return {
         payeeName: rawPayeeName,
         canonicalPayeeId: null, // Will be matched later if payee exists in budget
-        canonicalPayeeName: (result.canonicalPayeeName as string) || rawPayeeName,
-        confidence: (result.confidence as number) ?? 0.7,
-        rationale: (result.reasoning as string) || 'AI-identified payee',
+        canonicalPayeeName: result.canonicalPayeeName || rawPayeeName,
+        confidence: result.confidence ?? 0.7,
+        rationale: result.reasoning || 'AI-identified payee',
         source: 'ai',
       };
     } catch (error) {
@@ -470,6 +516,17 @@ ${categoryList}`;
         rawPayeeName,
         error: error instanceof Error ? error.message : String(error),
       });
+      this.logLlmFailure('identify_payee', {
+        rawPayeeName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (strict) {
+        throw new Error(
+          `LLM payee identification failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
       return {
         payeeName: rawPayeeName,
         canonicalPayeeId: null,
@@ -489,7 +546,8 @@ ${categoryList}`;
     payeeName: string,
     canonicalPayeeName: string | null,
     categories: Category[],
-    matchedPayeeCategories: Array<{ payeeName: string; categoryName: string; categoryId: string }>
+    matchedPayeeCategories: Array<{ payeeName: string; categoryName: string; categoryId: string }>,
+    strict: boolean
   ): Promise<CategorySuggestionResult> {
     try {
       const input = this.buildCategorySuggestionInput(
@@ -499,30 +557,28 @@ ${categoryList}`;
         matchedPayeeCategories
       );
 
-      logger.debug('Calling OpenAI for category suggestion with web search', {
+      logger.debug('Calling LLM for category suggestion with web search', {
         payeeName,
         canonicalPayeeName,
         matchedPayeesCount: matchedPayeeCategories.length,
       });
 
-      const response = await this.openai.completion({
-        instructions: this.CATEGORY_SUGGESTION_INSTRUCTIONS,
+      const result = await this.llm.generateObject<CategorySuggestionOutput>({
+        system: this.CATEGORY_SUGGESTION_INSTRUCTIONS,
         input,
         webSearch: true,
-        jsonSchema: {
+        schema: {
           name: 'category_suggestion',
           schema: CATEGORY_SUGGESTION_SCHEMA,
         },
       });
 
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
-
       return {
         payeeName,
-        categoryId: (result.categoryId as string) || null,
-        categoryName: (result.categoryName as string) || null,
-        confidence: (result.confidence as number) ?? 0.5,
-        rationale: (result.reasoning as string) || 'AI-suggested category',
+        categoryId: result.categoryId || null,
+        categoryName: result.categoryName || null,
+        confidence: result.confidence ?? 0.5,
+        rationale: result.reasoning || 'AI-suggested category',
         source: 'ai_web_search',
       };
     } catch (error) {
@@ -530,6 +586,18 @@ ${categoryList}`;
         payeeName,
         error: error instanceof Error ? error.message : String(error),
       });
+      this.logLlmFailure('suggest_category', {
+        payeeName,
+        canonicalPayeeName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (strict) {
+        throw new Error(
+          `LLM category suggestion failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
       return {
         payeeName,
         categoryId: null,
@@ -620,7 +688,8 @@ Respond with JSON only (no markdown):
     matchedCategory: string,
     matchedCategoryId: string,
     matchScore: number,
-    categories: Category[]
+    categories: Category[],
+    strict: boolean
   ): Promise<CombinedSuggestionResult> {
     const categoryList = categories
       .filter((cat) => !cat.hidden && !cat.isIncome)
@@ -635,39 +704,36 @@ Categories (id|name|group):
 ${categoryList}`;
 
     try {
-      const response = await this.openai.completion({
-        instructions: this.FUZZY_MATCH_INSTRUCTIONS,
+      const result = await this.llm.generateObject<FuzzyMatchVerificationOutput>({
+        system: this.FUZZY_MATCH_INSTRUCTIONS,
         input,
         webSearch: false,
-        jsonSchema: {
+        schema: {
           name: 'fuzzy_match_verification',
           schema: FUZZY_MATCH_VERIFICATION_SCHEMA,
         },
       });
 
-      logger.info('OpenAI response for fuzzy match verification', {
+      logger.info('LLM response for fuzzy match verification', {
         rawPayee,
         matchedPayee,
-        responseLength: response.length,
       });
-
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
 
       if (result.isSameMerchant === true) {
         return {
           payee: {
             payeeName: rawPayee,
             canonicalPayeeId: null,
-            canonicalPayeeName: (result.canonicalPayeeName as string) || matchedPayee,
-            confidence: (result.payeeConfidence as number) ?? 0.8,
+            canonicalPayeeName: result.canonicalPayeeName || matchedPayee,
+            confidence: result.payeeConfidence ?? 0.8,
             rationale: `Matched "${matchedPayee}" (${matchScore}%). ${result.payeeReasoning || ''}`,
             source: 'fuzzy_match',
           },
           category: {
             payeeName: rawPayee,
-            categoryId: (result.categoryId as string) || matchedCategoryId,
-            categoryName: (result.categoryName as string) || matchedCategory,
-            confidence: (result.categoryConfidence as number) ?? 0.8,
+            categoryId: result.categoryId || matchedCategoryId,
+            categoryName: result.categoryName || matchedCategory,
+            confidence: result.categoryConfidence ?? 0.8,
             rationale: `Matched payee "${matchedPayee}". ${result.categoryReasoning || ''}`,
             source: 'fuzzy_match',
           },
@@ -703,6 +769,18 @@ ${categoryList}`;
         matchedPayee,
         error: error instanceof Error ? error.message : String(error),
       });
+      this.logLlmFailure('verify_fuzzy_match', {
+        rawPayee,
+        matchedPayee,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (strict) {
+        throw new Error(
+          `LLM fuzzy match verification failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
       return {
         payee: {
           payeeName: rawPayee,
@@ -731,7 +809,8 @@ ${categoryList}`;
   private async disambiguateFuzzyMatches(
     rawPayee: string,
     candidates: FuzzyMatchResult[],
-    categories: Category[]
+    categories: Category[],
+    strict: boolean
   ): Promise<CombinedSuggestionResult> {
     if (candidates.length === 0) {
       return {
@@ -791,41 +870,38 @@ Categories (id|name|group):
 ${categoryList}`;
 
     try {
-      const response = await this.openai.completion({
-        instructions,
+      const result = await this.llm.generateObject<FuzzyMatchDisambiguationOutput>({
+        system: instructions,
         input,
         webSearch: false,
-        jsonSchema: {
+        schema: {
           name: 'fuzzy_match_disambiguation',
           schema: FUZZY_MATCH_DISAMBIGUATION_SCHEMA,
         },
       });
 
-      logger.info('OpenAI response for fuzzy match disambiguation', {
+      logger.info('LLM response for fuzzy match disambiguation', {
         rawPayee,
         candidateCount: candidates.length,
-        responseLength: response.length,
       });
 
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
-
-      const matchIndex = result.matchIndex as number | null;
+      const matchIndex = result.matchIndex ?? null;
       if (matchIndex !== null && matchIndex >= 1 && matchIndex <= candidates.length) {
         const matchedCandidate = candidates[matchIndex - 1];
         return {
           payee: {
             payeeName: rawPayee,
             canonicalPayeeId: null,
-            canonicalPayeeName: (result.canonicalPayeeName as string) || matchedCandidate.payeeName,
-            confidence: (result.payeeConfidence as number) ?? 0.7,
+            canonicalPayeeName: result.canonicalPayeeName || matchedCandidate.payeeName,
+            confidence: result.payeeConfidence ?? 0.7,
             rationale: `Matched "${matchedCandidate.payeeName}" (${matchedCandidate.score}%). ${result.payeeReasoning || ''}`,
             source: 'fuzzy_match',
           },
           category: {
             payeeName: rawPayee,
-            categoryId: (result.categoryId as string) || matchedCandidate.categoryId,
-            categoryName: (result.categoryName as string) || matchedCandidate.categoryName,
-            confidence: (result.categoryConfidence as number) ?? 0.7,
+            categoryId: result.categoryId || matchedCandidate.categoryId,
+            categoryName: result.categoryName || matchedCandidate.categoryName,
+            confidence: result.categoryConfidence ?? 0.7,
             rationale: `Matched payee category. ${result.categoryReasoning || ''}`,
             source: 'fuzzy_match',
           },
@@ -836,17 +912,17 @@ ${categoryList}`;
           payee: {
             payeeName: rawPayee,
             canonicalPayeeId: null,
-            canonicalPayeeName: (result.canonicalPayeeName as string) || null,
-            confidence: (result.payeeConfidence as number) ?? 0,
+            canonicalPayeeName: result.canonicalPayeeName || null,
+            confidence: result.payeeConfidence ?? 0,
             rationale: `No match found. ${result.payeeReasoning || ''}`,
             source: 'fuzzy_match',
           },
           category: {
             payeeName: rawPayee,
-            categoryId: (result.categoryId as string) || null,
-            categoryName: (result.categoryName as string) || null,
-            confidence: (result.categoryConfidence as number) ?? 0.5,
-            rationale: (result.categoryReasoning as string) || 'No matching payee',
+            categoryId: result.categoryId || null,
+            categoryName: result.categoryName || null,
+            confidence: result.categoryConfidence ?? 0.5,
+            rationale: result.categoryReasoning || 'No matching payee',
             source: 'fuzzy_match',
           },
         };
@@ -857,6 +933,18 @@ ${categoryList}`;
         candidateCount: candidates.length,
         error: error instanceof Error ? error.message : String(error),
       });
+      this.logLlmFailure('disambiguate_fuzzy_match', {
+        rawPayee,
+        candidateCount: candidates.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (strict) {
+        throw new Error(
+          `LLM fuzzy match disambiguation failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
       return {
         payee: {
           payeeName: rawPayee,
@@ -944,7 +1032,8 @@ ${categoryList}`;
         highConfidenceMatch.categoryName,
         highConfidenceMatch.categoryId,
         highConfidenceMatch.score,
-        categories
+        categories,
+        useAI
       );
 
       if (verified.payee.confidence > 0 || verified.category.confidence > 0) {
@@ -967,7 +1056,8 @@ ${categoryList}`;
       const disambiguated = await this.disambiguateFuzzyMatches(
         rawPayeeName,
         disambiguationCandidates,
-        categories
+        categories,
+        useAI
       );
 
       if (disambiguated.payee.confidence > 0 || disambiguated.category.confidence > 0) {
@@ -979,14 +1069,15 @@ ${categoryList}`;
     logger.info('No fuzzy match, using AI with web search', { rawPayeeName });
 
     // First identify the payee
-    const payeeResult = await this.identifyPayee(rawPayeeName);
+    const payeeResult = await this.identifyPayee(rawPayeeName, useAI);
 
     // Then suggest category with web search
     const categoryResult = await this.suggestCategory(
       rawPayeeName,
       payeeResult.canonicalPayeeName,
       categories,
-      [] // No matched payees
+      [], // No matched payees
+      useAI
     );
 
     return {
@@ -1135,7 +1226,7 @@ ${categoryList}`;
       }));
 
     // Similar payees provide context hints in the prompt
-    return this.suggestCategory(rawPayeeName, canonicalPayeeName, categories, similarPayees);
+    return this.suggestCategory(rawPayeeName, canonicalPayeeName, categories, similarPayees, true);
   }
 
   /**
@@ -1744,14 +1835,15 @@ ${categoryList}`;
 
       // Force regeneration using AI (bypass cache by calling AI directly)
       // First identify the payee
-      payeeResult = await this.identifyPayee(payeeName);
+      payeeResult = await this.identifyPayee(payeeName, true);
 
       // Then suggest category with web search
       categoryResult = await this.suggestCategory(
         payeeName,
         payeeResult.canonicalPayeeName,
         categories,
-        [] // No matched payees - force fresh AI suggestion
+        [], // No matched payees - force fresh AI suggestion
+        true
       );
     } else {
       const categories = await this.actualBudget.getCategories();
@@ -1857,12 +1949,13 @@ ${categoryList}`;
 
     if (useAI) {
       // Generate new suggestion once (same for all transactions with this payee)
-      payeeResult = await this.identifyPayee(payeeName);
+      payeeResult = await this.identifyPayee(payeeName, true);
       categoryResult = await this.suggestCategory(
         payeeName,
         payeeResult.canonicalPayeeName,
         categories,
-        [] // No matched payees - force fresh AI suggestion
+        [], // No matched payees - force fresh AI suggestion
+        true
       );
     } else {
       const fuzzyMatchCandidates = await this.buildFuzzyMatchCandidates(existing.budgetId);

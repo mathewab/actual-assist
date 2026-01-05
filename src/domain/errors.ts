@@ -26,11 +26,11 @@ export class ActualBudgetError extends AppError {
 }
 
 /**
- * OpenAI API errors (502 Bad Gateway)
+ * LLM API errors (502 Bad Gateway)
  */
-export class OpenAIError extends AppError {
+export class LLMError extends AppError {
   constructor(message: string, details?: unknown) {
-    super(message, 'OPENAI_API_ERROR', 502, details);
+    super(message, 'LLM_API_ERROR', 502, details);
   }
 }
 

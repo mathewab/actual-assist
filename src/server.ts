@@ -10,7 +10,8 @@ import rateLimit from 'express-rate-limit';
 import { DatabaseAdapter } from './infra/DatabaseAdapter.js';
 import { runMigrations } from './infra/migrations.js';
 import { ActualBudgetAdapter } from './infra/ActualBudgetAdapter.js';
-import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
+import { createLLMRouter } from './infra/llm/createLLMRouter.js';
+import { AppConfigRepository } from './infra/repositories/AppConfigRepository.js';
 import { SuggestionRepository } from './infra/repositories/SuggestionRepository.js';
 import { AuditRepository } from './infra/repositories/AuditRepository.js';
 import { PayeeCacheRepository } from './infra/repositories/PayeeCacheRepository.js';
@@ -29,6 +30,7 @@ import { JobEventBus } from './services/JobEventBus.js';
 import { JobOrchestrator } from './services/JobOrchestrator.js';
 import { JobTimeoutService } from './services/JobTimeoutService.js';
 import { PayeeMergeService } from './services/PayeeMergeService.js';
+import { LLMConfigService } from './services/LLMConfigService.js';
 import { createApiRouter } from './api/index.js';
 import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
 import { startScheduler } from './scheduler/SyncScheduler.js';
@@ -51,8 +53,8 @@ setLogger(loggerInstance);
 const db = new DatabaseAdapter(env);
 await runMigrations(env);
 const actualBudget = new ActualBudgetAdapter(env);
-const openai = new OpenAIAdapter(env);
-const openaiConfigured = openai.isConfigured();
+const appConfigRepo = new AppConfigRepository(db);
+const llm = createLLMRouter(env, appConfigRepo);
 
 // Initialize repositories
 const suggestionRepo = new SuggestionRepository(db);
@@ -66,12 +68,13 @@ const jobRepo = new JobRepository(db);
 const jobStepRepo = new JobStepRepository(db);
 const jobEventRepo = new JobEventRepository(db);
 const jobEventBus = new JobEventBus();
+const llmConfigService = new LLMConfigService(env, appConfigRepo, llm, auditRepo);
 
 // Initialize services
 const snapshotService = new SnapshotService(actualBudget, auditRepo, suggestionRepo);
 const suggestionService = new SuggestionService(
   actualBudget,
-  openai,
+  llm,
   suggestionRepo,
   auditRepo,
   payeeCache
@@ -84,7 +87,7 @@ const payeeMergeService = new PayeeMergeService(
   payeeMergeClusterMetaRepo,
   payeeMergePayeeSnapshotRepo,
   payeeMergeHiddenGroupRepo,
-  openai,
+  llm,
   auditRepo
 );
 const jobOrchestrator = new JobOrchestrator(
@@ -154,7 +157,7 @@ const apiRouter = createApiRouter({
   actualBudget,
   payeeMergeService,
   defaultBudgetId: env.ACTUAL_SYNC_ID || env.ACTUAL_BUDGET_ID || null,
-  openaiConfigured,
+  llmConfigService,
 });
 app.use('/api', apiRouter);
 

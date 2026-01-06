@@ -64,11 +64,14 @@ export function createApiRouter(deps: {
     })
   );
   router.use('/audit', createAuditRouter(deps.auditRepo));
-  router.use('/config', createConfigRouter({
-    aiConfigured: deps.aiConfigured,
-    aiBackend: deps.aiBackend,
-    aiCapabilities: deps.aiCapabilities,
-  }));
+  router.use(
+    '/config',
+    createConfigRouter({
+      aiConfigured: deps.aiConfigured,
+      aiBackend: deps.aiBackend,
+      aiCapabilities: deps.aiCapabilities,
+    })
+  );
 
   return router;
 }

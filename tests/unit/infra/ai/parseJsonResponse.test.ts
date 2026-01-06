@@ -28,7 +28,9 @@ describe('parseJsonResponse', () => {
   });
 
   it('should extract JSON object from text with extra content', () => {
-    const result = parseJsonResponse<{ result: boolean }>('Here is the result: {"result": true} More text');
+    const result = parseJsonResponse<{ result: boolean }>(
+      'Here is the result: {"result": true} More text'
+    );
     expect(result).toEqual({ result: true });
   });
 
@@ -44,7 +46,9 @@ describe('parseJsonResponse', () => {
   });
 
   it('should throw on invalid JSON', () => {
-    expect(() => parseJsonResponse('not valid json at all')).toThrow('Failed to parse JSON response');
+    expect(() => parseJsonResponse('not valid json at all')).toThrow(
+      'Failed to parse JSON response'
+    );
   });
 
   it('should handle case-insensitive code fence language', () => {

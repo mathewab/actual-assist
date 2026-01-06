@@ -22,7 +22,9 @@ export function createAIAdapter(env: Env): AIAdapter {
       logger.info('Using Google AI (Gemini) backend', { model: env.GOOGLE_AI_MODEL });
       return adapter;
     }
-    logger.warn('Google AI selected but not configured (missing GOOGLE_AI_API_KEY), falling back to OpenAI');
+    logger.warn(
+      'Google AI selected but not configured (missing GOOGLE_AI_API_KEY), falling back to OpenAI'
+    );
   }
 
   // Default to OpenAI

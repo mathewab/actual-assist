@@ -44,7 +44,7 @@
     "openai": "^6.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.11.0",
+    "react-router-dom": "^7.12.0",
     "winston": "^3.11.0",
     "zod": "^4.0.0"
   },

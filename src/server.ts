@@ -10,7 +10,7 @@ import rateLimit from 'express-rate-limit';
 import { DatabaseAdapter } from './infra/DatabaseAdapter.js';
 import { runMigrations } from './infra/migrations.js';
 import { ActualBudgetAdapter } from './infra/ActualBudgetAdapter.js';
-import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
+import { createAIAdapter } from './infra/ai/createAIAdapter.js';
 import { SuggestionRepository } from './infra/repositories/SuggestionRepository.js';
 import { AuditRepository } from './infra/repositories/AuditRepository.js';
 import { PayeeCacheRepository } from './infra/repositories/PayeeCacheRepository.js';
@@ -51,8 +51,8 @@ setLogger(loggerInstance);
 const db = new DatabaseAdapter(env);
 await runMigrations(env);
 const actualBudget = new ActualBudgetAdapter(env);
-const openai = new OpenAIAdapter(env);
-const openaiConfigured = openai.isConfigured();
+const aiAdapter = createAIAdapter(env);
+const aiConfigured = aiAdapter.isConfigured();
 
 // Initialize repositories
 const suggestionRepo = new SuggestionRepository(db);
@@ -71,7 +71,7 @@ const jobEventBus = new JobEventBus();
 const snapshotService = new SnapshotService(actualBudget, auditRepo, suggestionRepo);
 const suggestionService = new SuggestionService(
   actualBudget,
-  openai,
+  aiAdapter,
   suggestionRepo,
   auditRepo,
   payeeCache
@@ -84,7 +84,7 @@ const payeeMergeService = new PayeeMergeService(
   payeeMergeClusterMetaRepo,
   payeeMergePayeeSnapshotRepo,
   payeeMergeHiddenGroupRepo,
-  openai,
+  aiAdapter,
   auditRepo
 );
 const jobOrchestrator = new JobOrchestrator(
@@ -154,7 +154,9 @@ const apiRouter = createApiRouter({
   actualBudget,
   payeeMergeService,
   defaultBudgetId: env.ACTUAL_SYNC_ID || env.ACTUAL_BUDGET_ID || null,
-  openaiConfigured,
+  aiConfigured,
+  aiBackend: aiAdapter.getBackendName(),
+  aiCapabilities: aiAdapter.getCapabilities(),
 });
 app.use('/api', apiRouter);
 

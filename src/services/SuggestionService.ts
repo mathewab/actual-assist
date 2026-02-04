@@ -1,4 +1,5 @@
-import { OpenAIAdapter } from '../infra/OpenAIAdapter.js';
+import type { AIAdapter } from '../infra/ai/AIAdapter.js';
+import { parseJsonResponse } from '../infra/ai/parseJsonResponse.js';
 import type { SuggestionRepository } from '../infra/repositories/SuggestionRepository.js';
 import type { AuditRepository } from '../infra/repositories/AuditRepository.js';
 import type { ActualBudgetAdapter } from '../infra/ActualBudgetAdapter.js';
@@ -129,7 +130,7 @@ interface CombinedSuggestionResult {
 export class SuggestionService {
   constructor(
     private actualBudget: ActualBudgetAdapter,
-    private openai: OpenAIAdapter,
+    private ai: AIAdapter,
     private suggestionRepo: SuggestionRepository,
     private auditRepo: AuditRepository,
     private payeeCache?: PayeeCacheRepository,
@@ -444,18 +445,23 @@ ${categoryList}`;
   private async identifyPayee(rawPayeeName: string): Promise<PayeeSuggestionResult> {
     try {
       const input = this.buildPayeeIdentificationInput(rawPayeeName);
-      logger.debug('Calling OpenAI for payee identification', { rawPayeeName });
+      const canWebSearch = this.ai.getCapabilities().supportsWebSearch;
+      logger.debug('Calling AI for payee identification', {
+        rawPayeeName,
+        backend: this.ai.getBackendName(),
+        webSearch: canWebSearch,
+      });
 
-      const response = await this.openai.completion({
+      const response = await this.ai.completion({
         instructions: this.PAYEE_IDENTIFICATION_INSTRUCTIONS,
         input,
-        webSearch: true,
+        webSearch: canWebSearch,
         jsonSchema: {
           name: 'payee_identification',
           schema: PAYEE_IDENTIFICATION_SCHEMA,
         },
       });
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
+      const result = parseJsonResponse<Record<string, unknown>>(response);
 
       return {
         payeeName: rawPayeeName,
@@ -499,23 +505,26 @@ ${categoryList}`;
         matchedPayeeCategories
       );
 
-      logger.debug('Calling OpenAI for category suggestion with web search', {
+      const canWebSearch = this.ai.getCapabilities().supportsWebSearch;
+      logger.debug('Calling AI for category suggestion', {
         payeeName,
         canonicalPayeeName,
         matchedPayeesCount: matchedPayeeCategories.length,
+        backend: this.ai.getBackendName(),
+        webSearch: canWebSearch,
       });
 
-      const response = await this.openai.completion({
+      const response = await this.ai.completion({
         instructions: this.CATEGORY_SUGGESTION_INSTRUCTIONS,
         input,
-        webSearch: true,
+        webSearch: canWebSearch,
         jsonSchema: {
           name: 'category_suggestion',
           schema: CATEGORY_SUGGESTION_SCHEMA,
         },
       });
 
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
+      const result = parseJsonResponse<Record<string, unknown>>(response);
 
       return {
         payeeName,
@@ -635,7 +644,7 @@ Categories (id|name|group):
 ${categoryList}`;
 
     try {
-      const response = await this.openai.completion({
+      const response = await this.ai.completion({
         instructions: this.FUZZY_MATCH_INSTRUCTIONS,
         input,
         webSearch: false,
@@ -645,13 +654,14 @@ ${categoryList}`;
         },
       });
 
-      logger.info('OpenAI response for fuzzy match verification', {
+      logger.info('AI response for fuzzy match verification', {
         rawPayee,
         matchedPayee,
         responseLength: response.length,
+        backend: this.ai.getBackendName(),
       });
 
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
+      const result = parseJsonResponse<Record<string, unknown>>(response);
 
       if (result.isSameMerchant === true) {
         return {
@@ -791,7 +801,7 @@ Categories (id|name|group):
 ${categoryList}`;
 
     try {
-      const response = await this.openai.completion({
+      const response = await this.ai.completion({
         instructions,
         input,
         webSearch: false,
@@ -801,13 +811,14 @@ ${categoryList}`;
         },
       });
 
-      logger.info('OpenAI response for fuzzy match disambiguation', {
+      logger.info('AI response for fuzzy match disambiguation', {
         rawPayee,
         candidateCount: candidates.length,
         responseLength: response.length,
+        backend: this.ai.getBackendName(),
       });
 
-      const result = OpenAIAdapter.parseJsonResponse<Record<string, unknown>>(response);
+      const result = parseJsonResponse<Record<string, unknown>>(response);
 
       const matchIndex = result.matchIndex as number | null;
       if (matchIndex !== null && matchIndex >= 1 && matchIndex <= candidates.length) {

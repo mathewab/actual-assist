@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
-import react from 'eslint-plugin-react';
+import eslintReact from '@eslint-react/eslint-plugin';
 import reactHooks from 'eslint-plugin-react-hooks';
 import prettier from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
@@ -53,21 +53,16 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
-      react,
+      ...eslintReact.configs['recommended-typescript'].plugins,
       'react-hooks': reactHooks,
       prettier,
     },
-    settings: {
-      react: {
-        version: 'detect',
-      },
-    },
     rules: {
       ...tsPlugin.configs.recommended.rules,
-      ...react.configs.recommended.rules,
+      ...eslintReact.configs['recommended-typescript'].rules,
       ...reactHooks.configs.recommended.rules,
       ...prettierConfig.rules,
-      'react/react-in-jsx-scope': 'off',
+      '@eslint-react/unsupported-syntax': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',

@@ -17,7 +17,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@actual-app/core/types/*": ["./src/types/actual-core/types/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/ui/**", "node_modules", "dist", "tests"]

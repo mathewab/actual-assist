@@ -1,5 +1,4 @@
 import api from '@actual-app/api';
-import type { Query as AqlQuery } from '@actual-app/api/@types/loot-core/src/shared/query';
 import { ActualBudgetError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
@@ -136,10 +135,6 @@ function parseGoalDef(goalDef: unknown): {
   }
 
   return { templates: [], parseError: 'Unsupported goal_def format' };
-}
-
-function toAqlQuery(query: ReturnType<typeof api.q>): AqlQuery {
-  return query as unknown as AqlQuery;
 }
 
 /**
@@ -299,8 +294,8 @@ export class ActualBudgetAdapter {
       await api.internal.send('budget/store-note-templates', null);
 
       const [categoryResult, groupResult] = await Promise.all([
-        api.aqlQuery(toAqlQuery(api.q('categories').select(['*']))),
-        api.aqlQuery(toAqlQuery(api.q('category_groups').select(['*']))),
+        api.aqlQuery(api.q('categories').select(['*'])),
+        api.aqlQuery(api.q('category_groups').select(['*'])),
       ]);
 
       const categories = (categoryResult as AqlResult<ActualCategoryRow>).data.filter(
@@ -310,12 +305,10 @@ export class ActualBudgetAdapter {
       const categoryIds = categories.map((category) => category.id);
       const notesResult = categoryIds.length
         ? ((await api.aqlQuery(
-            toAqlQuery(
-              api
-                .q('notes')
-                .filter({ id: { $oneof: categoryIds } })
-                .select(['*'])
-            )
+            api
+              .q('notes')
+              .filter({ id: { $oneof: categoryIds } })
+              .select(['*'])
           )) as AqlResult<{ id: string; note?: string | null }>)
         : { data: [] as Array<{ id: string; note?: string | null }> };
       const notesMap = new Map<string, string | null>(
@@ -398,7 +391,7 @@ export class ActualBudgetAdapter {
 
     try {
       const result = (await api.aqlQuery(
-        toAqlQuery(api.q('notes').filter({ id: categoryId }).select(['*']))
+        api.q('notes').filter({ id: categoryId }).select(['*'])
       )) as AqlResult<{ note?: string | null }>;
       const note = result.data?.[0]?.note;
       return typeof note === 'string' ? note : null;
@@ -667,8 +660,8 @@ export class ActualBudgetAdapter {
       logger.info('Retrieved budget list', { count: budgets.length });
 
       const result = budgets
-        .filter((b) => b.id !== undefined && b.name !== undefined)
-        .map((b) => ({
+        .filter((b: { id?: string; name?: string }) => b.id !== undefined && b.name !== undefined)
+        .map((b: { id?: string; name?: string }) => ({
           id: b.id!,
           name: b.name!,
         }));

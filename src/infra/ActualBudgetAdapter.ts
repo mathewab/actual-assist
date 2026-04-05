@@ -1,5 +1,4 @@
 import api from '@actual-app/api';
-import type { Query as AqlQuery } from '@actual-app/core/src/shared/query';
 import { ActualBudgetError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
@@ -137,6 +136,8 @@ function parseGoalDef(goalDef: unknown): {
 
   return { templates: [], parseError: 'Unsupported goal_def format' };
 }
+
+type AqlQuery = Parameters<typeof api.aqlQuery>[0];
 
 function toAqlQuery(query: ReturnType<typeof api.q>): AqlQuery {
   return query as unknown as AqlQuery;
@@ -296,7 +297,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      await api.internal.send('budget/store-note-templates', null);
+      await api.internal.send('budget/store-note-templates', undefined);
 
       const [categoryResult, groupResult] = await Promise.all([
         api.aqlQuery(toAqlQuery(api.q('categories').select(['*']))),
@@ -338,7 +339,7 @@ export class ActualBudgetAdapter {
         const { templates, parseError } = parseGoalDef(category.goal_def);
         const renderedNote =
           templates.length > 0
-            ? await api.internal.send('budget/render-note-templates', templates)
+            ? await api.internal.send('budget/render-note-templates', templates as never)
             : '';
 
         templateSummaries.push({
@@ -380,7 +381,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      return await api.internal.send('budget/render-note-templates', templates);
+      return await api.internal.send('budget/render-note-templates', templates as never);
     } catch (error) {
       throw new ActualBudgetError('Failed to render note templates', { error });
     }
@@ -418,7 +419,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      await api.internal.send('notes-save', { id: categoryId, note });
+      await api.internal.send('notes-save', { id: categoryId, note: note ?? '' });
     } catch (error) {
       throw new ActualBudgetError('Failed to update category notes', {
         categoryId,
@@ -438,7 +439,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      const result = (await api.internal.send('budget/check-templates', null)) as {
+      const result = (await api.internal.send('budget/check-templates', undefined)) as {
         message: string;
         pre?: string;
       };

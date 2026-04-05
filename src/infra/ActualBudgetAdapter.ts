@@ -1,5 +1,5 @@
 import api from '@actual-app/api';
-import type { Query as AqlQuery } from '@actual-app/api/@types/loot-core/src/shared/query';
+import type { Query as AqlQuery } from '@actual-app/core/src/shared/query';
 import { ActualBudgetError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
@@ -663,7 +663,7 @@ export class ActualBudgetAdapter {
         password: this.env.ACTUAL_PASSWORD,
       });
 
-      const budgets = await api.getBudgets();
+      const budgets: Array<{ id?: string; name?: string }> = await api.getBudgets();
       logger.info('Retrieved budget list', { count: budgets.length });
 
       const result = budgets

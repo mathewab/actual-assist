@@ -72,8 +72,7 @@ interface CorrectionModalState {
 
 type PayeeOption = { id: string; name: string; type: 'existing' | 'add_new' };
 type PayeeCorrectionSelection =
-  | { mode: 'existing'; payeeId: string }
-  | { mode: 'new'; name: string };
+  { mode: 'existing'; payeeId: string } | { mode: 'new'; name: string };
 
 const addNewPayeeOption: PayeeOption = { id: 'add_new', name: 'Add new payee', type: 'add_new' };
 const filterPayeeOptions = createFilterOptions<PayeeOption>({ limit: 50 });

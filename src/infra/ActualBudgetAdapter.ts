@@ -3,6 +3,7 @@ import { ActualBudgetError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
 import type { Transaction, Category } from '../domain/entities/BudgetSnapshot.js';
+import type { Template } from '@actual-app/core/types/models/templates';
 
 type ActualAccount = {
   id: string;
@@ -291,7 +292,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      await api.internal.send('budget/store-note-templates', null);
+      await api.internal.send('budget/store-note-templates');
 
       const [categoryResult, groupResult] = await Promise.all([
         api.aqlQuery(api.q('categories').select(['*'])),
@@ -331,7 +332,7 @@ export class ActualBudgetAdapter {
         const { templates, parseError } = parseGoalDef(category.goal_def);
         const renderedNote =
           templates.length > 0
-            ? await api.internal.send('budget/render-note-templates', templates)
+            ? await api.internal.send('budget/render-note-templates', templates as Template[])
             : '';
 
         templateSummaries.push({
@@ -373,7 +374,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      return await api.internal.send('budget/render-note-templates', templates);
+      return await api.internal.send('budget/render-note-templates', templates as Template[]);
     } catch (error) {
       throw new ActualBudgetError('Failed to render note templates', { error });
     }
@@ -411,7 +412,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      await api.internal.send('notes-save', { id: categoryId, note });
+      await api.internal.send('notes-save', { id: categoryId, note: note ?? '' });
     } catch (error) {
       throw new ActualBudgetError('Failed to update category notes', {
         categoryId,
@@ -431,7 +432,7 @@ export class ActualBudgetAdapter {
     }
 
     try {
-      const result = (await api.internal.send('budget/check-templates', null)) as {
+      const result = (await api.internal.send('budget/check-templates')) as {
         message: string;
         pre?: string;
       };

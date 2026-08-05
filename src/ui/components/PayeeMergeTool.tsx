@@ -32,8 +32,7 @@ interface PayeeMergeToolProps {
 type TargetSelection = { mode: 'existing'; payeeId: string } | { mode: 'new'; name: string };
 
 type PayeeOption =
-  | { id: string; name: string; type: 'existing' }
-  | { id: 'add_new'; name: string; type: 'add_new' };
+  { id: string; name: string; type: 'existing' } | { id: 'add_new'; name: string; type: 'add_new' };
 
 export function PayeeMergeTool({ budgetId }: PayeeMergeToolProps) {
   const queryClient = useQueryClient();

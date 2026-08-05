@@ -116,14 +116,7 @@ interface TemplateDraft {
 }
 
 type FieldKey =
-  | 'priority'
-  | 'comment'
-  | 'limit'
-  | 'repeat'
-  | 'from'
-  | 'previous'
-  | 'adjustment'
-  | 'full';
+  'priority' | 'comment' | 'limit' | 'repeat' | 'from' | 'previous' | 'adjustment' | 'full';
 
 type FieldVisibility = Record<FieldKey, boolean>;
 

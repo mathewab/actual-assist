@@ -1,0 +1,87 @@
+name: Renovate Approval
+
+on:
+  workflow_run:
+    workflows:
+      - PR Validation
+      - CodeQL
+    types:
+      - completed
+
+jobs:
+  approve:
+    name: Approve eligible Renovate PRs
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Create actual-assist bot token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ACTUAL_ASSIST_BOT_ID }}
+          private-key: ${{ secrets.ACTUAL_ASSIST_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Approve eligible Renovate pull requests
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          pull_requests=$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${REPOSITORY}/commits/${WORKFLOW_SHA}/pulls" \
+            --jq '.[].number')
+
+          if [[ -z "${pull_requests}" ]]; then
+            echo "No pull requests are associated with this workflow run."
+            exit 0
+          fi
+
+          while IFS= read -r pr_number; do
+            pr=$(gh pr view "${pr_number}" --repo "${REPOSITORY}" \
+              --json author,baseRefName,headRefName,labels,reviews,statusCheckRollup)
+
+            if ! jq -e '
+              .author.login == "renovate[bot]" or .author.login == "app/renovate"
+            ' <<<"${pr}" >/dev/null; then
+              echo "Skipping #${pr_number}: not authored by Renovate."
+              continue
+            fi
+
+            if ! jq -e '
+              .baseRefName == "main" and
+              (.headRefName | startswith("renovate/")) and
+              any(.labels[]?; .name == "renovate-automerge")
+            ' <<<"${pr}" >/dev/null; then
+              echo "Skipping #${pr_number}: not an eligible Renovate PR."
+              continue
+            fi
+
+            if ! jq -e '
+              (.statusCheckRollup | length > 0) and
+              all(.statusCheckRollup[];
+                .name != null and
+                .status == "COMPLETED" and
+                .conclusion == "SUCCESS")
+            ' <<<"${pr}" >/dev/null; then
+              echo "Skipping #${pr_number}: required checks are not all successful."
+              continue
+            fi
+
+            if jq -e 'any(.reviews[]?; .user.login == "actual-assist-bot[bot]" and .state == "APPROVED")' <<<"${pr}" >/dev/null; then
+              echo "Skipping #${pr_number}: already approved by actual-assist-bot."
+              continue
+            fi
+
+            gh pr review "${pr_number}" --repo "${REPOSITORY}" \
+              --approve \
+              --body "Automated approval: Renovate PR and all reported checks passed."
+          done <<<"${pull_requests}"

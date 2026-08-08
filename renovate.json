@@ -1,6 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "extends": ["config:recommended"],
+  "prConcurrentLimit": 5,
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Auto-merge patch and minor dependency updates",
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "labels": ["renovate-automerge"]
+    },
+    {
+      "description": "Auto-merge GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "labels": ["renovate-automerge"]
+    }
   ]
 }

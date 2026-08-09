@@ -46,6 +46,9 @@ jobs:
           fi
 
           while IFS= read -r pr_number; do
+            echo "Processing pull request #${pr_number}."
+            echo "::notice title=Dependency pull request::Processing #${pr_number}"
+
             pr=$(gh pr view "${pr_number}" --repo "${REPOSITORY}" \
               --json author,baseRefName,headRefName,labels,reviews,statusCheckRollup)
 

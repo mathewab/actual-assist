@@ -8,12 +8,20 @@ on:
     types:
       - completed
 
+concurrency:
+  group: dependency-approval-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
 jobs:
   approve:
     name: Approve eligible dependency update PRs
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event.workflow_run.event == 'pull_request'
+      }}
     runs-on: ubuntu-latest
     permissions:
+      checks: write
       contents: write
       pull-requests: write
     steps:
@@ -25,6 +33,7 @@ jobs:
           private-key: ${{ secrets.ACTUAL_ASSIST_BOT_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           permission-contents: write
+          permission-checks: write
           permission-pull-requests: write
 
       - name: Approve eligible dependency update pull requests
@@ -50,14 +59,60 @@ jobs:
             echo "::notice title=Dependency pull request::Processing #${pr_number}"
 
             pr=$(gh pr view "${pr_number}" --repo "${REPOSITORY}" \
-              --json author,baseRefName,headRefName,labels,reviews,statusCheckRollup)
+              --json author,baseRefName,headRefName,headRefOid,labels,reviews,statusCheckRollup)
+
+            pr_sha=$(jq -r '.headRefOid' <<<"${pr}")
+            check_run_id=$(gh api \
+              "/repos/${REPOSITORY}/commits/${pr_sha}/check-runs?per_page=100" \
+              --jq '.check_runs[] | select(.name == "Dependency Update Approval") | .id' \
+              | head -n 1)
+
+            check_payload=$(jq -n \
+              --arg name "Dependency Update Approval" \
+              --arg head_sha "${pr_sha}" \
+              --arg external_id "${WORKFLOW_SHA}" \
+              '{name: $name, head_sha: $head_sha, external_id: $external_id, status: "in_progress"}')
+
+            if [[ -n "${check_run_id}" ]]; then
+              gh api --method PATCH \
+                "/repos/${REPOSITORY}/check-runs/${check_run_id}" \
+                --input - <<<"${check_payload}" >/dev/null
+            else
+              check_run_id=$(gh api --method POST \
+                "/repos/${REPOSITORY}/check-runs" \
+                --input - <<<"${check_payload}" \
+                --jq '.id')
+            fi
+
+            finish_check() {
+              local conclusion="$1"
+              local title="$2"
+              local summary="$3"
+              local completed_at
+              completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+              local result_payload
+              result_payload=$(jq -n \
+                --arg status "completed" \
+                --arg conclusion "${conclusion}" \
+                --arg completed_at "${completed_at}" \
+                --arg title "${title}" \
+                --arg summary "${summary}" \
+                '{status: $status, conclusion: $conclusion, completed_at: $completed_at,
+                  output: {title: $title, summary: $summary}}')
+              gh api --method PATCH \
+                "/repos/${REPOSITORY}/check-runs/${check_run_id}" \
+                --input - <<<"${result_payload}" >/dev/null
+            }
 
             if ! jq -e '
               .author.login == "renovate[bot]" or
               .author.login == "app/renovate" or
-              .author.login == "dependabot[bot]"
+              .author.login == "dependabot[bot]" or
+              .author.login == "app/dependabot"
             ' <<<"${pr}" >/dev/null; then
               echo "Skipping #${pr_number}: not authored by Renovate or Dependabot."
+              finish_check "neutral" "Not a dependency update" \
+                "This pull request was not authored by Renovate or Dependabot."
               continue
             fi
 
@@ -67,12 +122,13 @@ jobs:
                 ((.author.login == "renovate[bot]" or .author.login == "app/renovate") and
                   (.headRefName | startswith("renovate/")) and
                   any(.labels[]?; .name == "renovate-automerge")) or
-                (.author.login == "dependabot[bot]" and
-                  (.headRefName | startswith("dependabot/")) and
-                  any(.labels[]?; .name == "dependabot-automerge"))
+                ((.author.login == "dependabot[bot]" or .author.login == "app/dependabot") and
+                  (.headRefName | startswith("dependabot/")))
               )
             ' <<<"${pr}" >/dev/null; then
               echo "Skipping #${pr_number}: not an eligible Renovate or Dependabot PR."
+              finish_check "neutral" "Not eligible for automatic merge" \
+                "The pull request does not match the configured dependency-update eligibility rules."
               continue
             fi
 
@@ -81,9 +137,25 @@ jobs:
               all(.statusCheckRollup[];
                 .name != null and
                 .status == "COMPLETED" and
-                .conclusion == "SUCCESS")
+                (.conclusion == "SUCCESS" or
+                 .conclusion == "NEUTRAL" or
+                 .conclusion == "SKIPPED"))
             ' <<<"${pr}" >/dev/null; then
-              echo "Skipping #${pr_number}: required checks are not all successful."
+              if jq -e '
+                any(.statusCheckRollup[];
+                  .status == "COMPLETED" and
+                  (.conclusion != "SUCCESS" and
+                   .conclusion != "NEUTRAL" and
+                   .conclusion != "SKIPPED"))
+              ' <<<"${pr}" >/dev/null; then
+                echo "Skipping #${pr_number}: one or more checks failed."
+                finish_check "failure" "Checks failed" \
+                  "One or more dependency update checks failed."
+              else
+                echo "Skipping #${pr_number}: required checks are not all complete."
+                finish_check "neutral" "Waiting for checks" \
+                  "Dependency update checks are still pending."
+              fi
               continue
             fi
 
@@ -100,4 +172,7 @@ jobs:
               --admin \
               --squash \
               --delete-branch
+
+            finish_check "success" "Approved and merged" \
+              "Automated approval and administrator squash merge completed successfully."
           done <<<"${pull_requests}"

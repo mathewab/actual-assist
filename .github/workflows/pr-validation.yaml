@@ -6,6 +6,10 @@ on:
       - main
       - develop
 
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   app-lint:
     name: App Lint

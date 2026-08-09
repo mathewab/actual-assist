@@ -91,15 +91,6 @@ jobs:
       - name: Lint Helm chart
         run: helm lint charts/actual-assist/
 
-      - name: Ensure chart release tag exists
-        run: |
-          chart_version=$(awk '$1 == "version:" { print $2; exit }' charts/actual-assist/Chart.yaml)
-          chart_tag="actual-assist-${chart_version}"
-          if ! git ls-remote --exit-code origin "refs/tags/${chart_tag}" >/dev/null 2>&1; then
-            git tag "${chart_tag}" "$(git rev-parse HEAD)"
-            git push origin "${chart_tag}"
-          fi
-      
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         with:

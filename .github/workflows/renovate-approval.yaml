@@ -41,6 +41,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+          APPROVAL_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -71,7 +72,8 @@ jobs:
               --arg name "Dependency Update Approval" \
               --arg head_sha "${pr_sha}" \
               --arg external_id "${WORKFLOW_SHA}" \
-              '{name: $name, head_sha: $head_sha, external_id: $external_id, status: "in_progress"}')
+              --arg details_url "${APPROVAL_RUN_URL}" \
+              '{name: $name, head_sha: $head_sha, external_id: $external_id, details_url: $details_url, status: "in_progress"}')
 
             if [[ -n "${check_run_id}" ]]; then
               gh api --method PATCH \
@@ -97,7 +99,9 @@ jobs:
                 --arg completed_at "${completed_at}" \
                 --arg title "${title}" \
                 --arg summary "${summary}" \
+                --arg details_url "${APPROVAL_RUN_URL}" \
                 '{status: $status, conclusion: $conclusion, completed_at: $completed_at,
+                  details_url: $details_url,
                   output: {title: $title, summary: $summary}}')
               gh api --method PATCH \
                 "/repos/${REPOSITORY}/check-runs/${check_run_id}" \

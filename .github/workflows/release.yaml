@@ -72,7 +72,7 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
-          version: '3.13.0'
+          version: '4.2.3'
       
       - name: Lint Helm chart
         run: helm lint charts/actual-assist/

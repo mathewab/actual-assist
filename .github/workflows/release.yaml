@@ -14,6 +14,7 @@ jobs:
   build-and-push-app:
     name: Build and Push App Image
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     permissions:
       contents: read
       packages: write
@@ -58,6 +59,7 @@ jobs:
     name: Release Helm Chart
     runs-on: ubuntu-latest
     needs: [build-and-push-app]
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: write
     steps:

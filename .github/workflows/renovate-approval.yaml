@@ -95,22 +95,9 @@ jobs:
                 --body "Automated approval: dependency update PR and all reported checks passed."
             fi
 
-            pr=$(gh pr view "${pr_number}" --repo "${REPOSITORY}" \
-              --json autoMergeRequest,mergeStateStatus)
-
-            if jq -e '.mergeStateStatus == "BLOCKED"' <<<"${pr}" >/dev/null; then
-              echo "Merging #${pr_number} with administrator bypass because GitHub reports it as blocked."
-              gh pr merge "${pr_number}" --repo "${REPOSITORY}" \
-                --admin \
-                --squash \
-                --delete-branch
-            elif jq -e '.autoMergeRequest == null' <<<"${pr}" >/dev/null; then
-              echo "Enabling squash auto-merge for #${pr_number}."
-              gh pr merge "${pr_number}" --repo "${REPOSITORY}" \
-                --auto \
-                --squash \
-                --delete-branch
-            else
-              echo "Skipping auto-merge setup for #${pr_number}: already enabled."
-            fi
+            echo "Merging #${pr_number} with administrator bypass using squash merge."
+            gh pr merge "${pr_number}" --repo "${REPOSITORY}" \
+              --admin \
+              --squash \
+              --delete-branch
           done <<<"${pull_requests}"

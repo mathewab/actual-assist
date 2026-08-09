@@ -63,15 +63,25 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Create actual-assist bot token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ACTUAL_ASSIST_BOT_ID }}
+          private-key: ${{ secrets.ACTUAL_ASSIST_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: write
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'v0.8.0' || github.ref }}
+          token: ${{ steps.app-token.outputs.token }}
       
       - name: Configure Git
         run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git config user.name "actual-assist-bot[bot]"
+          git config user.email "actual-assist-bot[bot]@users.noreply.github.com"
       
       - name: Setup Helm
         uses: azure/setup-helm@v5
@@ -97,7 +107,7 @@ jobs:
           version: v1.8.1
           skip_existing: true
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_TOKEN: "${{ steps.app-token.outputs.token }}"
 
   create-github-release:
     name: Create GitHub Release

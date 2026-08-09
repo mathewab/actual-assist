@@ -1,4 +1,4 @@
-name: Renovate Approval
+name: Dependency Update Approval
 
 on:
   workflow_run:
@@ -10,11 +10,11 @@ on:
 
 jobs:
   approve:
-    name: Approve eligible Renovate PRs
+    name: Approve eligible dependency update PRs
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
       - name: Create actual-assist bot token
@@ -24,10 +24,10 @@ jobs:
           app-id: ${{ secrets.ACTUAL_ASSIST_BOT_ID }}
           private-key: ${{ secrets.ACTUAL_ASSIST_BOT_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          permission-contents: read
+          permission-contents: write
           permission-pull-requests: write
 
-      - name: Approve eligible Renovate pull requests
+      - name: Approve eligible dependency update pull requests
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPOSITORY: ${{ github.repository }}
@@ -50,18 +50,26 @@ jobs:
               --json author,baseRefName,headRefName,labels,reviews,statusCheckRollup)
 
             if ! jq -e '
-              .author.login == "renovate[bot]" or .author.login == "app/renovate"
+              .author.login == "renovate[bot]" or
+              .author.login == "app/renovate" or
+              .author.login == "dependabot[bot]"
             ' <<<"${pr}" >/dev/null; then
-              echo "Skipping #${pr_number}: not authored by Renovate."
+              echo "Skipping #${pr_number}: not authored by Renovate or Dependabot."
               continue
             fi
 
             if ! jq -e '
               .baseRefName == "main" and
-              (.headRefName | startswith("renovate/")) and
-              any(.labels[]?; .name == "renovate-automerge")
+              (
+                ((.author.login == "renovate[bot]" or .author.login == "app/renovate") and
+                  (.headRefName | startswith("renovate/")) and
+                  any(.labels[]?; .name == "renovate-automerge")) or
+                (.author.login == "dependabot[bot]" and
+                  (.headRefName | startswith("dependabot/")) and
+                  any(.labels[]?; .name == "dependabot-automerge"))
+              )
             ' <<<"${pr}" >/dev/null; then
-              echo "Skipping #${pr_number}: not an eligible Renovate PR."
+              echo "Skipping #${pr_number}: not an eligible Renovate or Dependabot PR."
               continue
             fi
 
@@ -77,11 +85,22 @@ jobs:
             fi
 
             if jq -e 'any(.reviews[]?; .user.login == "actual-assist-bot[bot]" and .state == "APPROVED")' <<<"${pr}" >/dev/null; then
-              echo "Skipping #${pr_number}: already approved by actual-assist-bot."
-              continue
+              echo "#${pr_number}: already approved by actual-assist-bot."
+            else
+              gh pr review "${pr_number}" --repo "${REPOSITORY}" \
+                --approve \
+                --body "Automated approval: dependency update PR and all reported checks passed."
             fi
 
-            gh pr review "${pr_number}" --repo "${REPOSITORY}" \
-              --approve \
-              --body "Automated approval: Renovate PR and all reported checks passed."
+            pr=$(gh pr view "${pr_number}" --repo "${REPOSITORY}" --json autoMergeRequest)
+
+            if jq -e '.autoMergeRequest == null' <<<"${pr}" >/dev/null; then
+              echo "Enabling auto-merge for #${pr_number}."
+              gh pr merge "${pr_number}" --repo "${REPOSITORY}" \
+                --auto \
+                --squash \
+                --delete-branch
+            else
+              echo "Skipping auto-merge setup for #${pr_number}: already enabled."
+            fi
           done <<<"${pull_requests}"

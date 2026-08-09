@@ -57,7 +57,8 @@ jobs:
 
           while IFS= read -r pr_number; do
             echo "Processing pull request #${pr_number}."
-            echo "::notice title=Dependency pull request::Processing #${pr_number}"
+            pull_request_url="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${pr_number}"
+            echo "::notice title=Dependency pull request::Processing #${pr_number}: ${pull_request_url}"
 
             pr=$(gh pr view "${pr_number}" --repo "${REPOSITORY}" \
               --json author,baseRefName,headRefName,headRefOid,labels,reviews,statusCheckRollup)

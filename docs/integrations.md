@@ -65,3 +65,24 @@ The October 25 deployment investigation reports 0.8.1 is already crash-looping a
 ### Startup compatibility evidence
 
 The released [v0.8.1 package](https://github.com/mathewab/actual-assist/blob/v0.8.1/package.json) pins Actual API 26.8.1. Current main already pins 26.10.0, matching the reported live Actual server 26.10.0. The official 26.10.0 core includes `1787013118115_add_account_groups.sql`, which creates `account_groups` and adds `accounts.account_group_id`. An isolated in-memory SQLite fixture reproduced `no such column: account_group_id` before applying that SQL and successfully queried the column afterward. This supports an SDK/schema mismatch diagnosis; it does not prove the state or recovery behavior of the live cache. No real budget or cached database was opened. The feature release also includes all previously unreleased main changes since 0.8.1, including that SDK upgrade; operators must review the complete release diff and backup/recovery plan, not only this PR.
+
+### Restored-copy rollout controls
+
+The chart enforces one application replica (or zero for coordinated maintenance) and uses `Recreate`, so Deployment upgrades terminate the old pod before starting the new pod. `storage.existingClaim` selects a pre-provisioned/restored PVC in the same namespace; blank retains the original claim. The original chart-owned `<release-fullname>-data` PVC is still rendered unchanged when an external claim is selected, avoiding Helm pruning during the switch. Do not uninstall the release or delete its original PVC as a rollback action: keeping that resource in the chart does not change its storage reclaim policy. The external claim must not be mounted by another application writer. Recreate does not fence other deployments or manual pods.
+
+For a separately approved restored-copy rollout, use these values (claim name is illustrative):
+
+```yaml
+app:
+  replicaCount: 1
+storage:
+  existingClaim: actual-assist-restored-0-9-0
+env:
+  scheduledSyncEnabled: false
+integrations:
+  enabled: false
+```
+
+`SCHEDULED_SYNC_ENABLED` (chart `env.scheduledSyncEnabled`) defaults to true to preserve existing behavior. False prevents creation of the app's scheduled sync timer; configuration changes trigger pod rollout through the ConfigMap checksum. It does **not** disable startup `api.downloadBudget()`, local database migrations, upstream synchronization, SDK services, or manually requested legacy UI operations. Existing interval behavior is unchanged: values above 59 minutes currently schedule hourly despite the default value of 360. `SYNC_INTERVAL_MINUTES=0` remains invalid; use the explicit enable flag.
+
+All `/data` contents must be preserved during an approved backup: app `actual-assist.db` and possible SQLite sidecars, Actual budget directories/databases/metadata, and all other SDK state. Stop the application writer before an archive, verify the archive outside the volume's failure domain, and restore into a separate PVC before starting the new application. Actual initialization against that copy can migrate and sync; it is not a read-only verification step and requires explicit operational approval. No chart setting performs the archive, restore, or migration on the operator's behalf.

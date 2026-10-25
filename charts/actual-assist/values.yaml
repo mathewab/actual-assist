@@ -3,8 +3,8 @@
 
 # Application configuration
 app:
-  # replicaCount: Keep at 1 for SQLite (file-based, single-writer).
-  # For production multi-replica: migrate to PostgreSQL external database.
+  # One SQLite writer; 0 is permitted only for coordinated maintenance.
+  # The chart rejects other counts and uses Recreate (no rolling overlap).
   replicaCount: 1
   image:
     repository: ghcr.io/mathewab/actual-assist
@@ -49,6 +49,9 @@ app:
 
 # Storage configuration
 storage:
+  # Optional pre-provisioned/restored claim in this namespace.
+  # The original chart-owned PVC remains rendered even when this is set.
+  existingClaim: ""
   className: standard
   size: 1Gi
   mountPath: /data
@@ -83,6 +86,7 @@ secrets:
 # Environment variables
 env:
   nodeEnv: production
+  scheduledSyncEnabled: true  # false disables only scheduled sync, not startup download/sync
   syncIntervalMinutes: 360  # 6 hours default
   jobTimeoutMinutes: 60
   jobTimeoutCheckIntervalMinutes: 5

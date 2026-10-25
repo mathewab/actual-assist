@@ -243,8 +243,7 @@ const server = app.listen(env.PORT, () => {
   });
 
   // Start periodic sync scheduler if interval is configured
-  if (env.SYNC_INTERVAL_MINUTES > 0) {
-    startScheduler(env, jobOrchestrator, env.ACTUAL_BUDGET_ID);
+  if (startScheduler(env, jobOrchestrator, env.ACTUAL_BUDGET_ID)) {
     loggerInstance.info('Periodic sync scheduler enabled', {
       intervalMinutes: env.SYNC_INTERVAL_MINUTES,
     });

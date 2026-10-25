@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "app": {
+      "type": "object",
+      "properties": {
+        "replicaCount": {
+          "type": "integer",
+          "enum": [0, 1],
+          "description": "One SQLite writer, or zero during coordinated maintenance."
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "existingClaim": { "type": "string", "maxLength": 253 }
+      }
+    },
+    "env": {
+      "type": "object",
+      "properties": {
+        "scheduledSyncEnabled": { "type": "boolean" }
+      }
+    }
+  }
+}

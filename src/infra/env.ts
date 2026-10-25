@@ -58,6 +58,10 @@ export const envSchema = z
     LOG_FILE: z.string().optional(),
 
     // Periodic Sync
+    SCHEDULED_SYNC_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
     SYNC_INTERVAL_MINUTES: z.coerce
       .number()
       .int()

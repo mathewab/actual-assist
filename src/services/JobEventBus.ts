@@ -12,6 +12,7 @@ type JobListener = (payload: JobEventPayload) => void;
 
 export class JobEventBus {
   private emitter = new EventEmitter();
+  private stopping = false;
 
   constructor() {
     this.emitter.setMaxListeners(0);
@@ -27,5 +28,23 @@ export class JobEventBus {
 
   emitJob(payload: JobEventPayload): void {
     this.emitter.emit('job', payload);
+  }
+
+  isStopping(): boolean {
+    return this.stopping;
+  }
+
+  onShutdown(listener: () => void): void {
+    this.emitter.on('shutdown', listener);
+  }
+
+  offShutdown(listener: () => void): void {
+    this.emitter.off('shutdown', listener);
+  }
+
+  shutdown(): void {
+    if (this.stopping) return;
+    this.stopping = true;
+    this.emitter.emit('shutdown');
   }
 }

@@ -35,6 +35,7 @@ import { startScheduler } from './scheduler/SyncScheduler.js';
 import { SyncScheduler } from './scheduler/SyncScheduler.js';
 import { IntegrationService } from './services/IntegrationService.js';
 import { createIntegrationRouter } from './api/integrationRoutes.js';
+import { closeHttpServer } from './infra/closeHttpServer.js';
 import type { Request, Response, NextFunction } from 'express';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -278,7 +279,7 @@ const server = app.listen(env.PORT, () => {
 
 // Graceful shutdown
 let shuttingDown = false;
-function shutdown() {
+async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   integrationService.stop();
@@ -288,18 +289,17 @@ function shutdown() {
     clearInterval(jobTimeoutInterval);
     jobTimeoutInterval = null;
   }
-  server.close(async () => {
-    try {
-      await integrationService.drain();
-      await actualBudget.shutdown();
-      db.close();
-      loggerInstance.info('Server closed');
-      process.exit(0);
-    } catch {
-      loggerInstance.error('Shutdown failed');
-      process.exit(1);
-    }
-  });
+  try {
+    await closeHttpServer(server, () => jobEventBus.shutdown());
+    await integrationService.drain();
+    await actualBudget.shutdown();
+    db.close();
+    loggerInstance.info('Server closed');
+    process.exit(0);
+  } catch {
+    loggerInstance.error('Shutdown failed');
+    process.exit(1);
+  }
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

@@ -1,4 +1,5 @@
 import api from '@actual-app/api';
+import { SerialQueue } from './SerialQueue.js';
 import { ActualBudgetError } from '../domain/errors.js';
 import { logger } from './logger.js';
 import type { Env } from './env.js';
@@ -157,16 +158,125 @@ export interface CategorizedPayee {
 export class ActualBudgetAdapter {
   private env: Env;
   private initialized = false;
+  private session = new SerialQueue();
+
+  async initialize(): Promise<void> {
+    return this.session.run(() => this.initializeWithinSession());
+  }
+
+  async getTransactions(): Promise<Transaction[]> {
+    return this.session.run(() => this.getTransactionsWithinSession());
+  }
+
+  async getCategories(): Promise<Category[]> {
+    return this.session.run(() => this.getCategoriesWithinSession());
+  }
+
+  async listCategoryTemplates(): Promise<CategoryTemplateSummary[]> {
+    return this.session.run(() => this.listCategoryTemplatesWithinSession());
+  }
+
+  async renderNoteTemplates(templates: TemplateRecord[]): Promise<string> {
+    return this.session.run(() => this.renderNoteTemplatesWithinSession(templates));
+  }
+
+  async getCategoryNote(categoryId: string): Promise<string | null> {
+    return this.session.run(() => this.getCategoryNoteWithinSession(categoryId));
+  }
+
+  async updateCategoryNote(categoryId: string, note: string | null): Promise<void> {
+    return this.session.run(() => this.updateCategoryNoteWithinSession(categoryId, note));
+  }
+
+  async checkTemplates(): Promise<{ message: string; pre?: string | null }> {
+    return this.session.run(() => this.checkTemplatesWithinSession());
+  }
+
+  async updateTransactionCategory(transactionId: string, categoryId: string | null): Promise<void> {
+    return this.session.run(() =>
+      this.updateTransactionCategoryWithinSession(transactionId, categoryId)
+    );
+  }
+
+  async updateTransactionPayee(transactionId: string, payeeId: string | null): Promise<void> {
+    return this.session.run(() => this.updateTransactionPayeeWithinSession(transactionId, payeeId));
+  }
+
+  async updateTransaction(
+    transactionId: string,
+    updates: { categoryId?: string | null; payeeId?: string | null }
+  ): Promise<void> {
+    return this.session.run(() => this.updateTransactionWithinSession(transactionId, updates));
+  }
+
+  async getPayees(): Promise<{ id: string; name: string }[]> {
+    return this.session.run(() => this.getPayeesWithinSession());
+  }
+
+  async getSchedules(): Promise<{ id: string; name: string }[]> {
+    return this.session.run(() => this.getSchedulesWithinSession());
+  }
+
+  async findPayeeByName(name: string): Promise<{ id: string; name: string } | null> {
+    return this.session.run(() => this.findPayeeByNameWithinSession(name));
+  }
+
+  async createPayee(name: string): Promise<string> {
+    return this.session.run(() => this.createPayeeWithinSession(name));
+  }
+
+  async mergePayees(targetPayeeId: string, mergePayeeIds: string[]): Promise<void> {
+    return this.session.run(() => this.mergePayeesWithinSession(targetPayeeId, mergePayeeIds));
+  }
+
+  async findOrCreatePayee(name: string): Promise<string> {
+    return this.session.run(() => this.findOrCreatePayeeWithinSession(name));
+  }
+
+  async sync(): Promise<void> {
+    return this.session.run(() => this.syncWithinSession());
+  }
+
+  async listBudgets(): Promise<{ id: string; name: string }[]> {
+    return this.session.run(() => this.listBudgetsWithinSession());
+  }
+
+  async getCategorizedPayees(): Promise<CategorizedPayee[]> {
+    return this.session.run(() => this.getCategorizedPayeesWithinSession());
+  }
+
+  async shutdown(): Promise<void> {
+    return this.session.close(() => this.shutdownWithinSession());
+  }
 
   constructor(env: Env) {
     this.env = env;
+  }
+
+  getAccounts(): Promise<ActualAccount[]> {
+    return this.session.run(async () => {
+      this.ensureInitialized();
+      return api.getAccounts() as Promise<ActualAccount[]>;
+    });
+  }
+
+  getAccountTransactions(
+    accountId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<ActualTransaction[]> {
+    return this.session.run(async () => {
+      this.ensureInitialized();
+      return api.getTransactions(accountId, startDate, endDate) as Promise<ActualTransaction[]>;
+    });
   }
 
   /**
    * Initialize connection to Actual Budget server
    * P7 (Explicit error handling): Fail-fast if connection fails
    */
-  async initialize(): Promise<void> {
+  private async initializeWithinSession(): Promise<void> {
+    if (this.initialized) return;
     try {
       await api.init({
         dataDir: this.env.DATA_DIR,
@@ -198,7 +308,7 @@ export class ActualBudgetAdapter {
    * Get all transactions from the budget
    * P4 (Explicitness): Returns strongly-typed Transaction array
    */
-  async getTransactions(): Promise<Transaction[]> {
+  private async getTransactionsWithinSession(): Promise<Transaction[]> {
     this.ensureInitialized();
 
     try {
@@ -253,7 +363,7 @@ export class ActualBudgetAdapter {
    * Get all categories from the budget
    * P4 (Explicitness): Returns strongly-typed Category array
    */
-  async getCategories(): Promise<Category[]> {
+  private async getCategoriesWithinSession(): Promise<Category[]> {
     this.ensureInitialized();
 
     try {
@@ -284,7 +394,7 @@ export class ActualBudgetAdapter {
   /**
    * List categories with template data and notes
    */
-  async listCategoryTemplates(): Promise<CategoryTemplateSummary[]> {
+  private async listCategoryTemplatesWithinSession(): Promise<CategoryTemplateSummary[]> {
     this.ensureInitialized();
 
     if (!api.internal?.send || !api.q || !api.aqlQuery) {
@@ -318,7 +428,7 @@ export class ActualBudgetAdapter {
       const groupMap = new Map(categoryGroups.map((group) => [group.id, group.name || 'Unknown']));
       const categoryGroupNameMap = new Map<string, string>();
       try {
-        const categorized = await this.getCategories();
+        const categorized = await this.getCategoriesWithinSession();
         categorized.forEach((category) => {
           categoryGroupNameMap.set(category.id, category.groupName || 'Unknown');
         });
@@ -366,7 +476,7 @@ export class ActualBudgetAdapter {
   /**
    * Render template objects back into note lines
    */
-  async renderNoteTemplates(templates: TemplateRecord[]): Promise<string> {
+  private async renderNoteTemplatesWithinSession(templates: TemplateRecord[]): Promise<string> {
     this.ensureInitialized();
 
     if (!api.internal?.send) {
@@ -383,7 +493,7 @@ export class ActualBudgetAdapter {
   /**
    * Fetch a single category note
    */
-  async getCategoryNote(categoryId: string): Promise<string | null> {
+  private async getCategoryNoteWithinSession(categoryId: string): Promise<string | null> {
     this.ensureInitialized();
 
     if (!api.q || !api.aqlQuery) {
@@ -404,7 +514,10 @@ export class ActualBudgetAdapter {
   /**
    * Update category notes
    */
-  async updateCategoryNote(categoryId: string, note: string | null): Promise<void> {
+  private async updateCategoryNoteWithinSession(
+    categoryId: string,
+    note: string | null
+  ): Promise<void> {
     this.ensureInitialized();
 
     if (!api.internal?.send) {
@@ -424,7 +537,7 @@ export class ActualBudgetAdapter {
   /**
    * Check templates based on current notes
    */
-  async checkTemplates(): Promise<{ message: string; pre?: string | null }> {
+  private async checkTemplatesWithinSession(): Promise<{ message: string; pre?: string | null }> {
     this.ensureInitialized();
 
     if (!api.internal?.send) {
@@ -446,7 +559,10 @@ export class ActualBudgetAdapter {
    * Update transaction category
    * P7 (Explicit error handling): Wraps API call with error context
    */
-  async updateTransactionCategory(transactionId: string, categoryId: string | null): Promise<void> {
+  private async updateTransactionCategoryWithinSession(
+    transactionId: string,
+    categoryId: string | null
+  ): Promise<void> {
     this.ensureInitialized();
 
     try {
@@ -470,7 +586,10 @@ export class ActualBudgetAdapter {
   /**
    * Update transaction payee
    */
-  async updateTransactionPayee(transactionId: string, payeeId: string | null): Promise<void> {
+  private async updateTransactionPayeeWithinSession(
+    transactionId: string,
+    payeeId: string | null
+  ): Promise<void> {
     this.ensureInitialized();
 
     try {
@@ -494,7 +613,7 @@ export class ActualBudgetAdapter {
   /**
    * Update transaction with multiple fields (category and/or payee)
    */
-  async updateTransaction(
+  private async updateTransactionWithinSession(
     transactionId: string,
     updates: { categoryId?: string | null; payeeId?: string | null }
   ): Promise<void> {
@@ -532,7 +651,7 @@ export class ActualBudgetAdapter {
   /**
    * Get all payees from the budget
    */
-  async getPayees(): Promise<{ id: string; name: string }[]> {
+  private async getPayeesWithinSession(): Promise<{ id: string; name: string }[]> {
     this.ensureInitialized();
 
     try {
@@ -551,7 +670,7 @@ export class ActualBudgetAdapter {
   /**
    * Get active schedule names from the budget
    */
-  async getSchedules(): Promise<{ id: string; name: string }[]> {
+  private async getSchedulesWithinSession(): Promise<{ id: string; name: string }[]> {
     this.ensureInitialized();
 
     try {
@@ -572,8 +691,10 @@ export class ActualBudgetAdapter {
   /**
    * Find a payee by name (case-insensitive)
    */
-  async findPayeeByName(name: string): Promise<{ id: string; name: string } | null> {
-    const payees = await this.getPayees();
+  private async findPayeeByNameWithinSession(
+    name: string
+  ): Promise<{ id: string; name: string } | null> {
+    const payees = await this.getPayeesWithinSession();
     const normalizedName = name.toLowerCase().trim();
     return payees.find((p) => p.name.toLowerCase().trim() === normalizedName) || null;
   }
@@ -581,7 +702,7 @@ export class ActualBudgetAdapter {
   /**
    * Create a new payee
    */
-  async createPayee(name: string): Promise<string> {
+  private async createPayeeWithinSession(name: string): Promise<string> {
     this.ensureInitialized();
 
     try {
@@ -596,7 +717,10 @@ export class ActualBudgetAdapter {
   /**
    * Merge multiple payees into a target payee
    */
-  async mergePayees(targetPayeeId: string, mergePayeeIds: string[]): Promise<void> {
+  private async mergePayeesWithinSession(
+    targetPayeeId: string,
+    mergePayeeIds: string[]
+  ): Promise<void> {
     this.ensureInitialized();
 
     try {
@@ -618,18 +742,18 @@ export class ActualBudgetAdapter {
   /**
    * Find or create a payee by name
    */
-  async findOrCreatePayee(name: string): Promise<string> {
-    const existing = await this.findPayeeByName(name);
+  private async findOrCreatePayeeWithinSession(name: string): Promise<string> {
+    const existing = await this.findPayeeByNameWithinSession(name);
     if (existing) {
       return existing.id;
     }
-    return this.createPayee(name);
+    return this.createPayeeWithinSession(name);
   }
 
   /**
    * Sync changes with server (bi-directional: push local changes, pull remote changes)
    */
-  async sync(): Promise<void> {
+  private async syncWithinSession(): Promise<void> {
     this.ensureInitialized();
 
     try {
@@ -648,14 +772,15 @@ export class ActualBudgetAdapter {
    * List available budgets from the Actual Budget server
    * P4 (Explicitness): Returns array of budget metadata
    */
-  async listBudgets(): Promise<{ id: string; name: string }[]> {
+  private async listBudgetsWithinSession(): Promise<{ id: string; name: string }[]> {
     try {
-      // Temporarily initialize to fetch budgets list
-      await api.init({
-        dataDir: this.env.DATA_DIR,
-        serverURL: this.env.ACTUAL_SERVER_URL,
-        password: this.env.ACTUAL_PASSWORD,
-      });
+      // The loaded budget owns the API lifetime; never reinitialize an active session.
+      if (!this.initialized)
+        await api.init({
+          dataDir: this.env.DATA_DIR,
+          serverURL: this.env.ACTUAL_SERVER_URL,
+          password: this.env.ACTUAL_PASSWORD,
+        });
 
       const budgets = await api.getBudgets();
       logger.info('Retrieved budget list', { count: budgets.length });
@@ -685,7 +810,7 @@ export class ActualBudgetAdapter {
    * Get payees that have at least one categorized non-transfer transaction
    * Used for fuzzy matching - only match against payees with known categories
    */
-  async getCategorizedPayees(): Promise<CategorizedPayee[]> {
+  private async getCategorizedPayeesWithinSession(): Promise<CategorizedPayee[]> {
     this.ensureInitialized();
 
     try {
@@ -766,7 +891,7 @@ export class ActualBudgetAdapter {
   /**
    * Shutdown API connection
    */
-  async shutdown(): Promise<void> {
+  private async shutdownWithinSession(): Promise<void> {
     if (this.initialized) {
       await api.shutdown();
       this.initialized = false;

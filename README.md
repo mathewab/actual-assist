@@ -146,3 +146,5 @@ Optional (defaults are enforced by `src/infra/env.ts`):
 ## License
 
 MIT
+
+REST and MCP integrations: see [the integration contract and rollout guide](docs/integrations.md).

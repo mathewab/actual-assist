@@ -89,3 +89,9 @@ env:
   sqliteDbPath: /data/actual-assist.db
   port: 3000
   dataDir: /data
+
+# Machine integrations stay off until their access policy and token are provisioned.
+integrations:
+  enabled: false
+  allowedOrigins: []
+  # INTEGRATIONS_TOKEN must come from the existing externally managed Secret.

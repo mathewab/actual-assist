@@ -7,6 +7,12 @@ on:
         description: 'Release version (vX.Y.Z with optional pre-release/build)'
         required: true
 
+env:
+  GIT_AUTHOR_NAME: Mathew
+  GIT_COMMITTER_NAME: Mathew
+  GIT_AUTHOR_EMAIL: amathew121@gmail.com
+  GIT_COMMITTER_EMAIL: amathew121@gmail.com
+
 jobs:
   bump-version:
     name: Bump Version, Commit, Tag
@@ -30,8 +36,10 @@ jobs:
 
       - name: Validate version input
         id: validate
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
+          VERSION="$REQUESTED_VERSION"
           if ! printf '%s' "$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
             echo "Invalid version. Expected vX.Y.Z with optional -pre/+build."
             exit 1
@@ -93,8 +101,8 @@ jobs:
 
       - name: Commit and tag
         run: |
-          git config user.name "actual-assist-bot[bot]"
-          git config user.email "actual-assist-bot[bot]@users.noreply.github.com"
+          git config user.name "Mathew"
+          git config user.email "amathew121@gmail.com"
           git add package.json package-lock.json charts/actual-assist/Chart.yaml
           git commit -m "chore(release): ${{ steps.validate.outputs.version }}"
           git tag "${{ steps.validate.outputs.version }}"

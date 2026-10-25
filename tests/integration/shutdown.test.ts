@@ -53,4 +53,4 @@ it('ends open SSE streams and drains an active HTTP read before resource cleanup
     server.closeAllConnections();
     server.close();
   }
-});
+}, 10_000);

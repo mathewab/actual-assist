@@ -11,6 +11,8 @@ spec:
       {{- include "actual-assist.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | quote }}
       labels:
         {{- include "actual-assist.selectorLabels" . | nindent 8 }}
     spec:

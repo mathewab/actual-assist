@@ -137,6 +137,9 @@ jobs:
       - name: Lint Helm chart
         run: helm lint charts/actual-assist/
 
+      - name: Verify integration configuration triggers a rollout
+        run: python3 tests/helm/integrations.py
+
   pr-summary:
     name: PR Validation Summary
     runs-on: ubuntu-latest

@@ -238,16 +238,8 @@ export function createHttpAuth(options: AuthOptions) {
     }
     next();
   };
-  const requestLimiter = rateLimit({
-    windowMs: 60_000,
-    limit: 120,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    message: { error: 'RATE_LIMITED' },
-  });
   return {
     mode: options.mode,
-    requestLimiter,
     sessionRouter,
     authenticate,
     requirePermission,

@@ -3,6 +3,7 @@
  * P1 (Single Responsibility): Represents job lifecycle state
  */
 export type JobType =
+  | 'integration_read'
   | 'budget_sync'
   | 'suggestions_generate'
   | 'sync_and_suggest'

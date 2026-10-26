@@ -11,6 +11,10 @@ export function createJobEventsRouter(jobEventBus: JobEventBus): Router {
 
   router.get('/stream', (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (jobEventBus.isStopping()) {
+        res.status(503).json({ error: 'UNAVAILABLE' });
+        return;
+      }
       const { budgetId } = req.query;
 
       if (!budgetId || typeof budgetId !== 'string') {
@@ -44,10 +48,17 @@ export function createJobEventsRouter(jobEventBus: JobEventBus): Router {
 
       jobEventBus.onJob(onJob);
 
-      req.on('close', () => {
+      const cleanup = () => {
         clearInterval(heartbeat);
         jobEventBus.offJob(onJob);
-      });
+        jobEventBus.offShutdown(onShutdown);
+      };
+      const onShutdown = () => {
+        cleanup();
+        res.end();
+      };
+      jobEventBus.onShutdown(onShutdown);
+      req.on('close', cleanup);
     } catch (error) {
       next(error);
     }

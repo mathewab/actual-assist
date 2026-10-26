@@ -4,65 +4,95 @@ import { z, ZodError } from 'zod';
  * Environment variable schema with strict validation
  * Enforces P7 (explicit error handling) and P4 (explicitness)
  */
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().default(3000),
+export const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    PORT: z.coerce.number().int().default(3000),
 
-  // Actual Budget API credentials
-  ACTUAL_SERVER_URL: z.string().url(),
-  ACTUAL_PASSWORD: z.string().min(1),
-  ACTUAL_BUDGET_ID: z.string().uuid(),
-  ACTUAL_SYNC_ID: z.string().optional(),
-  ACTUAL_ENCRYPTION_KEY: z.string().optional(),
+    // Opt-in machine integrations. Legacy UI authentication remains a deployment concern.
+    INTEGRATIONS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    INTEGRATIONS_TOKEN: z.string().min(32).optional(),
+    INTEGRATIONS_ALLOWED_ORIGINS: z
+      .string()
+      .default('')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean)
+      ),
 
-  // AI Backend Selection
-  AI_BACKEND: z.enum(['openai', 'google']).default('openai'),
+    // Actual Budget API credentials
+    ACTUAL_SERVER_URL: z.string().url(),
+    ACTUAL_PASSWORD: z.string().min(1),
+    ACTUAL_BUDGET_ID: z.string().uuid(),
+    ACTUAL_SYNC_ID: z.string().optional(),
+    ACTUAL_ENCRYPTION_KEY: z.string().optional(),
 
-  // OpenAI API
-  OPENAI_API_KEY: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().regex(/^sk-/).optional()
-  ),
-  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+    // AI Backend Selection
+    AI_BACKEND: z.enum(['openai', 'google']).default('openai'),
 
-  // Google AI (Gemini) API
-  GOOGLE_AI_API_KEY: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().optional()
-  ),
-  GOOGLE_AI_MODEL: z.string().default('gemini-2.0-flash'),
+    // OpenAI API
+    OPENAI_API_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().regex(/^sk-/).optional()
+    ),
+    OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
-  // Data storage
-  DATA_DIR: z.string().default('./data'),
-  SQLITE_DB_PATH: z.string().default('./data/audit.db'),
+    // Google AI (Gemini) API
+    GOOGLE_AI_API_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().optional()
+    ),
+    GOOGLE_AI_MODEL: z.string().default('gemini-2.0-flash'),
 
-  // Logging
-  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
-  LOG_FILE: z.string().optional(),
+    // Data storage
+    DATA_DIR: z.string().default('./data'),
+    SQLITE_DB_PATH: z.string().default('./data/audit.db'),
 
-  // Periodic Sync
-  SYNC_INTERVAL_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
-    .default(360),
+    // Logging
+    LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+    LOG_FILE: z.string().optional(),
 
-  // Job timeout handling
-  JOB_TIMEOUT_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
-    .default(60),
-  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
-    .default(5),
+    // Periodic Sync
+    SCHEDULED_SYNC_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    SYNC_INTERVAL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
+      .default(360),
 
-  // Rate limiting (API)
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60000),
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
-});
+    // Job timeout handling
+    JOB_TIMEOUT_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
+      .default(60),
+    JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
+      .default(5),
+
+    // Rate limiting (API)
+    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60000),
+    RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
+  })
+  .superRefine((env, context) => {
+    if (env.INTEGRATIONS_ENABLED && !env.INTEGRATIONS_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['INTEGRATIONS_TOKEN'],
+        message: 'Required when integrations are enabled',
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 

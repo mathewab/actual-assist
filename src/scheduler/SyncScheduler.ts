@@ -118,7 +118,8 @@ export function startScheduler(
   env: Env,
   jobOrchestrator: JobOrchestrator,
   budgetId: string
-): SyncScheduler {
+): SyncScheduler | null {
+  if (!env.SCHEDULED_SYNC_ENABLED) return null;
   const scheduler = new SyncScheduler(env, jobOrchestrator, budgetId);
   scheduler.start();
   return scheduler;

@@ -6,9 +6,12 @@ metadata:
     {{- include "actual-assist.labels" . | nindent 4 }}
 data:
   NODE_ENV: {{ .Values.env.nodeEnv | quote }}
+  SCHEDULED_SYNC_ENABLED: {{ .Values.env.scheduledSyncEnabled | quote }}
   SYNC_INTERVAL_MINUTES: {{ .Values.env.syncIntervalMinutes | quote }}
   JOB_TIMEOUT_MINUTES: {{ .Values.env.jobTimeoutMinutes | quote }}
   JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: {{ .Values.env.jobTimeoutCheckIntervalMinutes | quote }}
   SQLITE_DB_PATH: {{ .Values.env.sqliteDbPath | quote }}
   PORT: {{ .Values.env.port | quote }}
   DATA_DIR: {{ .Values.env.dataDir | quote }}
+  INTEGRATIONS_ENABLED: {{ .Values.integrations.enabled | quote }}
+  INTEGRATIONS_ALLOWED_ORIGINS: {{ join "," .Values.integrations.allowedOrigins | quote }}

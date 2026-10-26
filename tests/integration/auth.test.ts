@@ -252,3 +252,24 @@ it('attributes operator work and isolates concurrent request contexts', async ()
   expect(requestContext.getStore()).toBeUndefined();
   expect(attributedMetadata({ operation: 'scheduled' })).toEqual({ operation: 'scheduled' });
 });
+
+it('ends an SSE stream when its session expiry timer fires without another request', async () => {
+  const f = await fixture();
+  const login = await f.login();
+  const cookie = login.headers.get('set-cookie')!.split(';')[0];
+  const timer = vi.spyOn(globalThis, 'setTimeout');
+  try {
+    const stream = await fetch(f.url + '/api/job-events/stream', { headers: { Cookie: cookie } });
+    const body = stream.body!.getReader();
+    await body.read();
+    const expiry = timer.mock.calls.filter(([, delay]) => delay === 300_000);
+    expect(expiry).toHaveLength(1);
+    // Invoke the actual registered timer callback at the injected session deadline.
+    // No wall-clock wait and no subsequent request may trigger session pruning.
+    f.advance();
+    expiry[0][0]();
+    expect((await body.read()).done).toBe(true);
+  } finally {
+    timer.mockRestore();
+  }
+});

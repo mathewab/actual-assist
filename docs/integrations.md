@@ -1,14 +1,35 @@
 # REST and MCP integrations
 
-Actual Assist serves a versioned REST interface and a stateless Streamable HTTP MCP server on its existing HTTP listener. Both read the same configured budget through the existing `@actual-app/api` 26.10.0 adapter. No second process, budget cache, account, or synchronization loop is introduced. The existing UI `/api` contract remains unchanged; there was no previous MCP server in this repository.
+Actual Assist serves a versioned REST interface and a stateless Streamable HTTP MCP server on its existing HTTP listener. Both read the same configured budget through the existing `@actual-app/api` 26.10.0 adapter. No second process, budget cache, account, or synchronization loop is introduced. Existing UI `/api` response shapes remain unchanged; there was no previous MCP server in this repository.
 
-## Enable deliberately
+## Authentication and permissions
 
-Integrations default to disabled (HTTP 404). Set `INTEGRATIONS_ENABLED=true` and supply `INTEGRATIONS_TOKEN` from a secret manager (at least 32 characters). Every integration request, including health and MCP initialization, requires `Authorization: Bearer <token>` in every environment. Missing configuration fails startup. Never put tokens in URLs or chart values. The chart uses `integrations.enabled` and reads the token from `secrets.existingSecretName` via the existing Secret environment reference. A ConfigMap checksum in the Deployment pod template triggers rollout when enable/disable or origin settings change. External Secret value changes do not change that checksum: token rotation requires an operator-controlled pod restart after the Secret is updated. No secret-watching controller or permissions are introduced.
+One HTTP listener serves the UI, `/api/v1` REST reads, and `/mcp`. Transport deployment (including private tunnels, proxies, and their credentials) belongs to infrastructure configuration, not application routing. Authentication is not network isolation: an ingress forwarding this listener also forwards these routes unless its own policy restricts them. Keep TLS and deployment access controls in place.
 
-This token grants access to the configured budget's financial data. Provisioning it and enabling the feature require a reviewed access and rollout plan. The legacy UI routes retain their existing deployment-level access policy; this change does not retrofit bearer authentication onto them. Use the existing private ingress or local forwarding, with TLS at the trusted ingress for remote clients. Do not expose a public listener or send bearer tokens over an untrusted plaintext connection.
+Defaults preserve the existing UI with `AUTH_MODE=legacy` and `MACHINE_API_ENABLED=false`. Machine access cannot be enabled in legacy mode. With `AUTH_MODE=enforced`, every `/api` operation and `/mcp` request requires authentication, except the bounded session login/status/logout endpoints. Static UI assets and minimal `/health` and `/ready` probes remain public. Enforced mode requires an explicitly configured operator credential and exact UI origins; it works with machine access disabled too.
 
-Requests carrying an `Origin` header are denied unless it exactly matches an entry in the comma-separated `INTEGRATIONS_ALLOWED_ORIGINS` (chart: `integrations.allowedOrigins`). This is an origin check for MCP clients, not a browser CORS API. Native clients without Origin are supported. Neither credentials nor financial response bodies are logged by the integration layer. Responses have `Cache-Control: no-store`.
+Supply `AUTH_CREDENTIALS_JSON` from a secret manager as an array of objects with `id`, `token`, and `role`. IDs must be unique, 1–64 letters/digits/underscores/hyphens. Tokens must be unique high-entropy secrets of 32–512 characters, never human passwords. No credentials are created by the application or chart. Never commit them, put them in URLs, or store them in browser storage.
+
+| Role | Permissions | Access |
+| --- | --- | --- |
+| `reader` | `budget:read` | Enabled REST reads and MCP tools only |
+| `operator` | `budget:read`, `app:operate`, `ui:session` | Reads plus existing UI/API operations and UI sign-in |
+
+An operator credential is powerful: existing categorization, merge, configuration, jobs, and other legacy actions retain their existing behavior. A reader cannot access those routes, including audit and job streams. This adds no budget write endpoints to REST/MCP. Permission checks are centralized; adding a legacy API route inherits the operator requirement. API bearer authentication uses `Authorization: Bearer <credential>`. An invalid bearer header never falls back to a valid browser session.
+
+The UI exchanges an operator credential at `POST /api/auth/login` for an opaque HttpOnly, SameSite=Strict cookie scoped to `/api`. The credential field is cleared after submission. Sessions are bounded to 1,000, expire absolutely after `AUTH_SESSION_TTL_SECONDS` (default 3,600; range 300–86,400), and are revoked on logout or process restart. `GET /api/auth/session` returns session state and an in-memory CSRF token; `POST /api/auth/logout` revokes the session. Session-authenticated unsafe requests require an allowed Origin and `X-CSRF-Token`; logout and expiry close that session's job-event SSE connections. The UI clears cached data on expiry/logout and rechecks sessions on back navigation. Logout does not cancel already accepted jobs or in-flight operations.
+
+Set comma-separated `AUTH_ALLOWED_ORIGINS` to exact UI origins. Requests presenting another Origin are denied; native bearer clients without Origin are supported. This is not a cross-origin browser API. Production requires HTTPS origins and `AUTH_COOKIE_SECURE=true`; local HTTP development can explicitly disable secure cookies outside production. Do not trust arbitrary forwarded identity headers: none are accepted. Login is limited to five attempts per minute per peer IP, all API traffic (including session status/logout) to 120; behind a proxy limits apply to the peer unless a separately reviewed trust policy is configured.
+
+`AuthenticationProvider` produces a named principal, while authorization and session issuance remain separate. A future verified OIDC/Authelia adapter can map identities to these explicit roles without changing domain services or REST/MCP authorization. That requires a separate design for issuer verification, callbacks, trust boundaries, and revocation; no Authelia, proxy-header authentication, or Actual Budget server authentication change is implemented here.
+
+## Configuration and migration
+
+Chart values are `auth.mode`, `auth.allowedOrigins`, `auth.cookieSecure`, `auth.sessionTtlSeconds`, and `machineApi.enabled`. Credentials come from `secrets.existingSecretName` through the existing environment Secret reference. ConfigMap changes trigger pod rollout via checksum. Secret rotation requires a controlled restart, revoking existing sessions; no secret watcher or extra permissions are introduced.
+
+This replaces the 0.9.0 opt-in integration contract: `/integrations/v1/*` becomes `/api/v1/*`, and `/integrations/mcp` becomes `/mcp`. Old paths return 404 without redirects. Remove `INTEGRATIONS_ENABLED`, `INTEGRATIONS_TOKEN`, and `INTEGRATIONS_ALLOWED_ORIGINS`; active obsolete configuration fails startup instead of silently restoring unauthenticated UI access. The chart also rejects the old enabled integration setting. Provision explicit named credentials and update clients before enabling the new mode. Existing legacy UI route URLs and response shapes remain unchanged, but enforced mode deliberately adds sign-in and authorization.
+
+Activation, credential provisioning, ingress policy, and rollout require an operator plan separate from source changes. Auth configuration must be validated before budget initialization. Startup still opens/migrates local databases and calls Actual `downloadBudget`, which may synchronize upstream; neither read-only machine roles nor disabling scheduled sync makes startup read-only.
 
 ## REST contract
 
@@ -16,33 +37,33 @@ All paths are relative to the existing server address. Collections return `{data
 
 | Method | Path | Parameters |
 | --- | --- | --- |
-| GET | `/integrations/v1/health` | none; authenticated readiness and application version |
-| GET | `/integrations/v1/accounts` | `limit`, `offset` |
-| GET | `/integrations/v1/categories` | `limit`, `offset` |
-| GET | `/integrations/v1/payees` | `limit`, `offset` |
-| GET | `/integrations/v1/schedules` | `limit`, `offset` |
-| GET | `/integrations/v1/transactions` | required UUID `accountId`, `startDate`, `endDate`; `limit`, `offset` |
+| GET | `/api/v1/health` | none; authenticated readiness and application version |
+| GET | `/api/v1/accounts` | `limit`, `offset` |
+| GET | `/api/v1/categories` | `limit`, `offset` |
+| GET | `/api/v1/payees` | `limit`, `offset` |
+| GET | `/api/v1/schedules` | `limit`, `offset` |
+| GET | `/api/v1/transactions` | required UUID `accountId`, `startDate`, `endDate`; `limit`, `offset` |
 
 Pagination defaults to 100 rows, with maximum limit 500 and offset 100000. Transaction date windows are inclusive and at most 93 days apart. Unknown parameters, invalid dates, reversed dates, missing transaction filters, and out-of-range pagination return 400. Pagination is over the current cached result, not a stable snapshot across calls; transaction filtering is pushed into the official API before pagination. Collection queries may materialize all matching rows in memory. There is no arbitrary AQL, budget switching, write, import, or synchronization endpoint in this version.
 
-REST errors are `{error: CODE, message: "safe explanation"}`: 400 `INVALID_ARGUMENT`/`INVALID_REQUEST`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN_ORIGIN`, 404 `NOT_FOUND`, 413 `PAYLOAD_TOO_LARGE`, 429 `RATE_LIMITED`, and 503 `UNAVAILABLE`/`BUSY`. Requests are limited to 120 per minute per peer IP, with at most 16 pending integration reads and 32 KiB JSON bodies. Behind an unconfigured proxy the rate limit conservatively applies to the proxy peer; this change does not alter Express proxy trust.
+REST errors are `{error: CODE, message: "safe explanation"}`: 400 `INVALID_ARGUMENT`/`INVALID_REQUEST`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN`/`FORBIDDEN_ORIGIN`/`CSRF_REQUIRED`, 404 `NOT_FOUND`, 413 `PAYLOAD_TOO_LARGE`, 429 `RATE_LIMITED`, and 503 `UNAVAILABLE`/`BUSY`. Requests are limited to 120 per minute per peer IP, with at most 16 pending integration reads and 32 KiB JSON bodies. Behind an unconfigured proxy the rate limit conservatively applies to the proxy peer; this change does not alter Express proxy trust.
 
 Example using a token already supplied through your secret manager:
 
 ```sh
-curl --fail --header "Authorization: Bearer ${INTEGRATIONS_TOKEN}" \
-  'http://127.0.0.1:3000/integrations/v1/accounts?limit=20'
+curl --fail --header "Authorization: Bearer ${API_CREDENTIAL}" \
+  'http://127.0.0.1:3000/api/v1/accounts?limit=20'
 ```
 
 ## MCP contract
 
-Connect a Streamable HTTP client to `/integrations/mcp` with the same Authorization header. The official SDK handles initialization, protocol negotiation, tool listing/calls, and JSON-RPC errors. This endpoint is stateless: no session ID or persistent SSE subscription is created; GET and DELETE return 405. It is not the legacy HTTP+SSE transport and does not provide stdio.
+Connect a Streamable HTTP client to `/mcp` with the same Authorization header. The official SDK handles initialization, protocol negotiation, tool listing/calls, and JSON-RPC errors. This endpoint is stateless: no session ID or persistent SSE subscription is created; GET and DELETE return 405. It is not the legacy HTTP+SSE transport and does not provide stdio.
 
 Tools are `list_accounts`, `list_categories`, `list_payees`, `list_schedules`, and `list_transactions`, with the same parameters as REST. Successful tool calls return the REST envelope as `structuredContent` and JSON text content. Application failures use `isError: true` with a redacted coded error. Malformed protocol calls are handled by the SDK. HTTP authentication and origin failures occur before protocol dispatch.
 
 ## Ownership, lifecycle, and verification
 
-`IntegrationService` owns input validation, job/audit tracking, readiness, pending request limits, and result pagination. REST and MCP are thin transports. Reads record an `integration_read` job and success/failure audit event with operation, transport, count, and duration; financial values, filters, and tokens are excluded. Validation/authentication failures do not create jobs. Reads create persistent job/audit rows. The existing JobRetentionService can remove old jobs when invoked, but the server does not currently schedule automatic retention; operators should account for storage growth.
+`IntegrationService` owns input validation, job/audit tracking, readiness, pending request limits, and result pagination. REST and MCP are thin transports. Reads record an `integration_read` job and success/failure audit event with operation, transport, named principal ID, count, and duration; financial values, filters, and tokens are excluded. Validation/authentication failures do not create budget jobs. Login success/failure and logout are audit events without credentials; operator jobs and audit entries carry request principal attribution. Reads create persistent job/audit rows. The existing JobRetentionService can remove old jobs when invoked, but the server does not currently schedule automatic retention; operators should account for storage growth.
 
 `ActualBudgetAdapter` owns the one process-global API session. Every public async adapter operation enters one FIFO queue, including legacy UI/scheduler operations, initialization, and shutdown. Internal method composition uses private methods within that same session to avoid nested queue deadlocks. This serializes adapter operations, not multi-operation UI workflows into database transactions. Budget listing reuses an initialized session instead of reinitializing it. MCP request completion closes only its transport, never the budget. SIGINT/SIGTERM stop new integration work and the scheduler, end registered job-event SSE streams (including their heartbeat/subscriptions), close HTTP after ordinary in-flight requests finish, drain integration work and queued API operations, then close Actual and SQLite. Existing background UI jobs are not made transactional or restart-resumable by this change; avoid upgrading during active financial workflows. An unresponsive backend remains subject to the deployment's termination grace period.
 
@@ -54,35 +75,10 @@ The official MCP TypeScript SDK is pinned to 1.32.2 (MIT; about 4.5 MB unpacked 
 
 The community [actual-http-api](https://github.com/jhonderson/actual-http-api) is a standalone Express application, not a documented embeddable library. Its server startup and separate Actual lifetime would conflict with this app. No upstream implementation code is copied. This implementation retains the existing official API pin and uses its public read methods; it does not upgrade the SDK or deployed Actual server as part of enabling integrations.
 
-## Release and rollback review
+## Deployment and lifecycle controls
 
-Proposed feature version: 0.9.0, after draft PR review and exact-SHA CI. Before release, verify the deployed Actual server is compatible with API 26.10.0. The version workflow updates npm/Helm together and tags `v0.9.0`, triggering image tags `0.9.0`/`0.9`, chart 0.9.0, and the GitHub release. Verify the published image provenance and digest before rollout.
+Authentication is a deliberate configuration migration. Verify exact-SHA tests and image provenance before rollout; do not enable machine access on an unprotected legacy API. Default chart settings preserve legacy UI behavior with machine routes disabled. No tunnel image, sidecar, separate listener, or tunnel credential is configured by this chart.
 
-Preserve the previous chart and image digest and back up the existing PVC using the established operator process before any approved upgrade. No new schema migration is added. First deploy with integrations disabled, verify health and existing UI, then enable only after approving the token source and access policy. Health/authentication checks do not read financial records. Functional checks against a real budget require separate authorization.
+The chart enforces one replica (or zero for maintenance) and uses `Recreate`. `storage.existingClaim` can select a pre-provisioned PVC without removing the original chart-owned PVC. The external claim must have no other writer; Recreate does not fence manual pods or other deployments. Storage recovery policy remains an operator decision; do not delete caches or claims as an authentication migration step.
 
-The October 25 deployment investigation reports 0.8.1 is already crash-looping and Helm has no healthy rollback target; a historical controller-to-Kubernetes API trust error was observed, but is not confirmed as a current blocker. Returning to the 0.8.1 configuration is a configuration rollback, not a recovery guarantee. Do not publish/deploy as a workaround for these unresolved blockers, and do not change cluster trust as part of this feature. Resolve the application startup cause and coordinate the existing controller issue with the operator first. Disable integrations and restore the exact prior chart/image if the new feature fails; do not delete or migrate budget data during rollback.
-
-### Startup compatibility evidence
-
-The released [v0.8.1 package](https://github.com/mathewab/actual-assist/blob/v0.8.1/package.json) pins Actual API 26.8.1. Current main already pins 26.10.0, matching the reported live Actual server 26.10.0. The official 26.10.0 core includes `1787013118115_add_account_groups.sql`, which creates `account_groups` and adds `accounts.account_group_id`. An isolated in-memory SQLite fixture reproduced `no such column: account_group_id` before applying that SQL and successfully queried the column afterward. This supports an SDK/schema mismatch diagnosis; it does not prove the state or recovery behavior of the live cache. No real budget or cached database was opened. The feature release also includes all previously unreleased main changes since 0.8.1, including that SDK upgrade; operators must review the complete release diff and backup/recovery plan, not only this PR.
-
-### Restored-copy rollout controls
-
-The chart enforces one application replica (or zero for coordinated maintenance) and uses `Recreate`, so Deployment upgrades terminate the old pod before starting the new pod. `storage.existingClaim` selects a pre-provisioned/restored PVC in the same namespace; blank retains the original claim. The original chart-owned `<release-fullname>-data` PVC is still rendered unchanged when an external claim is selected, avoiding Helm pruning during the switch. Do not uninstall the release or delete its original PVC as a rollback action: keeping that resource in the chart does not change its storage reclaim policy. The external claim must not be mounted by another application writer. Recreate does not fence other deployments or manual pods.
-
-For a separately approved restored-copy rollout, use these values (claim name is illustrative):
-
-```yaml
-app:
-  replicaCount: 1
-storage:
-  existingClaim: actual-assist-restored-0-9-0
-env:
-  scheduledSyncEnabled: false
-integrations:
-  enabled: false
-```
-
-`SCHEDULED_SYNC_ENABLED` (chart `env.scheduledSyncEnabled`) defaults to true to preserve existing behavior. False prevents creation of the app's scheduled sync timer; configuration changes trigger pod rollout through the ConfigMap checksum. It does **not** disable startup `api.downloadBudget()`, local database migrations, upstream synchronization, SDK services, or manually requested legacy UI operations. Existing interval behavior is unchanged: values above 59 minutes currently schedule hourly despite the default value of 360. `SYNC_INTERVAL_MINUTES=0` remains invalid; use the explicit enable flag.
-
-All `/data` contents must be preserved during an approved backup: app `actual-assist.db` and possible SQLite sidecars, Actual budget directories/databases/metadata, and all other SDK state. Stop the application writer before an archive, verify the archive outside the volume's failure domain, and restore into a separate PVC before starting the new application. Actual initialization against that copy can migrate and sync; it is not a read-only verification step and requires explicit operational approval. No chart setting performs the archive, restore, or migration on the operator's behalf.
+`SCHEDULED_SYNC_ENABLED=false` (chart `env.scheduledSyncEnabled`) disables only the app's scheduled sync timer. It does not disable startup download/migration/synchronization, SDK services, or manually requested operator actions. Existing scheduling behavior is unchanged: intervals above 59 minutes currently schedule hourly. Keep previous chart/image references and review compatibility before rollback; a prior crash-looping image is not a recovery guarantee.

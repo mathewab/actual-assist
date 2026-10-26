@@ -1,3 +1,6 @@
+import { createHttpAuth } from '../../src/auth/httpAuth.js';
+import { StaticCredentialProvider, credentialsSchema } from '../../src/auth/principals.js';
+import { mountAccessBoundary } from '../../src/auth/mountAccessBoundary.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import type { Server } from 'node:http';
@@ -48,37 +51,41 @@ function fixture() {
 async function start(enabled = true) {
   const f = fixture();
   const app = express();
-  app.use(
-    '/integrations',
-    createIntegrationRouter(f.service, { enabled, token, allowedOrigins: [], version: 'test' })
+  const auth = createHttpAuth({
+    mode: 'enforced',
+    origins: ['http://fixture.invalid'],
+    secureCookie: false,
+    ttlSeconds: 3600,
+    provider: new StaticCredentialProvider([{ id: 'reader', role: 'reader', token }]),
+    audit: () => {},
+  });
+  mountAccessBoundary(
+    app,
+    auth,
+    createIntegrationRouter(f.service, { enabled, auth, version: 'test' })
   );
   const server = app.listen(0, '127.0.0.1');
   servers.push(server);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing test listener');
-  return { ...f, url: `http://127.0.0.1:${address.port}/integrations` };
+  return { ...f, url: `http://127.0.0.1:${address.port}` };
 }
 
 describe('authenticated REST and MCP', () => {
   it('defaults to a disabled, closed surface', async () => {
     const f = await start(false);
-    expect((await fetch(`${f.url}/v1/accounts`, { headers })).status).toBe(404);
+    expect((await fetch(`${f.url}/api/v1/accounts`, { headers })).status).toBe(404);
     expect(f.budget.getAccounts).not.toHaveBeenCalled();
   });
-  it('fails closed without an adequate token', () => {
-    expect(() =>
-      createIntegrationRouter(fixture().service, {
-        enabled: true,
-        token: 'short',
-        allowedOrigins: [],
-        version: 'test',
-      })
-    ).toThrow();
+  it('fails closed without an adequate credential', () => {
+    expect(
+      credentialsSchema.safeParse([{ id: 'reader', role: 'reader', token: 'short' }]).success
+    ).toBe(false);
   });
   it('requires bearer authentication for REST, MCP and health', async () => {
     const f = await start();
-    for (const path of ['/v1/accounts', '/v1/health', '/mcp']) {
+    for (const path of ['/api/v1/accounts', '/api/v1/health', '/mcp']) {
       for (const authorization of ['', 'Bearer wrong', `Basic ${token}`]) {
         expect(
           (await fetch(f.url + path, { headers: { Authorization: authorization } })).status
@@ -87,9 +94,27 @@ describe('authenticated REST and MCP', () => {
     }
     expect(f.jobs.createJob).not.toHaveBeenCalled();
   });
+  it('blocks unauthorized MCP initialization, discovery and calls before any budget work', async () => {
+    const f = await start();
+    for (const method of ['initialize', 'tools/list', 'tools/call']) {
+      const response = await fetch(`${f.url}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method,
+          params: { name: 'list_accounts', arguments: {} },
+        }),
+      });
+      expect(response.status).toBe(401);
+    }
+    expect(f.budget.getAccounts).not.toHaveBeenCalled();
+    expect(f.jobs.createJob).not.toHaveBeenCalled();
+  });
   it('rejects unapproved browser origins and does not emit permissive CORS', async () => {
     const f = await start();
-    const result = await fetch(`${f.url}/v1/accounts`, {
+    const result = await fetch(`${f.url}/api/v1/accounts`, {
       headers: { ...headers, Origin: 'https://evil.invalid' },
     });
     expect(result.status).toBe(403);
@@ -106,13 +131,13 @@ describe('authenticated REST and MCP', () => {
       'transactions?accountId=00000000-0000-4000-8000-000000000000&startDate=2026-02-30&endDate=2026-03-01',
       'transactions?accountId=00000000-0000-4000-8000-000000000000&startDate=2026-01-01&endDate=2026-12-31',
     ]) {
-      expect((await fetch(`${f.url}/v1/${path}`, { headers })).status).toBe(400);
+      expect((await fetch(`${f.url}/api/v1/${path}`, { headers })).status).toBe(400);
     }
     expect(f.jobs.createJob).not.toHaveBeenCalled();
   });
   it('serves REST reads with audit/jobs without storing financial output', async () => {
     const f = await start();
-    const result = await fetch(`${f.url}/v1/accounts?limit=1`, { headers });
+    const result = await fetch(`${f.url}/api/v1/accounts?limit=1`, { headers });
     expect(result.status).toBe(200);
     expect(await result.json()).toEqual({
       data: [{ id: 'fixture', name: 'Mock account' }],
@@ -138,7 +163,7 @@ describe('authenticated REST and MCP', () => {
       'list_transactions',
     ]);
     const mcp = await client.callTool({ name: 'list_accounts', arguments: { limit: 1 } });
-    const rest = await (await fetch(`${f.url}/v1/accounts?limit=1`, { headers })).json();
+    const rest = await (await fetch(`${f.url}/api/v1/accounts?limit=1`, { headers })).json();
     expect(mcp.structuredContent).toEqual(rest);
     const invalid = await client.callTool({ name: 'list_transactions', arguments: {} });
     expect(invalid.isError).toBe(true);
@@ -170,12 +195,12 @@ describe('authenticated REST and MCP', () => {
   it('redacts backend failures and rejects reads during shutdown', async () => {
     const f = await start();
     f.budget.getAccounts.mockRejectedValueOnce(new Error('PRIVATE_CREDENTIAL_AND_RECORD'));
-    const failure = await fetch(`${f.url}/v1/accounts`, { headers });
+    const failure = await fetch(`${f.url}/api/v1/accounts`, { headers });
     expect(failure.status).toBe(503);
     expect(await failure.text()).not.toContain('PRIVATE_CREDENTIAL');
     expect(f.jobs.markJobFailed).toHaveBeenCalledWith('fixture-job', 'Budget service unavailable');
     f.service.stop();
-    expect((await fetch(`${f.url}/v1/health`, { headers })).status).toBe(503);
-    expect((await fetch(`${f.url}/v1/accounts`, { headers })).status).toBe(503);
+    expect((await fetch(`${f.url}/api/v1/health`, { headers })).status).toBe(503);
+    expect((await fetch(`${f.url}/api/v1/accounts`, { headers })).status).toBe(503);
   });
 });

@@ -4,21 +4,15 @@ import type { Job } from '../../../src/domain/entities/Job.js';
 import { envSchema } from '../../../src/infra/env.js';
 
 describe('integration configuration and draining', () => {
-  it('defaults off and fails closed when enabled without a token', () => {
+  it('defaults machine access off and rejects obsolete activation', () => {
     const base = {
       ACTUAL_SERVER_URL: 'https://fixture.invalid',
       ACTUAL_PASSWORD: 'fixture',
       ACTUAL_BUDGET_ID: '00000000-0000-4000-8000-000000000000',
     };
-    expect(envSchema.parse(base).INTEGRATIONS_ENABLED).toBe(false);
+    expect(envSchema.parse(base).MACHINE_API_ENABLED).toBe(false);
     expect(envSchema.safeParse({ ...base, INTEGRATIONS_ENABLED: 'true' }).success).toBe(false);
-    expect(
-      envSchema.safeParse({
-        ...base,
-        INTEGRATIONS_ENABLED: 'true',
-        INTEGRATIONS_TOKEN: 'fixture-token-that-is-at-least-32-characters',
-      }).success
-    ).toBe(true);
+    expect(envSchema.safeParse({ ...base, MACHINE_API_ENABLED: 'true' }).success).toBe(false);
   });
   it('bounds pending reads and waits for job/audit completion during shutdown', async () => {
     let release!: (rows: never[]) => void;

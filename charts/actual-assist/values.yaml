@@ -94,8 +94,11 @@ env:
   port: 3000
   dataDir: /data
 
-# Machine integrations stay off until their access policy and token are provisioned.
-integrations:
-  enabled: false
+# Generic application security; credential JSON comes only from an existing Secret.
+auth:
+  mode: legacy
   allowedOrigins: []
-  # INTEGRATIONS_TOKEN must come from the existing externally managed Secret.
+  cookieSecure: true
+  sessionTtlSeconds: 3600
+machineApi:
+  enabled: false

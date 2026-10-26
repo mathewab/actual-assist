@@ -1,3 +1,17 @@
+{{- if and .Values.integrations .Values.integrations.enabled }}
+{{- fail "Obsolete integrations.enabled: migrate to auth.mode=enforced and machineApi.enabled" }}
+{{- end }}
+{{- if and .Values.machineApi.enabled (ne .Values.auth.mode "enforced") }}
+{{- fail "machineApi.enabled requires auth.mode=enforced" }}
+{{- end }}
+{{- if eq .Values.auth.mode "enforced" }}
+{{- if not .Values.auth.allowedOrigins }}
+{{- fail "auth.allowedOrigins requires an exact UI origin" }}
+{{- end }}
+{{- if and (eq .Values.env.nodeEnv "production") (not .Values.auth.cookieSecure) }}
+{{- fail "production sessions require auth.cookieSecure" }}
+{{- end }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,5 +27,8 @@ data:
   SQLITE_DB_PATH: {{ .Values.env.sqliteDbPath | quote }}
   PORT: {{ .Values.env.port | quote }}
   DATA_DIR: {{ .Values.env.dataDir | quote }}
-  INTEGRATIONS_ENABLED: {{ .Values.integrations.enabled | quote }}
-  INTEGRATIONS_ALLOWED_ORIGINS: {{ join "," .Values.integrations.allowedOrigins | quote }}
+  AUTH_MODE: {{ .Values.auth.mode | quote }}
+  AUTH_ALLOWED_ORIGINS: {{ join "," .Values.auth.allowedOrigins | quote }}
+  AUTH_COOKIE_SECURE: {{ .Values.auth.cookieSecure | quote }}
+  AUTH_SESSION_TTL_SECONDS: {{ .Values.auth.sessionTtlSeconds | quote }}
+  MACHINE_API_ENABLED: {{ .Values.machineApi.enabled | quote }}

@@ -27,12 +27,21 @@ def checksum(*values):
     return match.group(1)
 
 
-disabled = checksum("integrations.enabled=false")
-enabled = checksum("integrations.enabled=true")
-origin = checksum("integrations.enabled=true", "integrations.allowedOrigins[0]=https://fixture.invalid")
+disabled = checksum("machineApi.enabled=false")
+enforced = ["auth.mode=enforced", "auth.allowedOrigins[0]=https://fixture.invalid"]
+enabled = checksum(*enforced, "machineApi.enabled=true")
+origin = checksum(*enforced, "auth.allowedOrigins[0]=https://second.invalid")
 scheduler_disabled = checksum("env.scheduledSyncEnabled=false")
-assert len({disabled, enabled, origin, scheduler_disabled}) == 4, "Environment changes must alter the pod template"
-assert checksum("integrations.enabled=false") == disabled, "Config rendering must be deterministic"
+assert len({disabled, enabled, origin, scheduler_disabled}) == 4
+assert "requires" in render("deployment", "machineApi.enabled=true", success=False)
+assert "Obsolete" in render("deployment", "integrations.enabled=true", success=False)
+assert "cookieSecure" in render("deployment", *enforced, "auth.cookieSecure=false", success=False)
+assert "auth.allowedOrigins" in render("deployment", "auth.mode=enforced", success=False)
+assert checksum("machineApi.enabled=false") == disabled
+assert "INTEGRATIONS_" not in render("configmap")
+assert "AUTH_MODE" in render("configmap", *enforced)
+assert "tunnel" not in render("deployment", *enforced)
+assert render("service", *enforced) == render("service")
 
 original_pvc = render("pvc")
 restored = "storage.existingClaim=fixture-restored-copy"

@@ -1,4 +1,5 @@
 import { z, ZodError } from 'zod';
+import { credentialsSchema } from '../auth/principals.js';
 
 /**
  * Environment variable schema with strict validation
@@ -9,21 +10,40 @@ export const envSchema = z
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.coerce.number().int().default(3000),
 
-    // Opt-in machine integrations. Legacy UI authentication remains a deployment concern.
-    INTEGRATIONS_ENABLED: z
+    AUTH_MODE: z.enum(['legacy', 'enforced']).default('legacy'),
+    MACHINE_API_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
-      .transform((value) => value === 'true'),
-    INTEGRATIONS_TOKEN: z.string().min(32).optional(),
-    INTEGRATIONS_ALLOWED_ORIGINS: z
+      .transform((v) => v === 'true'),
+    AUTH_CREDENTIALS_JSON: z
+      .string()
+      .default('[]')
+      .transform((value, context) => {
+        try {
+          const result = credentialsSchema.safeParse(JSON.parse(value));
+          if (result.success) return result.data;
+        } catch {
+          /* Report only the config field, never credential contents. */
+        }
+        context.addIssue({ code: 'custom', message: 'Invalid named credential configuration' });
+        return z.NEVER;
+      }),
+    AUTH_ALLOWED_ORIGINS: z
       .string()
       .default('')
-      .transform((value) =>
-        value
+      .transform((v) =>
+        v
           .split(',')
-          .map((origin) => origin.trim())
+          .map((s) => s.trim())
           .filter(Boolean)
       ),
+    AUTH_COOKIE_SECURE: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((v) => v === 'true'),
+    AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
+    // Reject obsolete activation rather than silently starting an unauthenticated deployment.
+    INTEGRATIONS_ENABLED: z.enum(['true', 'false']).default('false'),
 
     // Actual Budget API credentials
     ACTUAL_SERVER_URL: z.string().url(),
@@ -85,12 +105,35 @@ export const envSchema = z
     RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
   })
   .superRefine((env, context) => {
-    if (env.INTEGRATIONS_ENABLED && !env.INTEGRATIONS_TOKEN) {
-      context.addIssue({
-        code: 'custom',
-        path: ['INTEGRATIONS_TOKEN'],
-        message: 'Required when integrations are enabled',
-      });
+    const issue = (path: string, message: string) =>
+      context.addIssue({ code: 'custom', path: [path], message });
+    if (env.INTEGRATIONS_ENABLED === 'true')
+      issue(
+        'INTEGRATIONS_ENABLED',
+        'Migrate to AUTH_MODE=enforced and MACHINE_API_ENABLED; old routes are removed'
+      );
+    if (env.MACHINE_API_ENABLED && env.AUTH_MODE !== 'enforced')
+      issue('AUTH_MODE', 'Machine access requires enforced authentication for all API routes');
+    if (env.AUTH_MODE === 'enforced') {
+      if (!env.AUTH_CREDENTIALS_JSON.some((c) => c.role === 'operator'))
+        issue('AUTH_CREDENTIALS_JSON', 'Configure an explicit operator for UI access');
+      if (!env.AUTH_ALLOWED_ORIGINS.length)
+        issue('AUTH_ALLOWED_ORIGINS', 'Configure an exact UI origin');
+      for (const origin of env.AUTH_ALLOWED_ORIGINS) {
+        try {
+          const url = new URL(origin);
+          if (
+            url.origin !== origin ||
+            !['http:', 'https:'].includes(url.protocol) ||
+            (env.NODE_ENV === 'production' && url.protocol !== 'https:')
+          )
+            throw new Error();
+        } catch {
+          issue('AUTH_ALLOWED_ORIGINS', 'Expected exact HTTP origins; production requires HTTPS');
+        }
+      }
+      if (env.NODE_ENV === 'production' && !env.AUTH_COOKIE_SECURE)
+        issue('AUTH_COOKIE_SECURE', 'Production sessions require secure cookies');
     }
   });
 

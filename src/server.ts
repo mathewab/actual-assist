@@ -1,3 +1,6 @@
+import { mountAccessBoundary } from './auth/mountAccessBoundary.js';
+import { createHttpAuth, principalOf } from './auth/httpAuth.js';
+import { StaticCredentialProvider } from './auth/principals.js';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,19 +123,27 @@ const packageInfo = JSON.parse(
     'utf-8'
   )
 ) as { version: string };
-// Mount before permissive legacy CORS/JSON middleware; this surface owns its auth and errors.
-app.use(
-  '/integrations',
+const auth = createHttpAuth({
+  mode: env.AUTH_MODE,
+  origins: env.AUTH_ALLOWED_ORIGINS,
+  secureCookie: env.AUTH_COOKIE_SECURE,
+  ttlSeconds: env.AUTH_SESSION_TTL_SECONDS,
+  provider: new StaticCredentialProvider(env.AUTH_CREDENTIALS_JSON),
+  audit: (eventType, principalId) =>
+    auditRepo.log({ eventType, entityType: 'principal', entityId: principalId ?? 'anonymous' }),
+});
+mountAccessBoundary(
+  app,
+  auth,
   createIntegrationRouter(integrationService, {
-    enabled: env.INTEGRATIONS_ENABLED,
-    token: env.INTEGRATIONS_TOKEN,
-    allowedOrigins: env.INTEGRATIONS_ALLOWED_ORIGINS,
+    enabled: env.MACHINE_API_ENABLED,
+    auth,
     version: packageInfo.version,
   })
 );
 
 // Middleware
-app.use(cors());
+if (env.AUTH_MODE === 'legacy') app.use(cors());
 app.use(express.json());
 
 const apiLimiter = rateLimit({
@@ -146,8 +157,9 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 // Request logging middleware
-app.use((req: Request, _res: Response, next: NextFunction) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   loggerInstance.info('Incoming request', {
+    principalId: principalOf(res)?.id,
     method: req.method,
     path: req.path,
     ip: req.ip,
@@ -289,7 +301,10 @@ async function shutdown() {
     jobTimeoutInterval = null;
   }
   try {
-    await closeHttpServer(server, () => jobEventBus.shutdown());
+    await closeHttpServer(server, () => {
+      auth.close();
+      jobEventBus.shutdown();
+    });
     await integrationService.drain();
     await actualBudget.shutdown();
     db.close();

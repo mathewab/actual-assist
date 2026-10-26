@@ -4,6 +4,9 @@ import type { Server } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createIntegrationRouter } from '../../src/api/integrationRoutes.js';
+import { mountIntegrations, listenForIntegrations } from '../../src/api/integrationListener.js';
+import { closeHttpServer } from '../../src/infra/closeHttpServer.js';
+import { envSchema } from '../../src/infra/env.js';
 import { IntegrationService } from '../../src/services/IntegrationService.js';
 import type { Job } from '../../src/domain/entities/Job.js';
 
@@ -45,19 +48,32 @@ function fixture() {
     service: new IntegrationService(budget, audit, jobs, 'fixture-budget'),
   };
 }
-async function start(enabled = true) {
+async function start(enabled = true, listener: 'shared' | 'loopback' = 'shared') {
   const f = fixture();
   const app = express();
-  app.use(
-    '/integrations',
-    createIntegrationRouter(f.service, { enabled, token, allowedOrigins: [], version: 'test' })
-  );
+  const privateApp = mountIntegrations(app, f.service, {
+    enabled,
+    token,
+    allowedOrigins: [],
+    version: 'test',
+    listener,
+  });
+  app.get('/ui-fixture', (_req, res) => res.json({ ui: true }));
+  app.use((_req, res) => res.status(200).send('SPA fallback'));
   const server = app.listen(0, '127.0.0.1');
   servers.push(server);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing test listener');
-  return { ...f, url: `http://127.0.0.1:${address.port}/integrations` };
+  const publicUrl = `http://127.0.0.1:${address.port}`;
+  const privateServer = privateApp ? await listenForIntegrations(privateApp, 0) : null;
+  if (privateServer) servers.push(privateServer);
+  const privateAddress = privateServer?.address();
+  const integrationUrl =
+    privateAddress && typeof privateAddress !== 'string'
+      ? `http://127.0.0.1:${privateAddress.port}`
+      : publicUrl;
+  return { ...f, url: `${integrationUrl}/integrations`, publicUrl, server, privateServer };
 }
 
 describe('authenticated REST and MCP', () => {
@@ -177,5 +193,110 @@ describe('authenticated REST and MCP', () => {
     f.service.stop();
     expect((await fetch(`${f.url}/v1/health`, { headers })).status).toBe(503);
     expect((await fetch(`${f.url}/v1/accounts`, { headers })).status).toBe(503);
+  });
+});
+
+describe('private listener isolation', () => {
+  it('keeps UI routes working and rejects every integration method/path on the public listener', async () => {
+    const f = await start(true, 'loopback');
+    expect(await (await fetch(`${f.publicUrl}/ui-fixture`)).json()).toEqual({ ui: true });
+    expect(f.privateServer?.address()).toMatchObject({ address: '127.0.0.1' });
+    for (const method of ['GET', 'POST', 'DELETE', 'OPTIONS']) {
+      for (const path of [
+        '/integrations',
+        '/integrations/mcp',
+        '/integrations/v1/accounts',
+        '/INTEGRATIONS/mcp',
+      ]) {
+        expect((await fetch(f.publicUrl + path, { method, headers })).status).toBe(404);
+      }
+    }
+    expect(f.budget.getAccounts).not.toHaveBeenCalled();
+    expect((await fetch(`${f.url}/v1/accounts`)).status).toBe(401);
+    expect((await fetch(`${f.url}/v1/accounts`, { headers })).status).toBe(200);
+    expect(
+      (
+        await fetch(`${f.url}/v1/accounts`, {
+          headers: { ...headers, Origin: 'https://untrusted.invalid' },
+        })
+      ).status
+    ).toBe(403);
+    const client = new Client({ name: 'private-fixture', version: '1' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${f.url}/mcp`), { requestInit: { headers } })
+    );
+    expect((await client.listTools()).tools).toHaveLength(5);
+    await client.close();
+  });
+
+  it('rejects a conflicting forwarded bearer instead of trusting tunnel proximity', async () => {
+    const f = await start(true, 'loopback');
+    // Upstream v0.0.18 applies connector headers after static headers, case-insensitively.
+    // Model that documented boundary here; this does not execute the tunnel runtime.
+    const effective = new Headers(headers);
+    effective.set('authorization', 'Bearer fixture-conflicting-connector-token');
+    expect((await fetch(`${f.url}/v1/accounts`, { headers: effective })).status).toBe(401);
+    expect(f.budget.getAccounts).not.toHaveBeenCalled();
+    effective.set('authorization', `Bearer ${token}`);
+    expect((await fetch(`${f.url}/v1/accounts`, { headers: effective })).status).toBe(200);
+  });
+
+  it('does not start a private listener when integrations are disabled', async () => {
+    const f = await start(false, 'loopback');
+    expect(f.privateServer).toBeNull();
+    expect((await fetch(`${f.publicUrl}/integrations/mcp`, { headers })).status).toBe(404);
+  });
+
+  it('fails a listener bind conflict instead of falling back to a public interface', async () => {
+    const f = await start(true, 'loopback');
+    const address = f.privateServer!.address();
+    if (!address || typeof address === 'string') throw new Error('Missing listener');
+    await expect(listenForIntegrations(express(), address.port)).rejects.toMatchObject({
+      code: 'EADDRINUSE',
+    });
+  });
+
+  it('drains the private read before shared resources can be closed', async () => {
+    const f = await start(true, 'loopback');
+    let finish!: () => void;
+    let notify!: () => void;
+    const started = new Promise<void>((resolve) => {
+      notify = resolve;
+    });
+    f.budget.getAccounts.mockImplementation(async () => {
+      notify();
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return [];
+    });
+    const read = fetch(`${f.url}/v1/accounts`, { headers }).then((r) => r.json());
+    await started;
+    f.service.stop();
+    const cleanup = vi.fn();
+    const closed = Promise.all([
+      closeHttpServer(f.server, () => {}),
+      closeHttpServer(f.privateServer!, () => {}),
+    ])
+      .then(() => f.service.drain())
+      .then(cleanup);
+    expect(cleanup).not.toHaveBeenCalled();
+    finish();
+    await read;
+    await closed;
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
+  it('validates private port configuration before startup', () => {
+    const fixtureEnv = {
+      ACTUAL_SERVER_URL: 'http://fixture.invalid',
+      ACTUAL_PASSWORD: 'fixture',
+      ACTUAL_BUDGET_ID: '00000000-0000-4000-8000-000000000001',
+      INTEGRATIONS_LISTENER: 'loopback',
+    };
+    for (const port of [0, 3000, 65536, 1.5]) {
+      expect(envSchema.safeParse({ ...fixtureEnv, INTEGRATIONS_PORT: port }).success).toBe(false);
+    }
+    expect(envSchema.parse(fixtureEnv).INTEGRATIONS_PORT).toBe(3001);
   });
 });

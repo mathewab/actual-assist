@@ -14,6 +14,8 @@ export const envSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((value) => value === 'true'),
+    INTEGRATIONS_LISTENER: z.enum(['shared', 'loopback']).default('shared'),
+    INTEGRATIONS_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
     INTEGRATIONS_TOKEN: z.string().min(32).optional(),
     INTEGRATIONS_ALLOWED_ORIGINS: z
       .string()
@@ -85,6 +87,13 @@ export const envSchema = z
     RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
   })
   .superRefine((env, context) => {
+    if (env.INTEGRATIONS_LISTENER === 'loopback' && env.INTEGRATIONS_PORT === env.PORT) {
+      context.addIssue({
+        code: 'custom',
+        path: ['INTEGRATIONS_PORT'],
+        message: 'Must differ from PORT in loopback mode',
+      });
+    }
     if (env.INTEGRATIONS_ENABLED && !env.INTEGRATIONS_TOKEN) {
       context.addIssue({
         code: 'custom',

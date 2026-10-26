@@ -7,7 +7,10 @@
       "properties": {
         "replicaCount": {
           "type": "integer",
-          "enum": [0, 1],
+          "enum": [
+            0,
+            1
+          ],
           "description": "One SQLite writer, or zero during coordinated maintenance."
         }
       }
@@ -15,13 +18,60 @@
     "storage": {
       "type": "object",
       "properties": {
-        "existingClaim": { "type": "string", "maxLength": 253 }
+        "existingClaim": {
+          "type": "string",
+          "maxLength": 253
+        }
       }
     },
     "env": {
       "type": "object",
       "properties": {
-        "scheduledSyncEnabled": { "type": "boolean" }
+        "scheduledSyncEnabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "listener": {
+          "enum": [
+            "shared",
+            "loopback"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "tunnel": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "type": "string"
+        },
+        "tunnelId": {
+          "type": "string"
+        },
+        "existingSecretName": {
+          "type": "string"
+        },
+        "runtimeKeyKey": {
+          "type": "string"
+        },
+        "authorizationHeaderKey": {
+          "type": "string"
+        }
       }
     }
   }

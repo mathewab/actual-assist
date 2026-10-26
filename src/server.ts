@@ -34,7 +34,7 @@ import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
 import { startScheduler } from './scheduler/SyncScheduler.js';
 import { SyncScheduler } from './scheduler/SyncScheduler.js';
 import { IntegrationService } from './services/IntegrationService.js';
-import { createIntegrationRouter } from './api/integrationRoutes.js';
+import { mountIntegrations, listenForIntegrations } from './api/integrationListener.js';
 import { closeHttpServer } from './infra/closeHttpServer.js';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -120,16 +120,17 @@ const packageInfo = JSON.parse(
     'utf-8'
   )
 ) as { version: string };
-// Mount before permissive legacy CORS/JSON middleware; this surface owns its auth and errors.
-app.use(
-  '/integrations',
-  createIntegrationRouter(integrationService, {
-    enabled: env.INTEGRATIONS_ENABLED,
-    token: env.INTEGRATIONS_TOKEN,
-    allowedOrigins: env.INTEGRATIONS_ALLOWED_ORIGINS,
-    version: packageInfo.version,
-  })
-);
+// Route isolation is installed before legacy CORS, JSON and SPA fallback middleware.
+const privateIntegrationApp = mountIntegrations(app, integrationService, {
+  enabled: env.INTEGRATIONS_ENABLED,
+  token: env.INTEGRATIONS_TOKEN,
+  allowedOrigins: env.INTEGRATIONS_ALLOWED_ORIGINS,
+  version: packageInfo.version,
+  listener: env.INTEGRATIONS_LISTENER,
+});
+const integrationServer = privateIntegrationApp
+  ? await listenForIntegrations(privateIntegrationApp, env.INTEGRATIONS_PORT)
+  : null;
 
 // Middleware
 app.use(cors());
@@ -289,7 +290,10 @@ async function shutdown() {
     jobTimeoutInterval = null;
   }
   try {
-    await closeHttpServer(server, () => jobEventBus.shutdown());
+    await Promise.all([
+      closeHttpServer(server, () => jobEventBus.shutdown()),
+      ...(integrationServer ? [closeHttpServer(integrationServer, () => {})] : []),
+    ]);
     await integrationService.drain();
     await actualBudget.shutdown();
     db.close();

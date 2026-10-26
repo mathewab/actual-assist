@@ -86,3 +86,87 @@ integrations:
 `SCHEDULED_SYNC_ENABLED` (chart `env.scheduledSyncEnabled`) defaults to true to preserve existing behavior. False prevents creation of the app's scheduled sync timer; configuration changes trigger pod rollout through the ConfigMap checksum. It does **not** disable startup `api.downloadBudget()`, local database migrations, upstream synchronization, SDK services, or manually requested legacy UI operations. Existing interval behavior is unchanged: values above 59 minutes currently schedule hourly despite the default value of 360. `SYNC_INTERVAL_MINUTES=0` remains invalid; use the explicit enable flag.
 
 All `/data` contents must be preserved during an approved backup: app `actual-assist.db` and possible SQLite sidecars, Actual budget directories/databases/metadata, and all other SDK state. Stop the application writer before an archive, verify the archive outside the volume's failure domain, and restore into a separate PVC before starting the new application. Actual initialization against that copy can migrate and sync; it is not a read-only verification step and requires explicit operational approval. No chart setting performs the archive, restore, or migration on the operator's behalf.
+
+## Private listener and optional tunnel sidecar
+
+`INTEGRATIONS_LISTENER=shared` preserves the existing routing. Set
+`INTEGRATIONS_LISTENER=loopback` with `INTEGRATIONS_ENABLED=true` to serve the
+same authenticated router only on `127.0.0.1:INTEGRATIONS_PORT` (default 3001).
+The UI port returns JSON 404 for all `/integrations` paths before the SPA fallback,
+including when integrations are disabled. The private port must differ from
+`PORT`; a bind failure stops startup rather than falling back to a public address.
+UI routes remain on their original port. Both listeners share the existing
+IntegrationService, job/audit tracking and serialized Actual session. Shutdown
+stops accepting integration work and drains both listeners before closing that
+session and SQLite. No second budget connection is created (constitution P1/P2/P3/P5/P7).
+
+The chart's optional `tunnel` sidecar targets the loopback MCP URL only. REST
+shares the private listener but is not exposed through a Service or tunnel target.
+Do not expose the private port via host networking, a Service, or Ingress. This is
+a same-pod trust boundary: other containers in the pod can reach loopback and
+still need the bearer token. There is no independent REST public-port option.
+
+Preparation values (not a deployable credential configuration):
+
+```yaml
+integrations:
+  enabled: true
+  listener: loopback
+  port: 3001
+tunnel:
+  enabled: false
+  image: "" # Set an independently provenance-verified official image digest.
+  tunnelId: "" # Dedicated Actual tunnel, separate from other services.
+  existingSecretName: ""
+```
+
+Enabling the sidecar requires enabled loopback integrations, an explicit
+`ghcr.io/openai/tunnel-client@sha256:...` image, a tunnel ID, and an existing
+Secret. Chart validation checks the image reference shape, not its provenance.
+No default image is supplied: the available CLI could inspect official v0.0.18
+manifests but does not support `gh attestation verify`. Before activation, verify
+that exact image using the [official image verification instructions](https://github.com/openai/tunnel-client/blob/v0.0.18/docs/deployment/docker.md).
+No downloaded tunnel binary or image was executed during preparation. Removing
+the optional sidecar/config restores an app-only deployment; no app dependency
+or protocol fork is introduced (P6).
+
+Use the existing external-secret workflow to supply only these references:
+
+- App Secret: `INTEGRATIONS_TOKEN`, at least 32 characters.
+- Tunnel Secret `runtime-api-key`: a separately scoped OpenAI runtime credential.
+- Tunnel Secret `actual-authorization-header`: the complete `Bearer <token>`
+  header, derived from the same app token using secret-store templating.
+
+The sidecar receives the two selected keys, not the app's other credentials or
+budget volume. No credentials belong in Helm values, argv or Git. Secret rotation
+requires a coordinated restart; no watcher or permissions are added. ConfigMap
+changes trigger rollout through a checksum.
+
+[Upstream v0.0.18 static-header tests](https://github.com/openai/tunnel-client/blob/v0.0.18/e2e/static_headers_e2e_test.go)
+confirm that connector-supplied Authorization overrides the configured static
+header case-insensitively; discovery headers are distinct and scoped to the MCP
+origin. Configure the connector without a conflicting upstream credential. A
+conflicting header must yield 401; never strip app authentication to make it work.
+The local synthetic test models this documented precedence, but is not a tunnel
+runtime end-to-end test. Origin checks remain active: absent Origin is accepted;
+a supplied Origin must match the explicit allowlist. Validate actual connector
+headers with fixtures before approving real-budget calls.
+
+The tunnel is restricted to the `main` channel and outbound HTTPS to OpenAI. No
+public endpoint, Service port, hostPort, admin key, or automatic tunnel creation is
+added. Health/admin binds `127.0.0.1:8080`; this port is reserved while enabled.
+No Kubernetes probe is guessed for this unexecuted image: before activation,
+verify a supported loopback readiness probe and the non-root/read-only filesystem
+settings against the verified image using a mock upstream. The sidecar's HTTP
+health/admin surface must not be exposed just to make kubelet probing convenient.
+Tunnel failure does not change UI readiness. See the
+[official tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
+for account/workspace association and runtime permissions; availability and costs
+must be confirmed for the selected personal account.
+
+Deployment remains separate from this source preparation. This change neither
+migrates data nor makes startup read-only: the SDK's download/load path can
+migrate its local cache and synchronize pending changes upstream even with the
+app scheduler disabled. Obtain startup-sync approval before an app upgrade and
+separate approval for persistent tunnel credentials/access. Tests use injected
+fixtures only and must not contact an Actual server.

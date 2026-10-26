@@ -13,5 +13,7 @@ data:
   SQLITE_DB_PATH: {{ .Values.env.sqliteDbPath | quote }}
   PORT: {{ .Values.env.port | quote }}
   DATA_DIR: {{ .Values.env.dataDir | quote }}
+  INTEGRATIONS_LISTENER: {{ .Values.integrations.listener | quote }}
+  INTEGRATIONS_PORT: {{ .Values.integrations.port | quote }}
   INTEGRATIONS_ENABLED: {{ .Values.integrations.enabled | quote }}
   INTEGRATIONS_ALLOWED_ORIGINS: {{ join "," .Values.integrations.allowedOrigins | quote }}

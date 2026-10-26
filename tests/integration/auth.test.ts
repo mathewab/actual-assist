@@ -273,3 +273,25 @@ it('ends an SSE stream when its session expiry timer fires without another reque
     timer.mockRestore();
   }
 });
+
+it('rate limits session status and logout before dispatch using the shared API budget', async () => {
+  const f = await fixture();
+  for (let i = 0; i < 60; i++) {
+    expect((await fetch(f.url + '/api/auth/session')).status).toBe(200);
+    expect((await fetch(f.url + '/api/auth/logout', { method: 'POST' })).status).toBe(204);
+  }
+  for (const [path, method] of [
+    ['/api/auth/session', 'GET'],
+    ['/api/auth/logout', 'POST'],
+    ['/api/auth/login', 'POST'],
+    ['/api/jobs', 'GET'],
+    ['/mcp', 'POST'],
+  ]) {
+    const response = await fetch(f.url + path, { method });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: 'RATE_LIMITED' });
+  }
+  expect(f.audit).not.toHaveBeenCalled();
+  expect(f.legacyOperation).not.toHaveBeenCalled();
+  expect((await fetch(f.url + '/health')).status).toBe(200);
+});

@@ -67,10 +67,12 @@
           "type": "string"
         },
         "runtimeKeyKey": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "authorizationHeaderKey": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         }
       }
     }

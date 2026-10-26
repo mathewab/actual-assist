@@ -88,3 +88,6 @@ def tunnel_checksum(*extra):
     return re.search(r'checksum/tunnel: "([a-f0-9]{64})"', render("deployment", *tunnel, *extra)).group(1)
 assert tunnel_checksum() != tunnel_checksum("tunnel.tunnelId=tunnel_fixture_two")
 print("Private listener, tunnel guards, scoped secret refs and unchanged Service/PVC verified")
+
+for key in ["runtimeKeyKey", "authorizationHeaderKey"]:
+    assert key in render("deployment", *tunnel, f"tunnel.{key}=", success=False)

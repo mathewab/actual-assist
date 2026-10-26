@@ -27,12 +27,21 @@ def checksum(*values):
     return match.group(1)
 
 
-disabled = checksum("integrations.enabled=false")
-enabled = checksum("integrations.enabled=true")
-origin = checksum("integrations.enabled=true", "integrations.allowedOrigins[0]=https://fixture.invalid")
+disabled = checksum("machineApi.enabled=false")
+enforced = ["auth.mode=enforced", "auth.allowedOrigins[0]=https://fixture.invalid"]
+enabled = checksum(*enforced, "machineApi.enabled=true")
+origin = checksum(*enforced, "auth.allowedOrigins[0]=https://second.invalid")
 scheduler_disabled = checksum("env.scheduledSyncEnabled=false")
-assert len({disabled, enabled, origin, scheduler_disabled}) == 4, "Environment changes must alter the pod template"
-assert checksum("integrations.enabled=false") == disabled, "Config rendering must be deterministic"
+assert len({disabled, enabled, origin, scheduler_disabled}) == 4
+assert "requires" in render("deployment", "machineApi.enabled=true", success=False)
+assert "Obsolete" in render("deployment", "integrations.enabled=true", success=False)
+assert "cookieSecure" in render("deployment", *enforced, "auth.cookieSecure=false", success=False)
+assert "auth.allowedOrigins" in render("deployment", "auth.mode=enforced", success=False)
+assert checksum("machineApi.enabled=false") == disabled
+assert "INTEGRATIONS_" not in render("configmap")
+assert "AUTH_MODE" in render("configmap", *enforced)
+assert "tunnel" not in render("deployment", *enforced)
+assert render("service", *enforced) == render("service")
 
 original_pvc = render("pvc")
 restored = "storage.existingClaim=fixture-restored-copy"
@@ -52,42 +61,3 @@ for invalid in ["2", "-1", "1.5"]:
 assert '  SCHEDULED_SYNC_ENABLED: "true"' in render("configmap")
 assert '  SCHEDULED_SYNC_ENABLED: "false"' in render("configmap", "env.scheduledSyncEnabled=false")
 print("Configuration rollouts, preserved PVC, external claim, Recreate and replica constraints verified")
-
-# Tunnel support is opt-in and cannot be enabled on the UI listener.
-assert "mcp-tunnel" not in render("deployment")
-assert '  INTEGRATIONS_LISTENER: "shared"' in render("configmap")
-assert "loopback" in render("deployment", "tunnel.enabled=true", success=False)
-private = ["integrations.enabled=true", "integrations.listener=loopback"]
-assert "verified" in render("deployment", *private, "tunnel.enabled=true", success=False)
-tunnel = private + [
-    "tunnel.enabled=true", "tunnel.image=ghcr.io/openai/tunnel-client@sha256:" + "a" * 64,
-    "tunnel.tunnelId=tunnel_fixture", "tunnel.existingSecretName=fixture-tunnel-secret",
-]
-manifest = render("deployment", *tunnel)
-assert 'name: mcp-tunnel' in manifest
-assert 'args: ["--config", "/etc/tunnel/config.yaml"]' in manifest
-assert 'name: "fixture-tunnel-secret"' in manifest
-assert 'key: "runtime-api-key"' in manifest
-assert 'key: "actual-authorization-header"' in manifest
-assert "containerPort: 3001" not in manifest and "containerPort: 8080" not in manifest
-assert "hostPort:" not in manifest and "hostNetwork:" not in manifest
-assert manifest.count("mountPath: /data") == 1, "Tunnel must not mount budget storage"
-assert render("service", *tunnel) == render("service"), "No new Service port"
-config = render("tunnel-configmap", *tunnel)
-assert "http://127.0.0.1:3001/integrations/mcp" in config
-assert "listen_addr: 127.0.0.1:8080" in config
-assert "Authorization: env:ACTUAL_MCP_AUTHORIZATION" in config
-assert "poll_channels: [main]" in config
-assert render("pvc", *tunnel) == original_pvc
-assert "reserved" in render("deployment", *tunnel, "integrations.port=8080", success=False)
-assert "differ" in render("deployment", *private, "integrations.port=3000", success=False)
-assert "tunnelId" in render("deployment", *tunnel, "tunnel.tunnelId=", success=False)
-assert "existingSecretName" in render("deployment", *tunnel, "tunnel.existingSecretName=", success=False)
-assert "verified" in render("deployment", *tunnel, "tunnel.image=ghcr.io/openai/tunnel-client:latest", success=False)
-def tunnel_checksum(*extra):
-    return re.search(r'checksum/tunnel: "([a-f0-9]{64})"', render("deployment", *tunnel, *extra)).group(1)
-assert tunnel_checksum() != tunnel_checksum("tunnel.tunnelId=tunnel_fixture_two")
-print("Private listener, tunnel guards, scoped secret refs and unchanged Service/PVC verified")
-
-for key in ["runtimeKeyKey", "authorizationHeaderKey"]:
-    assert key in render("deployment", *tunnel, f"tunnel.{key}=", success=False)

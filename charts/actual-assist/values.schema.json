@@ -32,47 +32,36 @@
         }
       }
     },
-    "integrations": {
+    "auth": {
       "type": "object",
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "listener": {
+        "mode": {
           "enum": [
-            "shared",
-            "loopback"
+            "legacy",
+            "enforced"
           ]
         },
-        "port": {
+        "allowedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cookieSecure": {
+          "type": "boolean"
+        },
+        "sessionTtlSeconds": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 65535
+          "minimum": 300,
+          "maximum": 86400
         }
       }
     },
-    "tunnel": {
+    "machineApi": {
       "type": "object",
       "properties": {
         "enabled": {
           "type": "boolean"
-        },
-        "image": {
-          "type": "string"
-        },
-        "tunnelId": {
-          "type": "string"
-        },
-        "existingSecretName": {
-          "type": "string"
-        },
-        "runtimeKeyKey": {
-          "type": "string",
-          "minLength": 1
-        },
-        "authorizationHeaderKey": {
-          "type": "string",
-          "minLength": 1
         }
       }
     }

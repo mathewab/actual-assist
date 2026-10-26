@@ -1,13 +1,24 @@
 const express = require('express');
+const { createHttpAuth } = require('../../src/auth/httpAuth.ts');
+const { StaticCredentialProvider } = require('../../src/auth/principals.ts');
+const { mountAccessBoundary } = require('../../src/auth/mountAccessBoundary.ts');
 
 const app = express();
 app.use(express.json());
 
 const now = () => new Date().toISOString();
 
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+const auth = createHttpAuth({
+  mode: 'enforced', origins: ['http://localhost:3000'], secureCookie: false, ttlSeconds: 300,
+  provider: new StaticCredentialProvider([{ id: 'fixture-operator', role: 'operator', token: 'fixture-browser-operator-token-at-least-32' }]),
+  audit: () => {},
+});
+mountAccessBoundary(app, auth, express.Router());
 
 app.get('/api/budgets', (_req, res) => {
   res.json({

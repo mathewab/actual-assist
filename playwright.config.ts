@@ -19,12 +19,12 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'node tests/e2e/mock-api.cjs',
+      command: 'node --import tsx tests/e2e/mock-api.cjs',
       url: 'http://localhost:4010/api/health',
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'VITE_API_BASE_URL=http://localhost:4010/api npm run dev:ui',
+      command: 'VITE_API_BASE_URL=/api npm run dev:ui -- --config tests/e2e/vite.config.ts',
       url: 'http://localhost:3000',
       reuseExistingServer: !process.env.CI,
     },

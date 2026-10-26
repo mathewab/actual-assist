@@ -1,9 +1,8 @@
+import { sessionFetch, API_BASE } from './session';
 /**
  * API client for backend communication
  * P5 (Separation of concerns): Centralized API calls
  */
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function parseJson<T>(response: Response, errorMessage: string): Promise<T> {
   try {
@@ -222,7 +221,7 @@ export const api = {
    * Get app configuration for UI defaults
    */
   async getAppConfig(): Promise<AppConfig> {
-    const response = await fetch(`${API_BASE}/config`);
+    const response = await sessionFetch(`${API_BASE}/config`);
 
     if (!response.ok) {
       throw new Error('Failed to load app configuration');
@@ -235,7 +234,7 @@ export const api = {
    * T081: GET /api/budgets
    */
   async listBudgets(): Promise<{ budgets: Budget[] }> {
-    const response = await fetch(`${API_BASE}/budgets`);
+    const response = await sessionFetch(`${API_BASE}/budgets`);
 
     if (!response.ok) {
       throw new Error('Failed to list budgets');
@@ -248,7 +247,7 @@ export const api = {
    * Get all categories from the current budget
    */
   async getCategories(): Promise<{ categories: Category[] }> {
-    const response = await fetch(`${API_BASE}/budgets/categories`);
+    const response = await sessionFetch(`${API_BASE}/budgets/categories`);
 
     if (!response.ok) {
       throw new Error('Failed to get categories');
@@ -261,7 +260,7 @@ export const api = {
    * Get all payees from the current budget
    */
   async getPayees(): Promise<{ payees: Payee[] }> {
-    const response = await fetch(`${API_BASE}/budgets/payees`);
+    const response = await sessionFetch(`${API_BASE}/budgets/payees`);
 
     if (!response.ok) {
       throw new Error('Failed to get payees');
@@ -282,7 +281,7 @@ export const api = {
       params.set('minScore', String(minScore));
     }
     const query = `?${params.toString()}`;
-    const response = await fetch(`${API_BASE}/payees/merge-suggestions${query}`);
+    const response = await sessionFetch(`${API_BASE}/payees/merge-suggestions${query}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch payee merge suggestions');
@@ -292,7 +291,7 @@ export const api = {
   },
 
   async hidePayeeMergeCluster(budgetId: string, groupHash: string): Promise<{ hidden: boolean }> {
-    const response = await fetch(`${API_BASE}/payees/merge-clusters/hide`, {
+    const response = await sessionFetch(`${API_BASE}/payees/merge-clusters/hide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, groupHash }),
@@ -306,7 +305,7 @@ export const api = {
   },
 
   async unhidePayeeMergeCluster(budgetId: string, groupHash: string): Promise<{ hidden: boolean }> {
-    const response = await fetch(`${API_BASE}/payees/merge-clusters/unhide`, {
+    const response = await sessionFetch(`${API_BASE}/payees/merge-clusters/unhide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, groupHash }),
@@ -329,7 +328,7 @@ export const api = {
     force?: boolean,
     aiMinClusterSize?: number
   ): Promise<{ job: Job }> {
-    const response = await fetch(`${API_BASE}/jobs/payees-merge-suggestions`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/payees-merge-suggestions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, minScore, useAI, force, aiMinClusterSize }),
@@ -354,7 +353,7 @@ export const api = {
     merged: { targetPayeeId: string; mergePayeeIds: string[]; mergeCount: number };
     job: Job;
   }> {
-    const response = await fetch(`${API_BASE}/payees/merge`, {
+    const response = await sessionFetch(`${API_BASE}/payees/merge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -371,7 +370,7 @@ export const api = {
    * List category goal templates parsed from notes
    */
   async listCategoryTemplates(): Promise<{ templates: CategoryTemplateSummary[] }> {
-    const response = await fetch(`${API_BASE}/budgets/templates`);
+    const response = await sessionFetch(`${API_BASE}/budgets/templates`);
 
     if (!response.ok) {
       throw new Error('Failed to get templates');
@@ -384,7 +383,7 @@ export const api = {
    * List schedule names for template suggestions
    */
   async listSchedules(): Promise<{ schedules: ScheduleSummary[] }> {
-    const response = await fetch(`${API_BASE}/budgets/schedules`);
+    const response = await sessionFetch(`${API_BASE}/budgets/schedules`);
 
     if (!response.ok) {
       throw new Error('Failed to get schedules');
@@ -397,7 +396,7 @@ export const api = {
    * Render template objects into note strings
    */
   async renderNoteTemplates(templates: Record<string, unknown>[]): Promise<{ rendered: string }> {
-    const response = await fetch(`${API_BASE}/budgets/templates/render`, {
+    const response = await sessionFetch(`${API_BASE}/budgets/templates/render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ templates }),
@@ -424,7 +423,7 @@ export const api = {
     rolledBack: boolean;
     job: Job | null;
   }> {
-    const response = await fetch(`${API_BASE}/budgets/templates/apply`, {
+    const response = await sessionFetch(`${API_BASE}/budgets/templates/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ categoryId, note, sync, budgetId }),
@@ -441,7 +440,7 @@ export const api = {
    * Create a new budget snapshot
    */
   async createSnapshotJob(budgetId: string) {
-    const response = await fetch(`${API_BASE}/jobs/snapshot-create`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/snapshot-create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId }),
@@ -462,7 +461,7 @@ export const api = {
     _maxSuggestions?: number,
     useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, useAI }),
@@ -484,7 +483,7 @@ export const api = {
     fullSnapshot = false,
     useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, fullResync: fullSnapshot, useAI }),
@@ -501,7 +500,7 @@ export const api = {
    * Get pending suggestions
    */
   async getPendingSuggestions(): Promise<{ suggestions: Suggestion[] }> {
-    const response = await fetch(`${API_BASE}/suggestions/pending`);
+    const response = await sessionFetch(`${API_BASE}/suggestions/pending`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch pending suggestions');
@@ -514,7 +513,7 @@ export const api = {
    * Get suggestions by budget ID
    */
   async getSuggestionsByBudgetId(budgetId: string): Promise<{ suggestions: Suggestion[] }> {
-    const response = await fetch(`${API_BASE}/suggestions?budgetId=${budgetId}`);
+    const response = await sessionFetch(`${API_BASE}/suggestions?budgetId=${budgetId}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch suggestions');
@@ -529,7 +528,9 @@ export const api = {
   async getUncategorizedTransactions(
     budgetId: string
   ): Promise<{ transactions: UncategorizedTransaction[] }> {
-    const response = await fetch(`${API_BASE}/suggestions/uncategorized?budgetId=${budgetId}`);
+    const response = await sessionFetch(
+      `${API_BASE}/suggestions/uncategorized?budgetId=${budgetId}`
+    );
 
     if (!response.ok) {
       throw new Error('Failed to fetch uncategorized transactions');
@@ -552,7 +553,7 @@ export const api = {
     if (params.status) query.set('status', params.status);
     if (params.limit) query.set('limit', String(params.limit));
 
-    const response = await fetch(`${API_BASE}/jobs?${query.toString()}`);
+    const response = await sessionFetch(`${API_BASE}/jobs?${query.toString()}`);
     if (!response.ok) {
       throw new Error('Failed to list jobs');
     }
@@ -564,7 +565,7 @@ export const api = {
    * Get a job by ID with steps
    */
   async getJob(jobId: string): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+    const response = await sessionFetch(`${API_BASE}/jobs/${jobId}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch job');
@@ -577,7 +578,7 @@ export const api = {
    * Create a sync job
    */
   async createSyncJob(budgetId: string): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/budget-sync`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/budget-sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId }),
@@ -597,7 +598,7 @@ export const api = {
     budgetId: string,
     useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/suggestions-generate`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/suggestions-generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, useAI }),
@@ -618,7 +619,7 @@ export const api = {
     fullResync = false,
     useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/sync-and-suggest`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/sync-and-suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, fullResync, useAI }),
@@ -635,7 +636,7 @@ export const api = {
    * Approve a suggestion
    */
   async approveSuggestion(suggestionId: string) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/approve`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/${suggestionId}/approve`, {
       method: 'POST',
     });
 
@@ -650,7 +651,7 @@ export const api = {
    * Reject a suggestion
    */
   async rejectSuggestion(suggestionId: string) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reject`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/${suggestionId}/reject`, {
       method: 'POST',
     });
 
@@ -665,7 +666,7 @@ export const api = {
    * Approve only the payee suggestion
    */
   async approvePayeeSuggestion(suggestionId: string) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/approve-payee`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/${suggestionId}/approve-payee`, {
       method: 'POST',
     });
 
@@ -680,9 +681,12 @@ export const api = {
    * Approve only the category suggestion
    */
   async approveCategorySuggestion(suggestionId: string) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/approve-category`, {
-      method: 'POST',
-    });
+    const response = await sessionFetch(
+      `${API_BASE}/suggestions/${suggestionId}/approve-category`,
+      {
+        method: 'POST',
+      }
+    );
 
     if (!response.ok) {
       throw new Error('Failed to approve category suggestion');
@@ -698,7 +702,7 @@ export const api = {
     suggestionId: string,
     correction?: { payeeId?: string; payeeName?: string }
   ) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reject-payee`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/${suggestionId}/reject-payee`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(correction || {}),
@@ -718,7 +722,7 @@ export const api = {
     suggestionId: string,
     correction?: { categoryId?: string; categoryName?: string }
   ) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reject-category`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/${suggestionId}/reject-category`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(correction || {}),
@@ -738,7 +742,7 @@ export const api = {
     suggestionIds: string[],
     correction: { categoryId: string; categoryName?: string }
   ): Promise<{ corrected: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/bulk-correct-category`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/bulk-correct-category`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ suggestionIds, ...correction }),
@@ -758,7 +762,7 @@ export const api = {
     suggestionIds: string[],
     correction: { payeeId?: string; payeeName: string }
   ): Promise<{ corrected: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/bulk-correct-payee`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/bulk-correct-payee`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ suggestionIds, ...correction }),
@@ -775,7 +779,7 @@ export const api = {
    * Reset a suggestion back to pending (undo approve/reject)
    */
   async resetSuggestion(suggestionId: string) {
-    const response = await fetch(`${API_BASE}/suggestions/${suggestionId}/reset`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/${suggestionId}/reset`, {
       method: 'POST',
     });
 
@@ -790,7 +794,7 @@ export const api = {
    * Bulk reset suggestions back to pending
    */
   async bulkResetSuggestions(suggestionIds: string[]): Promise<{ reset: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/bulk-reset`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/bulk-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ suggestionIds }),
@@ -807,7 +811,7 @@ export const api = {
    * Get approved suggestions ready to apply
    */
   async getApprovedChanges(budgetId: string): Promise<{ changes: ApprovedChange[] }> {
-    const response = await fetch(`${API_BASE}/sync/pending?budgetId=${budgetId}`);
+    const response = await sessionFetch(`${API_BASE}/sync/pending?budgetId=${budgetId}`);
 
     if (!response.ok) {
       throw new Error('Failed to get approved changes');
@@ -823,7 +827,7 @@ export const api = {
     budgetId: string,
     suggestionIds: string[]
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/suggestions-apply`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/suggestions-apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, suggestionIds }),
@@ -845,7 +849,7 @@ export const api = {
     suggestionId: string,
     useAI?: boolean
   ): Promise<{ job: Job; steps: JobStep[] }> {
-    const response = await fetch(`${API_BASE}/jobs/suggestions-retry`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/suggestions-retry`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId, suggestionId, useAI }),
@@ -862,7 +866,7 @@ export const api = {
    * Redownload snapshot
    */
   async redownloadSnapshotJob(budgetId: string) {
-    const response = await fetch(`${API_BASE}/jobs/snapshot-redownload`, {
+    const response = await sessionFetch(`${API_BASE}/jobs/snapshot-redownload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ budgetId }),
@@ -879,7 +883,7 @@ export const api = {
    * Bulk approve multiple suggestions
    */
   async bulkApproveSuggestions(suggestionIds: string[]): Promise<{ approved: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/bulk-approve`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/bulk-approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ suggestionIds }),
@@ -896,7 +900,7 @@ export const api = {
    * Bulk reject multiple suggestions
    */
   async bulkRejectSuggestions(suggestionIds: string[]): Promise<{ rejected: number }> {
-    const response = await fetch(`${API_BASE}/suggestions/bulk-reject`, {
+    const response = await sessionFetch(`${API_BASE}/suggestions/bulk-reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ suggestionIds }),
@@ -913,7 +917,7 @@ export const api = {
    * Get audit events
    */
   async getAuditEvents(limit = 200): Promise<{ events: AuditEvent[] }> {
-    const response = await fetch(`${API_BASE}/audit?limit=${limit}`);
+    const response = await sessionFetch(`${API_BASE}/audit?limit=${limit}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch audit events');

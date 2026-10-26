@@ -73,7 +73,12 @@ export class IntegrationService {
     return new Promise((resolve) => this.idleWaiters.push(resolve));
   }
 
-  async read(collection: Collection, input: unknown, transport: 'rest' | 'mcp') {
+  async read(
+    collection: Collection,
+    input: unknown,
+    transport: 'rest' | 'mcp',
+    principalId?: string
+  ) {
     const query = readInputSchema.parse(input);
     if (collection === 'transactions') {
       if (
@@ -107,7 +112,7 @@ export class IntegrationService {
       const job = this.jobs.createJob({
         budgetId: this.budgetId,
         type: 'integration_read',
-        metadata: { collection, transport },
+        metadata: { collection, transport, principalId },
       });
       jobId = job.id;
       this.jobs.markJobRunning(job.id);
@@ -142,6 +147,7 @@ export class IntegrationService {
         metadata: {
           collection,
           transport,
+          principalId,
           count: data.length,
           durationMs: Math.round(performance.now() - started),
         },
@@ -161,6 +167,7 @@ export class IntegrationService {
         metadata: {
           collection,
           transport,
+          principalId,
           code: safe.code,
           durationMs: Math.round(performance.now() - started),
         },

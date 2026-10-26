@@ -1,21 +1,3 @@
-{{- if .Values.tunnel.enabled }}
-{{- if or (not .Values.integrations.enabled) (ne .Values.integrations.listener "loopback") }}
-{{- fail "tunnel requires enabled integrations with listener=loopback" }}
-{{- end }}
-{{- if not (regexMatch "^ghcr[.]io/openai/tunnel-client@sha256:[a-f0-9]{64}$" .Values.tunnel.image) }}
-{{- fail "tunnel.image requires a provenance-verified official image digest" }}
-{{- end }}
-{{- if or (eq (int .Values.integrations.port) 8080) (eq (int .Values.env.port) 8080) }}
-{{- fail "port 8080 is reserved for tunnel loopback health" }}
-{{- end }}
-{{- $_ := required "tunnel.tunnelId is required" .Values.tunnel.tunnelId }}
-{{- $_ := required "tunnel.existingSecretName is required" .Values.tunnel.existingSecretName }}
-{{- end }}
-{{- if eq (int .Values.integrations.port) (int .Values.env.port) }}
-{{- if eq .Values.integrations.listener "loopback" }}
-{{- fail "integrations.port must differ from env.port" }}
-{{- end }}
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,9 +15,6 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | quote }}
-        {{- if .Values.tunnel.enabled }}
-        checksum/tunnel: {{ include (print $.Template.BasePath "/tunnel-configmap.yaml") . | sha256sum | quote }}
-        {{- end }}
       labels:
         {{- include "actual-assist.selectorLabels" . | nindent 8 }}
     spec:
@@ -74,46 +53,7 @@ spec:
         volumeMounts:
         - name: data
           mountPath: {{ .Values.storage.mountPath }}
-      {{- if .Values.tunnel.enabled }}
-      - name: mcp-tunnel
-        image: {{ .Values.tunnel.image | quote }}
-        args: ["--config", "/etc/tunnel/config.yaml"]
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 10001
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop: ["ALL"]
-        env:
-        - name: CONTROL_PLANE_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.tunnel.existingSecretName | quote }}
-              key: {{ .Values.tunnel.runtimeKeyKey | quote }}
-        - name: ACTUAL_MCP_AUTHORIZATION
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.tunnel.existingSecretName | quote }}
-              key: {{ .Values.tunnel.authorizationHeaderKey | quote }}
-        resources:
-          {{- toYaml .Values.tunnel.resources | nindent 10 }}
-        volumeMounts:
-        - name: tunnel-config
-          mountPath: /etc/tunnel
-          readOnly: true
-        - name: tunnel-tmp
-          mountPath: /tmp
-      {{- end }}
       volumes:
-      {{- if .Values.tunnel.enabled }}
-      - name: tunnel-config
-        configMap:
-          name: {{ include "actual-assist.fullname" . }}-tunnel
-      - name: tunnel-tmp
-        emptyDir:
-          sizeLimit: 16Mi
-      {{- end }}
       - name: data
         persistentVolumeClaim:
           claimName: {{ .Values.storage.existingClaim | default (printf "%s-data" (include "actual-assist.fullname" .)) | quote }}

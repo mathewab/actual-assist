@@ -94,25 +94,11 @@ env:
   port: 3000
   dataDir: /data
 
-# Machine integrations stay off until their access policy and token are provisioned.
-integrations:
-  enabled: false
-  listener: shared
-  port: 3001
+# Generic application security; credential JSON comes only from an existing Secret.
+auth:
+  mode: legacy
   allowedOrigins: []
-  # INTEGRATIONS_TOKEN must come from the existing externally managed Secret.
-
-# Disabled until an operator verifies the image provenance and provisions scoped secrets.
-tunnel:
+  cookieSecure: true
+  sessionTtlSeconds: 3600
+machineApi:
   enabled: false
-  image: "" # ghcr.io/openai/tunnel-client@sha256:<verified digest>
-  tunnelId: ""
-  existingSecretName: ""
-  runtimeKeyKey: runtime-api-key
-  authorizationHeaderKey: actual-authorization-header
-  resources:
-    requests:
-      cpu: 25m
-      memory: 64Mi
-    limits:
-      memory: 256Mi

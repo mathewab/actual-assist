@@ -1,3 +1,4 @@
+import { attributedMetadata } from '../requestContext.js';
 import type { DatabaseAdapter } from '../DatabaseAdapter.js';
 import type { AuditEntry, AuditEventType } from '../../domain/entities/AuditEntry.js';
 import { createAuditEntry } from '../../domain/entities/AuditEntry.js';
@@ -30,7 +31,10 @@ export class AuditRepository {
     metadata?: Record<string, unknown>;
   }): void {
     try {
-      const entry = createAuditEntry(params);
+      const entry = createAuditEntry({
+        ...params,
+        metadata: attributedMetadata(params.metadata) ?? undefined,
+      });
 
       const sql = `
         INSERT INTO audit_log (event_type, entity_type, entity_id, metadata, timestamp)

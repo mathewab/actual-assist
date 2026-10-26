@@ -56,7 +56,7 @@ The community [actual-http-api](https://github.com/jhonderson/actual-http-api) i
 
 ## Release and rollback review
 
-Proposed feature version: 0.9.0, after draft PR review and exact-SHA CI. Before release, verify the deployed Actual server is compatible with API 26.10.0. Publish only with orchestrator authorization; the version workflow updates npm/Helm together and tags `v0.9.0`, triggering image tags `0.9.0`/`0.9`, chart 0.9.0, and the GitHub release. Release and chart-index git identities must both use `amathew121@gmail.com`. Inspect resulting remote author/committer identities and image provenance/digest before rollout.
+Proposed feature version: 0.9.0, after draft PR review and exact-SHA CI. Before release, verify the deployed Actual server is compatible with API 26.10.0. The version workflow updates npm/Helm together and tags `v0.9.0`, triggering image tags `0.9.0`/`0.9`, chart 0.9.0, and the GitHub release. Verify the published image provenance and digest before rollout.
 
 Preserve the previous chart and image digest and back up the existing PVC using the established operator process before any approved upgrade. No new schema migration is added. First deploy with integrations disabled, verify health and existing UI, then enable only after approving the token source and access policy. Health/authentication checks do not read financial records. Functional checks against a real budget require separate authorization.
 

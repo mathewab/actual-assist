@@ -77,7 +77,7 @@ spec:
       {{- if .Values.tunnel.enabled }}
       - name: mcp-tunnel
         image: {{ .Values.tunnel.image | quote }}
-        args: ["run", "--config", "/etc/tunnel/config.yaml"]
+        args: ["--config", "/etc/tunnel/config.yaml"]
         securityContext:
           runAsNonRoot: true
           runAsUser: 10001

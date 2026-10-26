@@ -65,6 +65,7 @@ tunnel = private + [
 ]
 manifest = render("deployment", *tunnel)
 assert 'name: mcp-tunnel' in manifest
+assert 'args: ["--config", "/etc/tunnel/config.yaml"]' in manifest
 assert 'name: "fixture-tunnel-secret"' in manifest
 assert 'key: "runtime-api-key"' in manifest
 assert 'key: "actual-authorization-header"' in manifest

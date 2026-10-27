@@ -23,6 +23,8 @@ Set comma-separated `AUTH_ALLOWED_ORIGINS` to exact UI origins. Requests present
 
 `AuthenticationProvider` produces a named principal, while authorization and session issuance remain separate. A future verified OIDC/Authelia adapter can map identities to these explicit roles without changing domain services or REST/MCP authorization. That requires a separate design for issuer verification, callbacks, trust boundaries, and revocation; no Authelia, proxy-header authentication, or Actual Budget server authentication change is implemented here.
 
+OAuth is not currently advertised. Requests under `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, and `/.well-known/openid-configuration` return JSON 404 responses, including resource-specific discovery paths such as `/mcp`. They never fall through to the UI HTML shell. Clients continue to use their configured bearer credential; these responses do not grant API access.
+
 ## Configuration and migration
 
 Chart values are `auth.mode`, `auth.allowedOrigins`, `auth.cookieSecure`, `auth.sessionTtlSeconds`, and `machineApi.enabled`. Credentials come from `secrets.existingSecretName` through the existing environment Secret reference. ConfigMap changes trigger pod rollout via checksum. Secret rotation requires a controlled restart, revoking existing sessions; no secret watcher or extra permissions are introduced.

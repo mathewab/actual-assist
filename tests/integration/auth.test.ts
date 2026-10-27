@@ -41,6 +41,7 @@ async function fixture(mode: 'legacy' | 'enforced' = 'enforced') {
     res.json({ fixture: true });
   });
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  app.get(/.*/, (_req, res) => res.type('html').send('<html>fixture UI</html>'));
   const server: Server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
@@ -295,3 +296,31 @@ it('rate limits session status and logout before dispatch using the shared API b
   expect(f.legacyOperation).not.toHaveBeenCalled();
   expect((await fetch(f.url + '/health')).status).toBe(200);
 });
+
+for (const mode of ['legacy', 'enforced'] as const) {
+  it(`returns absent OAuth metadata before SPA fallback in ${mode} mode`, async () => {
+    const f = await fixture(mode);
+    for (const path of [
+      '/.well-known/oauth-protected-resource/mcp',
+      '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-authorization-server',
+      '/.well-known/openid-configuration',
+    ]) {
+      for (const headers of [{}, { Authorization: `Bearer ${reader}` }]) {
+        const response = await fetch(f.url + path, { headers });
+        expect(response.status).toBe(404);
+        expect(response.headers.get('content-type')).toContain('application/json');
+        expect(await response.json()).toEqual({ error: 'NOT_FOUND' });
+        expect(response.headers.get('www-authenticate')).toBeNull();
+      }
+    }
+    const ui = await fetch(f.url + '/settings');
+    expect(ui.status).toBe(200);
+    expect(await ui.text()).toContain('fixture UI');
+    expect(f.legacyOperation).not.toHaveBeenCalled();
+    if (mode === 'enforced') {
+      expect((await fetch(f.url + '/mcp', { method: 'POST' })).status).toBe(401);
+      expect((await fetch(f.url + '/api/v1/accounts')).status).toBe(401);
+    }
+  });
+}

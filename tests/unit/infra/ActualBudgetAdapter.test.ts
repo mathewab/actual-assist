@@ -7,6 +7,8 @@ const api = vi.hoisted(() => ({
   getAccounts: vi.fn(),
   getTransactions: vi.fn(),
   getPayees: vi.fn(),
+  getCategories: vi.fn(),
+  getCategoryGroups: vi.fn(),
 }));
 vi.mock('@actual-app/api', () => ({ default: api }));
 vi.mock('../../../src/infra/logger.js', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
@@ -69,4 +71,31 @@ describe('shared Actual adapter lifetime (mock API only)', () => {
     ).resolves.toEqual([{ id: 'fixture-transaction', amount: 123 }]);
     expect(api.getTransactions).toHaveBeenCalledWith('fixture-account', '2026-01-01', '2026-01-02');
   });
+});
+
+it('captures hidden categories and closed-account history without syncing, excluding off-budget accounts', async () => {
+  const adapter = new ActualBudgetAdapter(env);
+  await adapter.initialize();
+  api.getAccounts.mockResolvedValue([
+    { id: 'closed', name: 'Closed', closed: true },
+    { id: 'off', offbudget: true },
+  ]);
+  api.getCategories.mockResolvedValue([
+    { id: 'hidden', name: 'Hidden income', group_id: 'income', hidden: true },
+  ]);
+  api.getCategoryGroups.mockResolvedValue([{ id: 'income', is_income: true }]);
+  api.getTransactions.mockResolvedValue([
+    {
+      id: 't',
+      date: '2026-09-01',
+      amount: 100,
+      notes: 'MUST_NOT_LEAVE_CAPTURE',
+      category: 'hidden',
+    },
+  ]);
+  const capture = await adapter.captureReport('2026-09');
+  expect(capture.categories).toEqual([{ id: 'hidden', name: 'Hidden income', income: true }]);
+  expect(capture.accounts).toHaveLength(1);
+  expect(api.getTransactions).toHaveBeenCalledWith('closed', '2026-09-01', '2026-09-30');
+  expect(JSON.stringify(capture)).not.toContain('MUST_NOT_LEAVE_CAPTURE');
 });

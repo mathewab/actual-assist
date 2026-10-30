@@ -1,0 +1,19 @@
+{
+  "month": "September 2026",
+  "currency": "USD",
+  "income_cents": 720000,
+  "categories_cents": {
+    "Home": 240000,
+    "Food & groceries": 76000,
+    "Transport": 42000,
+    "Lifestyle": 151000,
+    "Utilities": 31000,
+    "Uncategorized": 15000
+  },
+  "refunds_cents": 12000,
+  "gross_spending_cents": 567000,
+  "captured_at": "02 Oct 2026, 09:00 UTC",
+  "latest_recorded": "28 Sep 2026",
+  "spending_cents": 555000,
+  "net_cents": 165000
+}

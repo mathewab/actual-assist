@@ -1,3 +1,7 @@
+import { createReportRouter } from './api/reportRoutes.js';
+import { ReportService } from './services/ReportService.js';
+import { ReportRepository } from './infra/repositories/ReportRepository.js';
+import { ReportFileStore } from './infra/reports/ReportFileStore.js';
 import { mountAccessBoundary } from './auth/mountAccessBoundary.js';
 import { createHttpAuth, principalOf } from './auth/httpAuth.js';
 import { StaticCredentialProvider } from './auth/principals.js';
@@ -132,15 +136,25 @@ const auth = createHttpAuth({
   audit: (eventType, principalId) =>
     auditRepo.log({ eventType, entityType: 'principal', entityId: principalId ?? 'anonymous' }),
 });
-mountAccessBoundary(
-  app,
-  auth,
+const reportService = new ReportService(
+  env.ACTUAL_BUDGET_ID,
+  (month) => actualBudget.captureReport(month),
+  new ReportRepository(db),
+  new ReportFileStore(path.join(env.DATA_DIR, 'reports')),
+  jobService,
+  auditRepo
+);
+await reportService.recover();
+const machineRouter = express.Router();
+machineRouter.use('/api/v1/reports', createReportRouter(reportService, auth));
+machineRouter.use(
   createIntegrationRouter(integrationService, {
     enabled: env.MACHINE_API_ENABLED,
     auth,
     version: packageInfo.version,
   })
 );
+mountAccessBoundary(app, auth, machineRouter);
 
 // Middleware
 if (env.AUTH_MODE === 'legacy') app.use(cors());
@@ -294,6 +308,7 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   integrationService.stop();
+  reportService.stop();
   SyncScheduler.getInstance()?.stop();
   loggerInstance.info('Shutting down gracefully');
   if (jobTimeoutInterval) {
@@ -306,6 +321,7 @@ async function shutdown() {
       jobEventBus.shutdown();
     });
     await integrationService.drain();
+    await reportService.drain();
     await actualBudget.shutdown();
     db.close();
     loggerInstance.info('Server closed');

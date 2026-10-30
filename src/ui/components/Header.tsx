@@ -50,6 +50,7 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
 
   const isHomeSection = location.pathname === '/';
   const isToolsSection =
+    location.pathname.startsWith('/reports') ||
     location.pathname.startsWith('/suggestions') ||
     location.pathname.startsWith('/templates') ||
     location.pathname.startsWith('/history') ||
@@ -69,6 +70,7 @@ export function Header({ budgetName, budgetId }: HeaderProps) {
       {
         label: 'Tools',
         items: [
+          { label: 'Monthly reports', path: '/reports' },
           { label: 'Category suggestions', path: '/suggestions' },
           { label: 'Duplicate payee suggestions', path: '/payees/merge' },
           { label: 'Budget Template Studio', path: '/templates' },

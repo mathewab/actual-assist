@@ -51,8 +51,6 @@ export class OpenAIAdapter implements AIAdapter {
 
       logger.info('OpenAI request payload', {
         model: this.model,
-        instructions: options.instructions ?? null,
-        input: options.input,
         inputLength: options.input.length,
         hasInstructions: !!options.instructions,
         webSearch: options.webSearch ?? false,
@@ -78,22 +76,7 @@ export class OpenAIAdapter implements AIAdapter {
         tools: tools.length > 0 ? tools : undefined,
         text,
       });
-      let chunkBuffer = '';
-      responseStream.on('response.output_text.delta', (event) => {
-        chunkBuffer += event.delta;
-        if (chunkBuffer.length >= 100) {
-          logger.info('OpenAI response chunk', {
-            delta: chunkBuffer,
-          });
-          chunkBuffer = '';
-        }
-      });
       const response = await responseStream.finalResponse();
-      if (chunkBuffer.length > 0) {
-        logger.info('OpenAI response chunk', {
-          delta: chunkBuffer,
-        });
-      }
 
       // Log response structure for debugging
       logger.debug('OpenAI Responses API response', {
@@ -128,9 +111,7 @@ export class OpenAIAdapter implements AIAdapter {
       const content = textOutput?.content?.find((c) => c.type === 'output_text')?.text;
 
       if (!content) {
-        logger.error('Empty response from OpenAI', {
-          outputs: JSON.stringify(response.output, null, 2),
-        });
+        logger.error('Empty response from OpenAI');
         throw new OpenAIError('Empty response from OpenAI');
       }
 
@@ -145,11 +126,8 @@ export class OpenAIAdapter implements AIAdapter {
       if (error instanceof OpenAIError) {
         throw error;
       }
-      logger.error('OpenAI completion failed', {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      throw new OpenAIError('Completion failed', { error });
+      logger.error('OpenAI completion failed');
+      throw new OpenAIError('Completion failed');
     }
   }
 

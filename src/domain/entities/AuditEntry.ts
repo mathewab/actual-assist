@@ -12,6 +12,10 @@ export interface AuditEntry {
 }
 
 export type AuditEventType =
+  | 'report_started'
+  | 'report_saved'
+  | 'report_failed'
+  | 'report_downloaded'
   | 'auth_login'
   | 'auth_login_denied'
   | 'auth_logout'

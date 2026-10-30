@@ -74,9 +74,7 @@ export class GoogleAIAdapter implements AIAdapter {
       const content = response.text;
 
       if (!content) {
-        logger.error('Empty response from Google AI', {
-          response: JSON.stringify(response, null, 2),
-        });
+        logger.error('Empty response from Google AI');
         throw new AIError('Empty response from Google AI', 'google');
       }
 
@@ -90,11 +88,8 @@ export class GoogleAIAdapter implements AIAdapter {
       if (error instanceof AIError) {
         throw error;
       }
-      logger.error('Google AI completion failed', {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      throw new AIError('Completion failed', 'google', { error });
+      logger.error('Google AI completion failed');
+      throw new AIError('Completion failed', 'google');
     }
   }
 

@@ -80,3 +80,7 @@ Tests required before implementation merge: integer arithmetic/refunds/zero inco
 ## Design validation
 
 The accompanying generator asserts synthetic totals, percentages and category reconciliation, and creates a four-page PDF. Rendering and text extraction verify the PDF locally. No app tests were needed for this documentation-only milestone; application tests, runtime renderer benchmarks, actual SDK normalization, live auth, backups, AI and notification tests are not run. No commit, PR, credential, live API request, schedule or deployment created. No blocking product decision is required to review this design. Currency uses USD only as an explicitly synthetic visual assumption; production must read/validate the configured budget currency.
+
+## Optional spending-pattern drill-down
+
+The approved visual direction can extend to evidence-linked exploration on the authenticated Reports page. See [drill-down-proposal.md](drill-down-proposal.md) for a deliberately small, unimplemented increment, exact snapshot evidence requirements, AI boundaries, comparison/recurrence limitations and effort estimate. Scope approval is still needed before implementation; mockup approval does not enable real-data AI or approve PR creation.

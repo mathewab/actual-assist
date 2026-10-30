@@ -77,4 +77,21 @@ describe('monthly facts', () => {
     ).toBe(0);
     expect(() => calculateReport(capture([]), '2026-09', 'XXX')).toThrow();
   });
+  it('rejects intermediate integer overflow even when a later refund would hide it', () => {
+    expect(() =>
+      calc([
+        row('a', Number.MAX_SAFE_INTEGER, { category: 'pay' }),
+        row('b', 2, { category: 'pay' }),
+        row('c', -2, { category: 'pay' }),
+      ])
+    ).toThrow('AMOUNT_OVERFLOW');
+    expect(() =>
+      calc([
+        row('p', Number.MAX_SAFE_INTEGER, {
+          is_parent: true,
+          subtransactions: [row('a', Number.MAX_SAFE_INTEGER), row('b', 2), row('c', -2)],
+        }),
+      ])
+    ).toThrow('AMOUNT_OVERFLOW');
+  });
 });

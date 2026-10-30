@@ -57,10 +57,13 @@ export async function renderReportPdf(
       .fillColor(teal)
       .fontSize(10)
       .text(label, x + 12, cardY + 15, { width: 142 });
+    const value = reportMoney(amount, facts.currency);
+    let size = 21;
+    while (size > 8 && doc.fontSize(size).widthOfString(value) > 142) size--;
     doc
       .fillColor(ink)
-      .fontSize(21)
-      .text(reportMoney(amount, facts.currency), x + 12, cardY + 42, { width: 142 });
+      .fontSize(size)
+      .text(value, x + 12, cardY + 42, { width: 142, lineBreak: false });
   }
   doc.x = 40;
   doc.y = cardY + 130;

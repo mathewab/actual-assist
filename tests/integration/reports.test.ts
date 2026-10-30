@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 const reader = 'synthetic-reader-credential-at-least-32';
 const operator = 'synthetic-operator-credential-at-least-32';
-async function fixture() {
+async function fixture(mode: 'legacy' | 'enforced' = 'enforced') {
   const dir = await mkdtemp(join(tmpdir(), 'reports-test-'));
   const env = envSchema.parse({
     ACTUAL_SERVER_URL: 'https://fixture.invalid',
@@ -71,7 +71,7 @@ async function fixture() {
     new AuditRepository(db)
   );
   const auth = createHttpAuth({
-    mode: 'enforced',
+    mode,
     origins: ['https://fixture.invalid'],
     secureCookie: false,
     ttlSeconds: 300,
@@ -211,5 +211,62 @@ describe('saved reports with real SQLite and local PDF renderer', () => {
       });
     expect((await generate()).status).toBe(403);
     expect((await generate(session.csrf)).status).toBe(201);
+  });
+  it('does not publish a report after its job was canceled or timed out', async () => {
+    const f = await fixture();
+    f.capture.mockImplementationOnce(async () => {
+      const [job] = f.jobs.listJobs({
+        budgetId: f.env.ACTUAL_BUDGET_ID,
+        type: 'report_generate',
+        status: 'running',
+      });
+      f.jobs.markJobCanceled(job.id);
+      return structuredClone(f.source);
+    });
+    await expect(f.service.generate(f.input)).rejects.toThrow('REPORT_JOB_INACTIVE');
+    expect(f.service.list(100, 0)).toHaveLength(0);
+  });
+  it('keeps other-budget history during orphan cleanup and rejects cross-month regeneration', async () => {
+    const f = await fixture();
+    const original = await f.service.generate(f.input);
+    f.db.execute('UPDATE monthly_reports SET budget_id = ? WHERE id = ?', [
+      'other-budget',
+      original.id,
+    ]);
+    await utimes(join(f.dir, `${original.id}.pdf`), new Date(0), new Date(0));
+    await f.service.recover();
+    await expect(access(join(f.dir, `${original.id}.pdf`))).resolves.toBeUndefined();
+    expect(() => f.service.get(original.id)).toThrow('NOT_FOUND');
+    const own = await f.service.generate({ ...f.input, requestKey: randomUUID() });
+    await expect(
+      f.service.generate({
+        ...f.input,
+        month: '2026-08',
+        requestKey: randomUUID(),
+        supersedesId: own.id,
+      })
+    ).rejects.toThrow('INVALID_PREDECESSOR');
+  });
+  it('leaves no ready row when rendering or persistence fails; retry can succeed', async () => {
+    const f = await fixture();
+    const files = vi.spyOn(f.files, 'save').mockRejectedValueOnce(new Error('synthetic disk full'));
+    await expect(f.service.generate(f.input)).rejects.toThrow('REPORT_GENERATION_FAILED');
+    expect(f.service.list(100, 0)).toEqual([]);
+    files.mockRestore();
+    expect((await f.service.generate(f.input)).version).toBe(1);
+    vi.spyOn(f.repo, 'save').mockImplementationOnce(() => {
+      throw new Error('synthetic DB write failure');
+    });
+    await expect(f.service.generate({ ...f.input, requestKey: randomUUID() })).rejects.toThrow(
+      'REPORT_GENERATION_FAILED'
+    );
+    expect(f.service.list(100, 0)).toHaveLength(1);
+  });
+  it('does not expose report routes when authentication is in legacy mode', async () => {
+    const f = await fixture('legacy');
+    const response = await fetch(f.url);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'REPORTS_REQUIRE_ENFORCED_AUTH' });
+    expect(f.capture).not.toHaveBeenCalled();
   });
 });

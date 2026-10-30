@@ -1,5 +1,5 @@
 # Multi-stage build for single app
-FROM node:26-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
 LABEL org.opencontainers.image.title="Actual Assist" \
       org.opencontainers.image.description="AI-powered budgeting assistant for Actual Budget" \

@@ -53,6 +53,12 @@ export function validateCurrency(currency: string): string {
     throw new ReportError('UNSUPPORTED_CURRENCY', 400);
   return currency;
 }
+function addMinorUnits(left: number, right: number): number {
+  const sum = left + right;
+  if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right) || !Number.isSafeInteger(sum))
+    throw new ReportError('AMOUNT_OVERFLOW');
+  return sum;
+}
 /** Actual API returns grouped splits. Reject malformed groups instead of double counting. */
 export function calculateReport(
   capture: ReportCapture,
@@ -84,17 +90,17 @@ export function calculateReport(
     }
     const category = txn.category ? categories.get(txn.category) : undefined;
     if (category?.income) {
-      income += txn.amount;
+      income = addMinorUnits(income, txn.amount);
       return;
     }
     if (!category && txn.amount > 0) {
-      unresolvedInflows += txn.amount;
+      unresolvedInflows = addMinorUnits(unresolvedInflows, txn.amount);
       return;
     }
-    spending -= txn.amount;
+    spending = addMinorUnits(spending, -txn.amount);
     const id = category?.id ?? 'uncategorized';
     const total = totals.get(id) ?? { id, name: category?.name ?? 'Uncategorized', amount: 0 };
-    total.amount -= txn.amount;
+    total.amount = addMinorUnits(total.amount, -txn.amount);
     totals.set(id, total);
   };
   for (const account of capture.accounts)
@@ -106,10 +112,17 @@ export function calculateReport(
           throw new ReportError('INVALID_TRANSACTIONS');
         seen.add(txn.id);
         const children = txn.subtransactions;
-        if (!children?.length || children.reduce((s, c) => s + c.amount, 0) !== txn.amount)
+        if (
+          !children?.length ||
+          children.reduce((s, c) => addMinorUnits(s, c.amount), 0) !== txn.amount
+        )
           throw new ReportError('INCONSISTENT_SPLITS');
         for (const child of children) {
-          if (child.subtransactions?.length || (child.parent_id && child.parent_id !== txn.id))
+          if (
+            child.is_parent ||
+            child.subtransactions?.length ||
+            (child.parent_id && child.parent_id !== txn.id)
+          )
             throw new ReportError('INCONSISTENT_SPLITS');
           add({ ...child, date: txn.date });
         }

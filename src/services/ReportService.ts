@@ -135,6 +135,8 @@ export class ReportService {
         narrative,
       };
       await this.files.save(id, bytes);
+      if (this.jobs.getJob(job.id).status !== 'running')
+        throw new ReportError('REPORT_JOB_INACTIVE');
       this.repo.save(report, input.requestKey, request);
       saved = true;
       this.jobs.markJobSucceeded(job.id);

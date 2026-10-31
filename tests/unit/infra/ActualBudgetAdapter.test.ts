@@ -84,6 +84,7 @@ it('captures hidden categories and closed-account history without syncing, exclu
     { id: 'hidden', name: 'Hidden income', group_id: 'income', hidden: true },
   ]);
   api.getCategoryGroups.mockResolvedValue([{ id: 'income', is_income: true }]);
+  api.getPayees.mockResolvedValue([{ id: 'merchant', name: 'Synthetic merchant' }]);
   api.getTransactions.mockResolvedValue([
     {
       id: 't',
@@ -96,6 +97,6 @@ it('captures hidden categories and closed-account history without syncing, exclu
   const capture = await adapter.captureReport('2026-09');
   expect(capture.categories).toEqual([{ id: 'hidden', name: 'Hidden income', income: true }]);
   expect(capture.accounts).toHaveLength(1);
-  expect(api.getTransactions).toHaveBeenCalledWith('closed', '2026-09-01', '2026-09-30');
+  expect(api.getTransactions).toHaveBeenCalledWith('closed', '2025-09-01', '2026-09-30');
   expect(JSON.stringify(capture)).not.toContain('MUST_NOT_LEAVE_CAPTURE');
 });

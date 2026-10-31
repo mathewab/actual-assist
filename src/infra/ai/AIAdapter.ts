@@ -9,6 +9,7 @@ export interface CompletionOptions {
   instructions?: string;
   /** User input/prompt */
   input: string;
+  signal?: AbortSignal;
   /** Enable web search tool for up-to-date information (if supported) */
   webSearch?: boolean;
   /** Structured output schema for JSON responses */

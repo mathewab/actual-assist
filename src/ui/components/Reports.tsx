@@ -1,26 +1,11 @@
+import { reportRequest as request } from '../services/reports';
+import { ReportExplore } from './ReportExplore';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
-import { API_BASE, sessionFetch } from '../services/session';
+import { API_BASE } from '../services/session';
 import type { SavedReport } from '../../domain/reports/ReportTypes';
-async function request<T>(path: string, body?: unknown): Promise<T> {
-  const response = await sessionFetch(
-    `${API_BASE}/v1/reports${path}`,
-    body
-      ? {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }
-      : {}
-  );
-  if (!response.ok) {
-    const result = await response.json();
-    throw new Error(result.error ?? 'Report request failed');
-  }
-  return response.json() as Promise<T>;
-}
 export function Reports() {
   const { id } = useParams();
   const client = useQueryClient();
@@ -37,7 +22,7 @@ export function Reports() {
   });
   const detail = useQuery({
     queryKey: ['report', id],
-    queryFn: () => request<SavedReport>(`/${id}`),
+    queryFn: () => request<SavedReport & { deliveryStatus?: string }>(`/${id}`),
     enabled: Boolean(id),
   });
   const generate = useMutation({
@@ -52,18 +37,24 @@ export function Reports() {
       void client.invalidateQueries({ queryKey: ['reports'] });
     },
   });
+  const notify = useMutation({
+    mutationFn: () => request<{ status: string }>(`/${id}/notification`, { retry: true }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['report', id] });
+    },
+  });
   const current = detail.data;
-  const error = list.error ?? detail.error ?? generate.error;
+  const error = list.error ?? detail.error ?? generate.error ?? notify.error;
   return (
     <Stack spacing={3} sx={{ p: { xs: 2, md: 4 } }}>
       <Typography variant="h4">Monthly reports</Typography>
       <Alert severity="warning">
-        Manual CSV coverage is unconfirmed. Reports use the currently loaded cache without syncing.
-        Saved versions stay unchanged after later imports.
+        Reports use the current cache and existing history without syncing. Observed dates describe
+        records, not proof of missing imports. Saved versions stay unchanged after later imports.
       </Alert>
       <Typography>
-        Generate a local PDF, then view or download it here. AI, notifications and scheduled
-        delivery are disabled.
+        Generate a local PDF, then explore its saved records here. AI highlights, notifications and
+        scheduling require explicit server configuration and default to off.
       </Typography>
       {error && <Alert severity="error">{error.message}</Alert>}
       {generate.isSuccess && (
@@ -107,6 +98,22 @@ export function Reports() {
               </Typography>
               <Typography>Captured {current.facts.capturedAt}</Typography>
               <Typography>{current.narrative}</Typography>
+              <Typography variant="body2">
+                Summary: {current.narrativeSource ?? 'local'} · Notification:{' '}
+                {current.deliveryStatus ?? 'disabled'}
+              </Typography>
+              {current.deliveryStatus === 'failed' && (
+                <Button disabled={notify.isPending} onClick={() => notify.mutate()}>
+                  Retry availability notification
+                </Button>
+              )}
+              {current.deliveryStatus === 'uncertain' && (
+                <Alert severity="info">
+                  Notification outcome is uncertain. Automatic retries are suppressed to avoid
+                  duplicates.
+                </Alert>
+              )}
+              <ReportExplore key={current.id} report={current} />
               {current.facts.warnings.map((w) => (
                 <Alert key={w} severity="warning">
                   {w}
@@ -149,7 +156,7 @@ export function Reports() {
                       {report.month} · version {report.version}
                     </Typography>
                     <Typography variant="body2">
-                      Saved {report.createdAt.slice(0, 10)} · coverage unconfirmed
+                      Saved {report.createdAt.slice(0, 10)} · recorded snapshot
                     </Typography>
                   </Box>
                   <Stack direction="row">

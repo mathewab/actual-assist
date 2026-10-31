@@ -69,13 +69,16 @@ export class OpenAIAdapter implements AIAdapter {
             }
           : undefined;
 
-      const responseStream = this.client.responses.stream({
-        model: this.model,
-        instructions: options.instructions,
-        input: options.input,
-        tools: tools.length > 0 ? tools : undefined,
-        text,
-      });
+      const responseStream = this.client.responses.stream(
+        {
+          model: this.model,
+          instructions: options.instructions,
+          input: options.input,
+          tools: tools.length > 0 ? tools : undefined,
+          text,
+        },
+        options.signal ? { signal: options.signal, maxRetries: 0 } : undefined
+      );
       const response = await responseStream.finalResponse();
 
       // Log response structure for debugging

@@ -1,3 +1,4 @@
+import { validateCurrency } from '../domain/reports/Report.js';
 import { z, ZodError } from 'zod';
 import { credentialsSchema } from '../auth/principals.js';
 
@@ -73,6 +74,27 @@ export const envSchema = z
     DATA_DIR: z.string().default('./data'),
     SQLITE_DB_PATH: z.string().default('./data/audit.db'),
 
+    // Monthly reports: opt-in only; no effect unless explicitly configured.
+    REPORT_AI_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    REPORT_PUSH_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    REPORT_SCHEDULE_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    REPORT_APP_ORIGIN: z.string().default(''),
+    REPORT_PUSH_TOKEN: z.string().default(''),
+    REPORT_PUSH_USER: z.string().default(''),
+    REPORT_CURRENCY: z.string().default(''),
+    REPORT_SCHEDULE_DAY: z.coerce.number().int().min(1).max(28).default(2),
+    REPORT_SCHEDULE_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+    REPORT_TIMEZONE: z.string().default('UTC'),
+
     // Logging
     LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
     LOG_FILE: z.string().optional(),
@@ -107,6 +129,49 @@ export const envSchema = z
   .superRefine((env, context) => {
     const issue = (path: string, message: string) =>
       context.addIssue({ code: 'custom', path: [path], message });
+    if (
+      (env.REPORT_AI_ENABLED || env.REPORT_PUSH_ENABLED || env.REPORT_SCHEDULE_ENABLED) &&
+      env.AUTH_MODE !== 'enforced'
+    )
+      issue('AUTH_MODE', 'Report integrations require enforced authentication');
+    if (
+      env.REPORT_AI_ENABLED &&
+      !(env.AI_BACKEND === 'google' ? env.GOOGLE_AI_API_KEY : env.OPENAI_API_KEY)
+    )
+      issue(
+        'REPORT_AI_ENABLED',
+        'Selected report AI provider must be configured; no provider fallback'
+      );
+    if (env.REPORT_PUSH_ENABLED) {
+      if (!env.REPORT_PUSH_TOKEN || !env.REPORT_PUSH_USER)
+        issue('REPORT_PUSH_ENABLED', 'Pushover token and user must be explicitly configured');
+      try {
+        const url = new URL(env.REPORT_APP_ORIGIN);
+        if (
+          url.protocol !== 'https:' ||
+          url.origin !== env.REPORT_APP_ORIGIN ||
+          !env.AUTH_ALLOWED_ORIGINS.includes(url.origin)
+        )
+          throw new Error();
+      } catch {
+        issue('REPORT_APP_ORIGIN', 'Report origin must be an existing allowed HTTPS app origin');
+      }
+    }
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: env.REPORT_TIMEZONE });
+    } catch {
+      issue('REPORT_TIMEZONE', 'Expected an IANA timezone');
+    }
+    if (env.REPORT_SCHEDULE_ENABLED) {
+      try {
+        validateCurrency(env.REPORT_CURRENCY);
+      } catch {
+        issue(
+          'REPORT_CURRENCY',
+          'Configure the budget currency before enabling monthly scheduling'
+        );
+      }
+    }
     if (env.INTEGRATIONS_ENABLED === 'true')
       issue(
         'INTEGRATIONS_ENABLED',

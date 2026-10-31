@@ -1,5 +1,7 @@
 # Spending-pattern drill-down — design exploration
 
+> Historical design record. See [implementation.md](implementation.md) and [usage.md](usage.md) for the implemented draft and current opt-in boundaries.
+
 Status: proposal only, following positive feedback on the PDF mockup. No feature implementation, real-data capture, external AI permission, delivery enablement or draft-PR approval is implied. The monthly PDF remains the primary report; the authenticated Reports page supplies exploration.
 
 ## Recommended small extension

@@ -24,7 +24,7 @@ export class ReportRepository {
   list(budgetId: string, limit = 100, offset = 0): SavedReport[] {
     return this.db
       .query<{ report_json: string }>(
-        'SELECT report_json FROM monthly_reports WHERE budget_id = ? ORDER BY month DESC, version DESC LIMIT ? OFFSET ?',
+        "SELECT json_remove(report_json, '$.analysis') AS report_json FROM monthly_reports WHERE budget_id = ? ORDER BY month DESC, version DESC LIMIT ? OFFSET ?",
         [budgetId, limit, offset]
       )
       .map((row) => JSON.parse(row.report_json) as SavedReport);

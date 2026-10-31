@@ -11,7 +11,15 @@ test('monthly archive, saved detail, revision and download links use a stable au
       expect(request.headers()['x-csrf-token']).toBeTruthy();
       const input = request.postDataJSON();
       const report = {
-        rendererVersion: 1,
+        rendererVersion: 2,
+        analysis: {
+          evidenceVersion: 1,
+          evidence: [],
+          observations: [],
+          history: [],
+          observedStart: '2026-08-10',
+          observedEnd: '2026-09-10',
+        },
         id: `00000000-0000-4000-8000-${String(reports.length + 1).padStart(12, '0')}`,
         budgetId: 'budget-1',
         month: input.month,
@@ -31,7 +39,7 @@ test('monthly archive, saved detail, revision and download links use a stable au
           spending: 50000,
           net: 50000,
           unresolvedInflows: 0,
-          categories: [],
+          categories: [{ id: 'food', name: 'Food', amount: 50000 }],
           accounts: [],
           warnings: ['Coverage unconfirmed'],
           transactionCount: 2,
@@ -43,6 +51,54 @@ test('monthly archive, saved detail, revision and download links use a stable au
     }
     if (url.pathname.endsWith('/pdf')) {
       await route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n%%EOF' });
+      return;
+    }
+    if (url.pathname.endsWith('/observations')) {
+      await route.fulfill({
+        json: {
+          observations: [
+            {
+              id: 'largest-category',
+              kind: 'category',
+              text: 'Food: $500.00 recorded net spending.',
+              evidenceIds: ['row1'],
+            },
+          ],
+          merchants: [{ id: 'merchant', name: 'Frozen merchant', net: 50000, count: 1 }],
+          history: [
+            { month: '2026-08', spending: 40000, income: 0, transactionCount: 1, cutoffDay: null },
+          ],
+          observedStart: '2026-08-10',
+          observedEnd: '2026-09-10',
+        },
+      });
+      return;
+    }
+    if (url.pathname.endsWith('/transactions')) {
+      await route.fulfill({
+        json: {
+          total: 1,
+          netSpending: 50000,
+          rows: [
+            {
+              id: 'row1',
+              sourceId: 't1',
+              month: '2026-09',
+              date: '2026-09-10',
+              accountId: 'a',
+              accountName: 'Frozen account',
+              categoryId: 'food',
+              categoryName: 'Food',
+              payeeId: 'merchant',
+              payeeName: 'Frozen merchant',
+              amount: -50000,
+              role: 'spending',
+              parentId: null,
+              parentAmount: null,
+            },
+          ],
+        },
+      });
       return;
     }
     const id = url.pathname.split('/')[4];
@@ -57,6 +113,12 @@ test('monthly archive, saved detail, revision and download links use a stable au
   await page.getByRole('button', { name: 'Generate report', exact: true }).click();
   await page.getByRole('link', { name: 'View version 1' }).click();
   await expect(page.getByRole('heading', { name: '2026-09 · version 1' })).toBeVisible();
+  await page.getByRole('button', { name: 'Food: $500.00 recorded net spending.' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Frozen merchant' })).toBeVisible();
+  await expect(page.getByText('Filtered net spending: $500.00', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to report', exact: true }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
   const oldUrl = page.url();
   await expect(page.getByRole('link', { name: 'Download PDF' })).toHaveAttribute(
     'href',

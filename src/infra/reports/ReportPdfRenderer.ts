@@ -1,3 +1,4 @@
+import type { ReportObservation } from '../../domain/reports/ReportTypes.js';
 import PDFDocument from 'pdfkit';
 import { fileURLToPath } from 'node:url';
 import type { ReportFacts } from '../../domain/reports/Report.js';
@@ -7,13 +8,17 @@ export function reportMoney(value: number, currency: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value / 100);
 }
 export function localNarrative(facts: ReportFacts): string {
-  return `Recorded income was ${reportMoney(facts.income, facts.currency)} and net spending was ${reportMoney(facts.spending, facts.currency)}. The recorded difference was ${reportMoney(facts.net, facts.currency)}. Import coverage is unconfirmed; this is not a verified savings balance.`;
+  return `Recorded income was ${reportMoney(facts.income, facts.currency)} and net spending was ${reportMoney(facts.spending, facts.currency)}. The recorded difference was ${reportMoney(facts.net, facts.currency)}. These are recorded totals, not a verified savings balance.`;
 }
 /** Local rendering only: no remote fonts, URLs, HTML or model output. */
 export async function renderReportPdf(
   facts: ReportFacts,
   version: number,
-  narrative: string
+  narrative: string,
+  highlights: { observations: ReportObservation[]; source: 'local' | 'ai-assisted' } = {
+    observations: [],
+    source: 'local',
+  }
 ): Promise<Buffer> {
   const doc = new PDFDocument({
     size: 'A4',
@@ -38,9 +43,9 @@ export async function renderReportPdf(
     doc.moveDown();
   };
   title('Your month, in perspective');
-  text('IMPORT COVERAGE UNCONFIRMED', 11, '#9A631D');
+  text('RECORDED TRANSACTIONS / ON-BUDGET SCOPE', 11, teal);
   text(
-    'Manual CSV imports may be missing. Figures describe the captured records, not a confirmed complete month.'
+    'Figures reflect the records captured. Observed transaction dates do not prove complete imports or identify missing periods.'
   );
   doc.moveDown(1.5);
   const cardY = doc.y;
@@ -83,7 +88,12 @@ export async function renderReportPdf(
   text('The month in words', 17, teal);
   text(narrative);
   doc.moveDown();
-  text('Deterministic summary / AI disabled', 9);
+  text(
+    highlights.source === 'ai-assisted'
+      ? 'AI-selected highlights / server-verified facts'
+      : 'Deterministic summary',
+    9
+  );
   doc.moveDown();
   text(
     `Captured ${facts.capturedAt}. On-budget scope. Internal transfers excluded. ${facts.transactionCount} transaction entries.`,
@@ -95,6 +105,14 @@ export async function renderReportPdf(
   }
   doc.addPage();
   title('Spending & coverage');
+  if (highlights.observations.length) {
+    text('Highlights', 16, teal);
+    for (const observation of highlights.observations.slice(0, 3)) {
+      text(observation.text, 10);
+      doc.moveDown(0.4);
+    }
+    doc.moveDown();
+  }
   const maximum = Math.max(1, ...facts.categories.map((c) => Math.abs(c.amount)));
   for (const category of facts.categories) {
     if (doc.y > 680) {
@@ -116,7 +134,7 @@ export async function renderReportPdf(
   for (const account of facts.accounts) {
     if (doc.y > 700) doc.addPage();
     text(
-      `${account.name} / latest record: ${account.latestRecord ?? 'none this month'} / coverage unconfirmed`,
+      `${account.name} / observed records: ${account.firstRecord ?? 'none'} to ${account.latestRecord ?? 'none this month'}`,
       10
     );
     doc.moveDown(0.5);

@@ -1,3 +1,6 @@
+import { ReportDeliveryService } from '../../src/services/ReportDeliveryService.js';
+import { ReportNotificationAdapter } from '../../src/infra/reports/ReportNotificationAdapter.js';
+import { NotificationFailure } from '../../src/infra/reports/PushoverTransport.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile, utimes, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -268,5 +271,140 @@ describe('saved reports with real SQLite and local PDF renderer', () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: 'REPORTS_REQUIRE_ENFORCED_AUTH' });
     expect(f.capture).not.toHaveBeenCalled();
+  });
+  it('drills into frozen category/payee rows after recategorization and subsequent imports', async () => {
+    const f = await fixture();
+    f.source.payees = [{ id: 'merchant', name: 'Original merchant' }];
+    f.source.accounts[0].transactions[0].payee = 'merchant';
+    f.source.accounts[0].transactions.push({
+      id: 'older',
+      date: '2026-08-10',
+      amount: -1000,
+      category: 'food',
+      payee: 'merchant',
+    });
+    const original = await f.service.generate(f.input);
+    const query = { limit: 25, offset: 0, payeeId: 'merchant' };
+    expect(f.service.transactions(original.id, query)).toMatchObject({
+      netSpending: 1234,
+      total: 1,
+      rows: [{ payeeName: 'Original merchant', amount: -1234 }],
+    });
+    expect(f.service.explore(original.id).history).toHaveLength(2);
+    expect(
+      f.service.transactions(original.id, { limit: 25, offset: 0, observationId: 'previous-month' })
+        .periodTotals
+    ).toEqual([
+      { month: '2026-08', netSpending: 1000 },
+      { month: '2026-09', netSpending: 1234 },
+    ]);
+    expect(f.service.detail(original.id).analysis?.evidence).toEqual([]);
+    expect(f.service.list(100, 0)[0].analysis).toBeUndefined();
+    f.source.payees[0].name = 'Renamed merchant';
+    f.source.accounts[0].transactions[0].amount = -9999;
+    const revised = await f.service.generate({
+      ...f.input,
+      requestKey: randomUUID(),
+      supersedesId: original.id,
+    });
+    expect(f.service.transactions(original.id, query).rows[0].payeeName).toBe('Original merchant');
+    expect(f.service.transactions(revised.id, query).netSpending).toBe(9999);
+    expect(() =>
+      f.service.transactions(original.id, {
+        limit: 25,
+        offset: 0,
+        observationId: 'other-report-id',
+      })
+    ).toThrow('NOT_FOUND');
+    const response = await fetch(`${f.url}/${original.id}/transactions?categoryId=food`, {
+      headers: { Authorization: `Bearer ${reader}` },
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).netSpending).toBe(1234);
+    expect((await fetch(`${f.url}/${original.id}/transactions`)).status).toBe(401);
+    f.db.execute('UPDATE monthly_reports SET budget_id=? WHERE id=?', [
+      'different-budget',
+      original.id,
+    ]);
+    expect(
+      (
+        await fetch(`${f.url}/${original.id}/transactions`, {
+          headers: { Authorization: `Bearer ${reader}` },
+        })
+      ).status
+    ).toBe(404);
+  });
+  it('old report versions explicitly lack evidence rather than fetching current transactions', async () => {
+    const f = await fixture();
+    const report = await f.service.generate(f.input);
+    f.db.execute(
+      "UPDATE monthly_reports SET report_json=json_remove(report_json,'$.analysis') WHERE id=?",
+      [report.id]
+    );
+    expect(() => f.service.transactions(report.id, { limit: 25, offset: 0 })).toThrow(
+      'DETAIL_UNAVAILABLE'
+    );
+    expect(f.capture).toHaveBeenCalledTimes(1);
+  });
+  it('deduplicates delivery and never retries an uncertain provider outcome', async () => {
+    const f = await fixture();
+    const report = await f.service.generate(f.input);
+    const transport = { send: vi.fn(async () => undefined) };
+    const delivery = new ReportDeliveryService(
+      f.db,
+      new ReportNotificationAdapter(transport, true),
+      'https://fixture.invalid',
+      true,
+      f.jobs,
+      new AuditRepository(f.db),
+      f.env.ACTUAL_BUDGET_ID
+    );
+    await Promise.all([delivery.notify(report.id), delivery.notify(report.id)]);
+    expect(transport.send).toHaveBeenCalledTimes(1);
+    expect(delivery.status(report.id)).toBe('sent');
+    const next = await f.service.generate({ ...f.input, requestKey: randomUUID() });
+    transport.send.mockRejectedValueOnce(new NotificationFailure('uncertain'));
+    expect(await delivery.notify(next.id)).toBe('uncertain');
+    expect(await delivery.notify(next.id, true)).toBe('uncertain');
+    expect(transport.send).toHaveBeenCalledTimes(2);
+    const pending = randomUUID();
+    f.db.execute("INSERT INTO report_delivery VALUES (?,'pending',?)", [
+      pending,
+      new Date().toISOString(),
+    ]);
+    delivery.recover();
+    expect(delivery.status(pending)).toBe('uncertain');
+  });
+  it('failed notification preserves the ready PDF and only explicit retry resends', async () => {
+    const f = await fixture();
+    const transport = {
+      send: vi.fn(async () => undefined).mockRejectedValueOnce(new NotificationFailure('failed')),
+    };
+    const delivery = new ReportDeliveryService(
+      f.db,
+      new ReportNotificationAdapter(transport, true),
+      'https://fixture.invalid',
+      true,
+      f.jobs,
+      new AuditRepository(f.db),
+      f.env.ACTUAL_BUDGET_ID
+    );
+    const service = new ReportService(
+      f.env.ACTUAL_BUDGET_ID,
+      f.capture,
+      f.repo,
+      f.files,
+      f.jobs,
+      new AuditRepository(f.db),
+      undefined,
+      { delivery }
+    );
+    const report = await service.generate(f.input);
+    expect(delivery.status(report.id)).toBe('failed');
+    expect((await service.pdf(report.id)).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(await delivery.notify(report.id)).toBe('failed');
+    expect(transport.send).toHaveBeenCalledTimes(1);
+    expect(await delivery.notify(report.id, true)).toBe('sent');
+    expect(transport.send).toHaveBeenCalledTimes(2);
   });
 });

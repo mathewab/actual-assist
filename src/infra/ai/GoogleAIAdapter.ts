@@ -58,7 +58,7 @@ export class GoogleAIAdapter implements AIAdapter {
       });
 
       // Build config for structured output if JSON schema is provided
-      const config: Record<string, unknown> = {};
+      const config: Record<string, unknown> = options.signal ? { abortSignal: options.signal } : {};
       if (options.jsonSchema) {
         config.responseMimeType = 'application/json';
         // Use responseJsonSchema for JSON Schema format (more compatible)

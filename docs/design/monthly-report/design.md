@@ -1,5 +1,7 @@
 # Monthly reports — design review v1
 
+> Historical design record. See [implementation.md](implementation.md) and [usage.md](usage.md) for the implemented draft and current opt-in boundaries.
+
 Status: proposed, synthetic-only. No application behavior, credentials, schedules or deployment changed.
 Inspected checkout: `39e0309fcc78abb0a24b7ee3fed88581a6c12a6a`, package version `0.10.1` (2026-10-30). This is repository evidence, not verification of the running deployment.
 

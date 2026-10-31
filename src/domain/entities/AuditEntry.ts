@@ -12,6 +12,8 @@ export interface AuditEntry {
 }
 
 export type AuditEventType =
+  | 'report_notification'
+  | 'report_evidence_read'
   | 'report_started'
   | 'report_saved'
   | 'report_failed'

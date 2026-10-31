@@ -36,10 +36,39 @@ export function createReportRouter(service: ReportService, auth: HttpAuth): Rout
           supersedesId: z.string().uuid().optional(),
         })
         .parse(req.body);
-      res.status(201).json(await service.generate(input));
+      const report = await service.generate(input);
+      res.status(201).json(service.detail(report.id));
     }
   );
-  router.get('/:id', (req, res) => res.json(service.get(z.uuid().parse(req.params.id))));
+  router.get('/:id', (req, res) => res.json(service.detail(z.uuid().parse(req.params.id))));
+  router.get('/:id/observations', (req, res) =>
+    res.json(service.explore(z.uuid().parse(req.params.id)))
+  );
+  router.get('/:id/transactions', (req, res) => {
+    const query = z
+      .strictObject({
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+        offset: z.coerce.number().int().min(0).max(100000).default(0),
+        observationId: z.string().max(100).optional(),
+        categoryId: z.string().max(100).optional(),
+        payeeId: z.string().max(100).optional(),
+        month: z
+          .string()
+          .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+          .optional(),
+      })
+      .parse(req.query);
+    res.json(service.transactions(z.uuid().parse(req.params.id), query));
+  });
+  router.post(
+    '/:id/notification',
+    auth.requirePermission('app:operate'),
+    express.json({ limit: '1kb' }),
+    async (req, res) => {
+      const { retry } = z.strictObject({ retry: z.boolean().default(false) }).parse(req.body ?? {});
+      res.json({ status: await service.notify(z.uuid().parse(req.params.id), retry) });
+    }
+  );
   router.get('/:id/pdf', async (req, res) => {
     const id = z.uuid().parse(req.params.id);
     const report = service.get(id);

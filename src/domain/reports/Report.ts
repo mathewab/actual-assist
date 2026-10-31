@@ -1,4 +1,4 @@
-import type { ReportFacts } from './ReportTypes.js';
+import type { ReportFacts, ReportEvidence } from './ReportTypes.js';
 export type { ReportFacts, SavedReport } from './ReportTypes.js';
 import { z } from 'zod';
 export interface ReportTransaction {
@@ -6,6 +6,7 @@ export interface ReportTransaction {
   date: string;
   amount: number;
   category?: string | null;
+  payee?: string | null;
   transfer_id?: string | null;
   is_parent?: boolean;
   is_child?: boolean;
@@ -18,6 +19,7 @@ export const reportTransactionSchema: z.ZodType<ReportTransaction> = z.lazy(() =
     date: z.iso.date(),
     amount: z.number().int().safe(),
     category: z.string().nullable().optional(),
+    payee: z.string().nullable().optional(),
     transfer_id: z.string().nullable().optional(),
     is_parent: z.boolean().optional(),
     is_child: z.boolean().optional(),
@@ -27,6 +29,7 @@ export const reportTransactionSchema: z.ZodType<ReportTransaction> = z.lazy(() =
 );
 export interface ReportCapture {
   capturedAt: string;
+  payees?: Array<{ id: string; name: string }>;
   accounts: Array<{ id: string; name: string; transactions: ReportTransaction[] }>;
   categories: Array<{ id: string; name: string; income: boolean }>;
 }
@@ -53,22 +56,24 @@ export function validateCurrency(currency: string): string {
     throw new ReportError('UNSUPPORTED_CURRENCY', 400);
   return currency;
 }
-function addMinorUnits(left: number, right: number): number {
+export function addMinorUnits(left: number, right: number): number {
   const sum = left + right;
   if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right) || !Number.isSafeInteger(sum))
     throw new ReportError('AMOUNT_OVERFLOW');
   return sum;
 }
 /** Actual API returns grouped splits. Reject malformed groups instead of double counting. */
-export function calculateReport(
+export function calculateReportSnapshot(
   capture: ReportCapture,
   month: string,
   currency: string
-): ReportFacts {
+): { facts: ReportFacts; evidence: ReportEvidence[] } {
   const [start, end] = monthRange(month);
   validateCurrency(currency);
   const categories = new Map(capture.categories.map((c) => [c.id, c]));
   const totals = new Map<string, { id: string; name: string; amount: number }>();
+  const evidence: ReportEvidence[] = [];
+  const payees = new Map(capture.payees?.map((p) => [p.id, p.name]) ?? []);
   const seen = new Set<string>();
   const transfers = new Map<string, ReportTransaction>();
   let income = 0,
@@ -76,19 +81,45 @@ export function calculateReport(
     unresolvedInflows = 0,
     transactionCount = 0;
   const warnings = [
-    'Manual CSV import coverage is unconfirmed. Latest recorded dates do not prove completeness.',
-    'On-budget accounts only, including closed accounts with activity. Comparisons withheld.',
+    'Figures describe captured records. Transaction dates do not establish import completeness or missing imports.',
+    'On-budget account scope, including historical activity in closed accounts.',
   ];
-  const add = (txn: ReportTransaction) => {
+  const add = (
+    txn: ReportTransaction,
+    account: ReportCapture['accounts'][number],
+    parent?: ReportTransaction
+  ) => {
     if (seen.has(txn.id) || !Number.isSafeInteger(txn.amount))
       throw new ReportError('INVALID_TRANSACTIONS');
     seen.add(txn.id);
     transactionCount++;
+    const category = txn.category ? categories.get(txn.category) : undefined;
+    evidence.push({
+      id: `${month}:${txn.id}`,
+      sourceId: txn.id,
+      month,
+      date: txn.date,
+      accountId: account.id,
+      accountName: account.name,
+      categoryId: category?.id ?? null,
+      categoryName: category?.name ?? 'Uncategorized',
+      payeeId: txn.payee ?? null,
+      payeeName: (txn.payee && payees.get(txn.payee)) || 'Unknown payee',
+      amount: txn.amount,
+      role: txn.transfer_id
+        ? 'transfer'
+        : category?.income
+          ? 'income'
+          : !category && txn.amount > 0
+            ? 'unresolved_inflow'
+            : 'spending',
+      parentId: parent?.id ?? null,
+      parentAmount: parent?.amount ?? null,
+    });
     if (txn.transfer_id) {
       transfers.set(txn.id, txn);
       return;
     }
-    const category = txn.category ? categories.get(txn.category) : undefined;
     if (category?.income) {
       income = addMinorUnits(income, txn.amount);
       return;
@@ -124,9 +155,9 @@ export function calculateReport(
             (child.parent_id && child.parent_id !== txn.id)
           )
             throw new ReportError('INCONSISTENT_SPLITS');
-          add({ ...child, date: txn.date });
+          add({ ...child, date: txn.date }, account, txn);
         }
-      } else add(txn);
+      } else add(txn, account);
     }
   if (
     [...transfers.values()].some((t) => {
@@ -151,7 +182,7 @@ export function calculateReport(
     ].every(Number.isSafeInteger)
   )
     throw new ReportError('AMOUNT_OVERFLOW');
-  return {
+  const facts: ReportFacts = {
     schemaVersion: 1,
     month,
     currency,
@@ -165,6 +196,11 @@ export function calculateReport(
     ),
     accounts: capture.accounts.map((a) => ({
       name: a.name,
+      firstRecord:
+        a.transactions
+          .map((t) => t.date)
+          .filter((d) => d >= start && d <= end)
+          .sort()[0] ?? null,
       latestRecord:
         a.transactions
           .map((t) => t.date)
@@ -175,4 +211,12 @@ export function calculateReport(
     warnings,
     transactionCount,
   };
+  return { facts, evidence };
+}
+export function calculateReport(
+  capture: ReportCapture,
+  month: string,
+  currency: string
+): ReportFacts {
+  return calculateReportSnapshot(capture, month, currency).facts;
 }

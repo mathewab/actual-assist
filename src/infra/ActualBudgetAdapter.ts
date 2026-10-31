@@ -262,10 +262,12 @@ export class ActualBudgetAdapter {
   captureReport(month: string): Promise<ReportCapture> {
     return this.session.run(async () => {
       this.ensureInitialized();
-      const [start, end] = monthRange(month);
+      const [, end] = monthRange(month);
+      const start = `${Number(month.slice(0, 4)) - 1}${month.slice(4)}-01`;
       const accounts = ((await api.getAccounts()) as ActualAccount[]).filter((a) => !a.offbudget);
       const categories = (await api.getCategories()) as ActualCategory[];
       const groups = (await api.getCategoryGroups()) as ActualCategoryGroup[];
+      const payees = (await api.getPayees()) as ActualPayee[];
       const captured: ReportCapture['accounts'] = [];
       for (const account of accounts)
         captured.push({
@@ -277,6 +279,7 @@ export class ActualBudgetAdapter {
         });
       return {
         capturedAt: new Date().toISOString(),
+        payees: payees.map((p) => ({ id: p.id, name: p.name ?? 'Unknown payee' })),
         accounts: captured,
         categories: categories.map((c) => ({
           id: c.id,

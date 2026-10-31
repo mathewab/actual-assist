@@ -1,5 +1,5 @@
 # Multi-stage build for single app
-FROM node:26-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
 LABEL org.opencontainers.image.title="Actual Assist" \
       org.opencontainers.image.description="AI-powered budgeting assistant for Actual Budget" \
@@ -23,6 +23,8 @@ RUN apt-get update \
 RUN npm ci
 RUN npm run build
 RUN npm prune --omit=dev
+RUN mkdir -p dist/server/infra/reports/fonts \
+  && cp src/infra/reports/fonts/* dist/server/infra/reports/fonts/
 RUN mkdir -p dist/server/infra/db/migrations \
   && cp src/infra/db/schema.sql dist/server/infra/db/ \
   && cp src/infra/db/migrations/*.cjs dist/server/infra/db/migrations/

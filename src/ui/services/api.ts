@@ -184,6 +184,8 @@ export type JobType =
   | 'suggestions_retry_payee'
   | 'suggestions_apply'
   | 'templates_apply'
+  | 'report_notify'
+  | 'report_generate'
   | 'snapshot_create'
   | 'snapshot_redownload'
   | 'payees_merge'

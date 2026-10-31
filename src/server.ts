@@ -1,3 +1,14 @@
+import { ReportNarrativeService } from './services/ReportNarrativeService.js';
+import { ReportDeliveryService } from './services/ReportDeliveryService.js';
+import { ReportNotificationAdapter } from './infra/reports/ReportNotificationAdapter.js';
+import { PushoverTransport } from './infra/reports/PushoverTransport.js';
+import { ReportScheduler } from './scheduler/ReportScheduler.js';
+import { OpenAIAdapter } from './infra/OpenAIAdapter.js';
+import { GoogleAIAdapter } from './infra/ai/GoogleAIAdapter.js';
+import { createReportRouter } from './api/reportRoutes.js';
+import { ReportService } from './services/ReportService.js';
+import { ReportRepository } from './infra/repositories/ReportRepository.js';
+import { ReportFileStore } from './infra/reports/ReportFileStore.js';
 import { mountAccessBoundary } from './auth/mountAccessBoundary.js';
 import { createHttpAuth, principalOf } from './auth/httpAuth.js';
 import { StaticCredentialProvider } from './auth/principals.js';
@@ -132,15 +143,57 @@ const auth = createHttpAuth({
   audit: (eventType, principalId) =>
     auditRepo.log({ eventType, entityType: 'principal', entityId: principalId ?? 'anonymous' }),
 });
-mountAccessBoundary(
-  app,
-  auth,
+const reportService = new ReportService(
+  env.ACTUAL_BUDGET_ID,
+  (month) => actualBudget.captureReport(month),
+  new ReportRepository(db),
+  new ReportFileStore(path.join(env.DATA_DIR, 'reports')),
+  jobService,
+  auditRepo,
+  undefined,
+  {
+    narrative: new ReportNarrativeService(
+      env.REPORT_AI_ENABLED
+        ? env.AI_BACKEND === 'google'
+          ? new GoogleAIAdapter(env)
+          : new OpenAIAdapter(env)
+        : undefined,
+      env.REPORT_AI_ENABLED
+    ),
+    delivery: new ReportDeliveryService(
+      db,
+      new ReportNotificationAdapter(
+        new PushoverTransport(env.REPORT_PUSH_TOKEN, env.REPORT_PUSH_USER),
+        env.REPORT_PUSH_ENABLED
+      ),
+      env.REPORT_APP_ORIGIN,
+      env.REPORT_PUSH_ENABLED,
+      jobService,
+      auditRepo,
+      env.ACTUAL_BUDGET_ID
+    ),
+  }
+);
+await reportService.recover();
+const reportScheduler = new ReportScheduler(reportService, {
+  enabled: env.REPORT_SCHEDULE_ENABLED,
+  day: env.REPORT_SCHEDULE_DAY,
+  hour: env.REPORT_SCHEDULE_HOUR,
+  timezone: env.REPORT_TIMEZONE,
+  currency: env.REPORT_CURRENCY,
+  budgetId: env.ACTUAL_BUDGET_ID,
+});
+reportScheduler.start();
+const machineRouter = express.Router();
+machineRouter.use('/api/v1/reports', createReportRouter(reportService, auth));
+machineRouter.use(
   createIntegrationRouter(integrationService, {
     enabled: env.MACHINE_API_ENABLED,
     auth,
     version: packageInfo.version,
   })
 );
+mountAccessBoundary(app, auth, machineRouter);
 
 // Middleware
 if (env.AUTH_MODE === 'legacy') app.use(cors());
@@ -294,6 +347,8 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   integrationService.stop();
+  reportScheduler.stop();
+  reportService.stop();
   SyncScheduler.getInstance()?.stop();
   loggerInstance.info('Shutting down gracefully');
   if (jobTimeoutInterval) {
@@ -306,6 +361,7 @@ async function shutdown() {
       jobEventBus.shutdown();
     });
     await integrationService.drain();
+    await reportService.drain();
     await actualBudget.shutdown();
     db.close();
     loggerInstance.info('Server closed');

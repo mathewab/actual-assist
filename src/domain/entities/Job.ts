@@ -12,6 +12,8 @@ export type JobType =
   | 'templates_apply'
   | 'payees_merge'
   | 'payees_merge_suggestions_generate'
+  | 'report_notify'
+  | 'report_generate'
   | 'snapshot_create'
   | 'snapshot_redownload'
   | 'scheduled_sync_and_suggest';

@@ -1,3 +1,4 @@
+import { Reports } from './components/Reports';
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -79,6 +80,8 @@ export function App() {
           <main className="min-h-[400px] rounded-lg bg-[var(--theme-surface)] shadow-sm">
             <ErrorBoundary title="Something went wrong">
               <Routes>
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/reports/:id" element={<Reports />} />
                 <Route
                   path="/"
                   element={renderBudgetRoute((budgetId) => (

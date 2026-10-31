@@ -6,6 +6,10 @@ const jobUsesAI = (job: Job): boolean => {
 
 export function formatJobTypeLabel(job: Job): string {
   switch (job.type) {
+    case 'report_notify':
+      return 'Notify Report Available';
+    case 'report_generate':
+      return 'Generate Monthly Report';
     case 'budget_sync':
       return 'Sync Budget';
     case 'suggestions_generate':

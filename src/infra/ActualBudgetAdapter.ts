@@ -1,3 +1,8 @@
+import {
+  monthRange,
+  type ReportCapture,
+  reportTransactionSchema,
+} from '../domain/reports/Report.js';
 import api from '@actual-app/api';
 import { SerialQueue } from './SerialQueue.js';
 import { ActualBudgetError } from '../domain/errors.js';
@@ -251,6 +256,38 @@ export class ActualBudgetAdapter {
 
   constructor(env: Env) {
     this.env = env;
+  }
+
+  /** One queue slot prevents sync/mutations interleaving with report capture. No implicit sync. */
+  captureReport(month: string): Promise<ReportCapture> {
+    return this.session.run(async () => {
+      this.ensureInitialized();
+      const [, end] = monthRange(month);
+      const start = `${Number(month.slice(0, 4)) - 1}${month.slice(4)}-01`;
+      const accounts = ((await api.getAccounts()) as ActualAccount[]).filter((a) => !a.offbudget);
+      const categories = (await api.getCategories()) as ActualCategory[];
+      const groups = (await api.getCategoryGroups()) as ActualCategoryGroup[];
+      const payees = (await api.getPayees()) as ActualPayee[];
+      const captured: ReportCapture['accounts'] = [];
+      for (const account of accounts)
+        captured.push({
+          id: account.id,
+          name: account.name ?? 'Unnamed account',
+          transactions: reportTransactionSchema
+            .array()
+            .parse(await api.getTransactions(account.id, start, end)),
+        });
+      return {
+        capturedAt: new Date().toISOString(),
+        payees: payees.map((p) => ({ id: p.id, name: p.name ?? 'Unknown payee' })),
+        accounts: captured,
+        categories: categories.map((c) => ({
+          id: c.id,
+          name: c.name ?? 'Unnamed category',
+          income: Boolean(groups.find((g) => g.id === c.group_id)?.is_income),
+        })),
+      };
+    });
   }
 
   getAccounts(): Promise<ActualAccount[]> {

@@ -95,7 +95,7 @@ jobs:
         uses: helm/chart-releaser-action@v1.8.0
         with:
           charts_dir: charts
-          version: v1.9.0
+          version: v1.10.0
           skip_existing: true
         env:
           CR_TOKEN: "${{ steps.app-token.outputs.token }}"

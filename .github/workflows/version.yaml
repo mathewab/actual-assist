@@ -30,8 +30,10 @@ jobs:
 
       - name: Validate version input
         id: validate
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
+          VERSION="$REQUESTED_VERSION"
           if ! printf '%s' "$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
             echo "Invalid version. Expected vX.Y.Z with optional -pre/+build."
             exit 1

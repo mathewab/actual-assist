@@ -12,6 +12,11 @@ export interface AuditEntry {
 }
 
 export type AuditEventType =
+  | 'auth_login'
+  | 'auth_login_denied'
+  | 'auth_logout'
+  | 'integration_read'
+  | 'integration_read_failed'
   | 'snapshot_created'
   | 'suggestions_generated'
   | 'suggestions_generated_diff'

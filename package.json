@@ -1,6 +1,6 @@
 {
   "name": "actual-assist",
-  "version": "0.8.1",
+  "version": "0.10.1",
   "description": "AI-powered assistant for Actual Budget",
   "private": true,
   "type": "module",
@@ -27,10 +27,11 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "@actual-app/api": "26.10.0",
+    "@actual-app/api": "26.11.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@google/genai": "^2.15.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@mui/material": "^9.3.0",
     "@tanstack/react-query": "^5.101.4",
     "better-sqlite3": "^13.0.3",

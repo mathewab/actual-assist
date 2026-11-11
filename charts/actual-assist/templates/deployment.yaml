@@ -6,11 +6,15 @@ metadata:
     {{- include "actual-assist.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.app.replicaCount }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "actual-assist.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | quote }}
       labels:
         {{- include "actual-assist.selectorLabels" . | nindent 8 }}
     spec:
@@ -52,7 +56,7 @@ spec:
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: {{ include "actual-assist.fullname" . }}-data
+          claimName: {{ .Values.storage.existingClaim | default (printf "%s-data" (include "actual-assist.fullname" .)) | quote }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

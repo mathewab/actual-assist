@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "app": {
+      "type": "object",
+      "properties": {
+        "replicaCount": {
+          "type": "integer",
+          "enum": [
+            0,
+            1
+          ],
+          "description": "One SQLite writer, or zero during coordinated maintenance."
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "existingClaim": {
+          "type": "string",
+          "maxLength": 253
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "properties": {
+        "scheduledSyncEnabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "legacy",
+            "enforced"
+          ]
+        },
+        "allowedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cookieSecure": {
+          "type": "boolean"
+        },
+        "sessionTtlSeconds": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 86400
+        }
+      }
+    },
+    "machineApi": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -1,68 +1,141 @@
 import { z, ZodError } from 'zod';
+import { credentialsSchema } from '../auth/principals.js';
 
 /**
  * Environment variable schema with strict validation
  * Enforces P7 (explicit error handling) and P4 (explicitness)
  */
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().default(3000),
+export const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    PORT: z.coerce.number().int().default(3000),
 
-  // Actual Budget API credentials
-  ACTUAL_SERVER_URL: z.string().url(),
-  ACTUAL_PASSWORD: z.string().min(1),
-  ACTUAL_BUDGET_ID: z.string().uuid(),
-  ACTUAL_SYNC_ID: z.string().optional(),
-  ACTUAL_ENCRYPTION_KEY: z.string().optional(),
+    AUTH_MODE: z.enum(['legacy', 'enforced']).default('legacy'),
+    MACHINE_API_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    AUTH_CREDENTIALS_JSON: z
+      .string()
+      .default('[]')
+      .transform((value, context) => {
+        try {
+          const result = credentialsSchema.safeParse(JSON.parse(value));
+          if (result.success) return result.data;
+        } catch {
+          /* Report only the config field, never credential contents. */
+        }
+        context.addIssue({ code: 'custom', message: 'Invalid named credential configuration' });
+        return z.NEVER;
+      }),
+    AUTH_ALLOWED_ORIGINS: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      ),
+    AUTH_COOKIE_SECURE: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((v) => v === 'true'),
+    AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
+    // Reject obsolete activation rather than silently starting an unauthenticated deployment.
+    INTEGRATIONS_ENABLED: z.enum(['true', 'false']).default('false'),
 
-  // AI Backend Selection
-  AI_BACKEND: z.enum(['openai', 'google']).default('openai'),
+    // Actual Budget API credentials
+    ACTUAL_SERVER_URL: z.string().url(),
+    ACTUAL_PASSWORD: z.string().min(1),
+    ACTUAL_BUDGET_ID: z.string().uuid(),
+    ACTUAL_SYNC_ID: z.string().optional(),
+    ACTUAL_ENCRYPTION_KEY: z.string().optional(),
 
-  // OpenAI API
-  OPENAI_API_KEY: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().regex(/^sk-/).optional()
-  ),
-  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+    // AI Backend Selection
+    AI_BACKEND: z.enum(['openai', 'google']).default('openai'),
 
-  // Google AI (Gemini) API
-  GOOGLE_AI_API_KEY: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().optional()
-  ),
-  GOOGLE_AI_MODEL: z.string().default('gemini-2.0-flash'),
+    // OpenAI API
+    OPENAI_API_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().regex(/^sk-/).optional()
+    ),
+    OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
-  // Data storage
-  DATA_DIR: z.string().default('./data'),
-  SQLITE_DB_PATH: z.string().default('./data/audit.db'),
+    // Google AI (Gemini) API
+    GOOGLE_AI_API_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().optional()
+    ),
+    GOOGLE_AI_MODEL: z.string().default('gemini-2.0-flash'),
 
-  // Logging
-  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
-  LOG_FILE: z.string().optional(),
+    // Data storage
+    DATA_DIR: z.string().default('./data'),
+    SQLITE_DB_PATH: z.string().default('./data/audit.db'),
 
-  // Periodic Sync
-  SYNC_INTERVAL_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
-    .default(360),
+    // Logging
+    LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+    LOG_FILE: z.string().optional(),
 
-  // Job timeout handling
-  JOB_TIMEOUT_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
-    .default(60),
-  JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
-    .default(5),
+    // Periodic Sync
+    SCHEDULED_SYNC_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    SYNC_INTERVAL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1, { message: 'SYNC_INTERVAL_MINUTES must be at least 1' })
+      .default(360),
 
-  // Rate limiting (API)
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60000),
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
-});
+    // Job timeout handling
+    JOB_TIMEOUT_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1, { message: 'JOB_TIMEOUT_MINUTES must be at least 1' })
+      .default(60),
+    JOB_TIMEOUT_CHECK_INTERVAL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1, { message: 'JOB_TIMEOUT_CHECK_INTERVAL_MINUTES must be at least 1' })
+      .default(5),
+
+    // Rate limiting (API)
+    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(60000),
+    RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(120),
+  })
+  .superRefine((env, context) => {
+    const issue = (path: string, message: string) =>
+      context.addIssue({ code: 'custom', path: [path], message });
+    if (env.INTEGRATIONS_ENABLED === 'true')
+      issue(
+        'INTEGRATIONS_ENABLED',
+        'Migrate to AUTH_MODE=enforced and MACHINE_API_ENABLED; old routes are removed'
+      );
+    if (env.MACHINE_API_ENABLED && env.AUTH_MODE !== 'enforced')
+      issue('AUTH_MODE', 'Machine access requires enforced authentication for all API routes');
+    if (env.AUTH_MODE === 'enforced') {
+      if (!env.AUTH_CREDENTIALS_JSON.some((c) => c.role === 'operator'))
+        issue('AUTH_CREDENTIALS_JSON', 'Configure an explicit operator for UI access');
+      if (!env.AUTH_ALLOWED_ORIGINS.length)
+        issue('AUTH_ALLOWED_ORIGINS', 'Configure an exact UI origin');
+      for (const origin of env.AUTH_ALLOWED_ORIGINS) {
+        try {
+          const url = new URL(origin);
+          if (
+            url.origin !== origin ||
+            !['http:', 'https:'].includes(url.protocol) ||
+            (env.NODE_ENV === 'production' && url.protocol !== 'https:')
+          )
+            throw new Error();
+        } catch {
+          issue('AUTH_ALLOWED_ORIGINS', 'Expected exact HTTP origins; production requires HTTPS');
+        }
+      }
+      if (env.NODE_ENV === 'production' && !env.AUTH_COOKIE_SECURE)
+        issue('AUTH_COOKIE_SECURE', 'Production sessions require secure cookies');
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 

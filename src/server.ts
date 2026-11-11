@@ -1,3 +1,6 @@
+import { mountAccessBoundary } from './auth/mountAccessBoundary.js';
+import { createHttpAuth, principalOf } from './auth/httpAuth.js';
+import { StaticCredentialProvider } from './auth/principals.js';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +35,10 @@ import { PayeeMergeService } from './services/PayeeMergeService.js';
 import { createApiRouter } from './api/index.js';
 import { createErrorHandler, notFoundHandler } from './api/errorHandler.js';
 import { startScheduler } from './scheduler/SyncScheduler.js';
+import { SyncScheduler } from './scheduler/SyncScheduler.js';
+import { IntegrationService } from './services/IntegrationService.js';
+import { createIntegrationRouter } from './api/integrationRoutes.js';
+import { closeHttpServer } from './infra/closeHttpServer.js';
 import type { Request, Response, NextFunction } from 'express';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,8 +108,42 @@ await actualBudget.initialize();
 
 const app = express();
 
+const integrationService = new IntegrationService(
+  actualBudget,
+  auditRepo,
+  jobService,
+  env.ACTUAL_BUDGET_ID
+);
+const packageInfo = JSON.parse(
+  await readFile(
+    path.resolve(
+      __dirname,
+      env.NODE_ENV === 'production' ? '../../package.json' : '../package.json'
+    ),
+    'utf-8'
+  )
+) as { version: string };
+const auth = createHttpAuth({
+  mode: env.AUTH_MODE,
+  origins: env.AUTH_ALLOWED_ORIGINS,
+  secureCookie: env.AUTH_COOKIE_SECURE,
+  ttlSeconds: env.AUTH_SESSION_TTL_SECONDS,
+  provider: new StaticCredentialProvider(env.AUTH_CREDENTIALS_JSON),
+  audit: (eventType, principalId) =>
+    auditRepo.log({ eventType, entityType: 'principal', entityId: principalId ?? 'anonymous' }),
+});
+mountAccessBoundary(
+  app,
+  auth,
+  createIntegrationRouter(integrationService, {
+    enabled: env.MACHINE_API_ENABLED,
+    auth,
+    version: packageInfo.version,
+  })
+);
+
 // Middleware
-app.use(cors());
+if (env.AUTH_MODE === 'legacy') app.use(cors());
 app.use(express.json());
 
 const apiLimiter = rateLimit({
@@ -116,8 +157,9 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 // Request logging middleware
-app.use((req: Request, _res: Response, next: NextFunction) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   loggerInstance.info('Incoming request', {
+    principalId: principalOf(res)?.id,
     method: req.method,
     path: req.path,
     ip: req.ip,
@@ -134,7 +176,7 @@ app.get('/health', (_req: Request, res: Response) => {
 app.get('/ready', async (_req: Request, res: Response) => {
   try {
     db.queryOne('SELECT 1 as ok');
-    if (!actualBudget.isInitialized()) {
+    if (!integrationService.isReady()) {
       return res.status(503).json({ status: 'not-ready' });
     }
     res.json({ status: 'ready' });
@@ -213,8 +255,7 @@ const server = app.listen(env.PORT, () => {
   });
 
   // Start periodic sync scheduler if interval is configured
-  if (env.SYNC_INTERVAL_MINUTES > 0) {
-    startScheduler(env, jobOrchestrator, env.ACTUAL_BUDGET_ID);
+  if (startScheduler(env, jobOrchestrator, env.ACTUAL_BUDGET_ID)) {
     loggerInstance.info('Periodic sync scheduler enabled', {
       intervalMinutes: env.SYNC_INTERVAL_MINUTES,
     });
@@ -248,16 +289,33 @@ const server = app.listen(env.PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  loggerInstance.info('SIGTERM received, shutting down gracefully');
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  integrationService.stop();
+  SyncScheduler.getInstance()?.stop();
+  loggerInstance.info('Shutting down gracefully');
   if (jobTimeoutInterval) {
     clearInterval(jobTimeoutInterval);
     jobTimeoutInterval = null;
   }
-  server.close(() => {
+  try {
+    await closeHttpServer(server, () => {
+      auth.close();
+      jobEventBus.shutdown();
+    });
+    await integrationService.drain();
+    await actualBudget.shutdown();
+    db.close();
     loggerInstance.info('Server closed');
     process.exit(0);
-  });
-});
+  } catch {
+    loggerInstance.error('Shutdown failed');
+    process.exit(1);
+  }
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 export { app };

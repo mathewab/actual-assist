@@ -1,3 +1,4 @@
+import { attributedMetadata } from '../infra/requestContext.js';
 import { randomUUID } from 'node:crypto';
 import type { Job, JobStatus, JobType } from '../domain/entities/Job.js';
 import type { JobStep, JobStepStatus, JobStepType } from '../domain/entities/JobStep.js';
@@ -48,7 +49,7 @@ export class JobService {
       id: randomUUID(),
       budgetId: params.budgetId,
       type: params.type,
-      metadata: params.metadata,
+      metadata: attributedMetadata(params.metadata),
       parentJobId: params.parentJobId ?? null,
     });
 

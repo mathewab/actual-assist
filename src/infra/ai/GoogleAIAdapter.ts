@@ -23,7 +23,9 @@ export class GoogleAIAdapter implements AIAdapter {
 
   constructor(env: Env) {
     this.apiKey = env.GOOGLE_AI_API_KEY;
-    this.client = this.apiKey ? new GoogleGenAI({ apiKey: this.apiKey }) : null;
+    this.client = this.apiKey
+      ? new GoogleGenAI({ apiKey: this.apiKey, apiVersion: 'v1beta' })
+      : null;
     this.model = env.GOOGLE_AI_MODEL;
   }
 

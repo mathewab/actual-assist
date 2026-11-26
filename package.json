@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "VITE_MIDDLEWARE=true tsx watch src/server.ts",
     "dev:ui": "vite",
-    "build:server": "tsc -p tsconfig.server.json",
+    "build:server": "node node_modules/typescript-compiler/bin/tsc -p tsconfig.server.json",
     "build:ui": "vite build",
     "build": "npm run build:server && npm run build:ui",
     "start": "node dist/server/server.js",
@@ -73,7 +73,8 @@
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.8",
-    "typescript": "^6.0.3",
+    "typescript": "6.0.3",
+    "typescript-compiler": "npm:typescript@7.0.2",
     "vite": "^8.2.0",
     "vitest": "^5.0.0"
   },
